@@ -1,0 +1,21 @@
+description = "Relational queries for OCaml"
+version = "%%VERSION_NUM%%"
+
+requires = ""
+archive(byte) = "ask.cma"
+archive(native) = "ask.cmxa"
+plugin(byte) = "ask.cma"
+plugin(native) = "ask.cmxs"
+exists_if = "ask.cma"
+
+package "sqlite3" (
+  description = "Ask sqlite3"
+  version = "%%VERSION_NUM%%"
+  directory = "sqlite3"
+  requires = "ask"
+  archive(byte) = "ask_sqlite3.cma"
+  archive(native) = "ask_sqlite3.cmxa"
+  plugin(byte) = "ask_sqlite3.cma"
+  plugin(native) = "ask_sqlite3.cmxs"
+  exists_if = "ask_sqlite3.cma"
+)

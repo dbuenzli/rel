@@ -1,0 +1,22 @@
+opam-version: "2.0"
+maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
+authors: ["The ask programmers"]
+homepage: "https://erratique.ch/software/ask"
+doc: "https://erratique.ch/software/ask/doc"
+dev-repo: "git+https://erratique.ch/repos/ask.git"
+bug-reports: "https://github.com/dbuenzli/ask/issues"
+tags: [ "database" "query" "SQL" "org:erratique" ]
+license: "ISC"
+depends: [
+  "ocaml" {>= "4.08.0"}
+  "ocamlfind" {build}
+  "ocamlbuild" {build}
+  "topkg" {build & >= "0.9.0"}
+  "cmdliner"
+]
+depopts: [ "sqlite3" ]
+build: [[
+ "ocaml" "pkg/pkg.ml" "build"
+          "--dev-pkg" "%{dev}%"
+          "--with-sqlite3" "%{sqlite3:installed}%"
+]]

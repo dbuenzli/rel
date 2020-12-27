@@ -1,0 +1,6 @@
+true : bin_annot, safe_string
+<_b0> : -traverse
+<src> : include
+<src/ask_sqlite3*> : package(sqlite3)
+<test/*> : package(sqlite3)
+<test/ask_sqlite3*> : package(sqlite3), package(cmdliner)

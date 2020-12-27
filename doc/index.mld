@@ -1,0 +1,37 @@
+{0 Ask {%html: <span class="version">%%VERSION%%</span>%}}
+
+Ask is a library for programming with relational databases in OCaml.
+It provides:
+
+{ul
+{- Combinators to describe tables and translate their rows
+   to custom OCaml values.}
+{- A mechanism for typing SQL statement parameters and their results.}
+{- SQL generation helpers including schema generation from table
+   descriptions.}
+{- A query language embedded in {e plain} OCaml. Queries are typed,
+   composable and compile to a single, flat, SQL query (optional and
+    experimental).}
+{- Support for SQLite3 databases (optional). Run SQL statements
+   and generate OCaml table descriptions for existing databases.}}
+
+{1:manuals Manuals}
+
+These manuals are available:
+{ul
+{- The {{!page-sqlite3_howto}Sqlite3 howto} explains how to get
+   started to query an existing sqlite database.}}
+
+{1:ask The [ask] library}
+
+{!modules:
+Ask
+Ask_list
+Ask_sql
+}
+
+{1:ask_sqlite3 The [ask.sqlite3] library}
+
+{!modules:
+Ask_sqlite3
+}
