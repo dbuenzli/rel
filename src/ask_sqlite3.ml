@@ -3,6 +3,64 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+
+module Sqlite3 = struct
+  type db = Sqlite3.db
+  type stmt = Sqlite3.stmt
+
+  module Rc = struct
+    type unknown = Sqlite3.Rc.unknown
+    type t = Sqlite3.Rc.t =
+    | OK | ERROR | INTERNAL | PERM | ABORT | BUSY | LOCKED | NOMEM | READONLY
+    | INTERRUPT | IOERR | CORRUPT | NOTFOUND | FULL | CANTOPEN | PROTOCOL
+    | EMPTY | SCHEMA | TOOBIG | CONSTRAINT | MISMATCH | MISUSE | NOFLS
+    | AUTH | FORMAT | RANGE | NOTADB | ROW | DONE | UNKNOWN of unknown
+
+    let to_string =
+    Sqlite3.Rc.to_string end
+
+  let finalize = Sqlite3.finalize
+
+  exception SqliteError = Sqlite3.SqliteError
+  exception Error = Sqlite3.Error
+  exception RangeError = Sqlite3.RangeError
+
+  let db_open = Sqlite3.db_open
+  let db_close = Sqlite3.db_close
+  let errmsg = Sqlite3.errmsg
+  let exec = Sqlite3.exec
+  let prepare = Sqlite3.prepare
+  let reset = Sqlite3.reset
+  let step = Sqlite3.step
+  let column_count = Sqlite3.column_count
+  let bind_parameter_count = Sqlite3.bind_parameter_count
+  let bind_bool = Sqlite3.bind_bool
+  let bind_int = Sqlite3.bind_int
+  let bind_int64 = Sqlite3.bind_int64
+  let bind_double = Sqlite3.bind_double
+  let bind_text = Sqlite3.bind_text
+  let bind_blob = Sqlite3.bind_blob
+  let bind = Sqlite3.bind
+  let clear_bindings = Sqlite3.clear_bindings
+  let column_int = Sqlite3.column_int
+  let column_int64 = Sqlite3.column_int64
+  let column_double = Sqlite3.column_double
+  let column_text = Sqlite3.column_text
+  let column_blob = Sqlite3.column_blob
+  let column = Sqlite3.column
+  module Data = struct
+    type t = Sqlite3.Data.t =
+    | NONE | NULL | INT of int64 | FLOAT of float | TEXT of string
+    | BLOB of string
+
+    let to_int_exn = Sqlite3.Data.to_int_exn
+    let to_float_exn = Sqlite3.Data.to_float_exn
+    let to_int64_exn = Sqlite3.Data.to_int64_exn
+    let to_string_exn = Sqlite3.Data.to_string_exn
+  end
+end
+
+
 open Ask
 
 let strf = Printf.sprintf
@@ -195,7 +253,7 @@ let open' ?(stmt_cache_size = 10) ?mode ?memory f =
   | exception Sqlite3.SqliteError e -> Error e
   | exception Sqlite3.Error e -> Error e
   | d ->
-      let stmt_cache = Hashtbl.create stmt_cache_size in
+      let stmt_cache = Hashtbl.create ~random:true stmt_cache_size in
       Ok { d; stmt_cache_size; stmt_cache; closed = false }
 
 let close db =
