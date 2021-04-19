@@ -61,7 +61,8 @@ module Col : sig
   (** {1:cols Columns} *)
 
   type param = ..
-  (** The type for extensible column parameters. *)
+  (** The type for extensible column parameters. See {!Ask.Sql} for
+      some parameters. *)
 
   type ('r, 'a) t = string * param list * 'a Type.t * ('r -> 'a)
   (** The type for a column of type ['a] part of a row stored in
@@ -240,7 +241,8 @@ end
 module Table : sig
 
   type param = ..
-  (** The type for exensible table parameters. *)
+  (** The type for exensible table parameters. See {!Ask.Sql} for
+      some parameters. *)
 
   type 'r t = string * param list * 'r Row.t (** *)
   (** The type for a table represented by an OCaml of type ['a]. *)
@@ -750,7 +752,7 @@ module Sql : sig
     ?schema:string -> ?if_not_exists:bool -> 'a Table.t -> unit Stmt.t src
   (** [create_table t] is an SQL CREATE TABLE statement for [t].  If
       [if_not_exists] is [true] (default) the corresponding sentence
-      is added to the create statement. See {!Col.param}. *)
+      is added to the create statement. *)
 
   val create_schema :
     ?schema:string -> ?drop:bool -> Table.u list -> unit Stmt.t src

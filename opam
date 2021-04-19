@@ -1,22 +1,39 @@
 opam-version: "2.0"
-maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
+synopsis: """Relational database programming for OCaml"""
+maintainer: ["Daniel Bünzli <daniel.buenzl i@erratique.ch>"]
 authors: ["The ask programmers"]
 homepage: "https://erratique.ch/software/ask"
 doc: "https://erratique.ch/software/ask/doc"
 dev-repo: "git+https://erratique.ch/repos/ask.git"
 bug-reports: "https://github.com/dbuenzli/ask/issues"
-tags: [ "database" "query" "SQL" "org:erratique" ]
-license: "ISC"
-depends: [
-  "ocaml" {>= "4.08.0"}
-  "ocamlfind" {build}
-  "ocamlbuild" {build}
-  "topkg" {build & >= "0.9.0"}
-  "cmdliner"
-]
-depopts: [ "sqlite3" ]
-build: [[
- "ocaml" "pkg/pkg.ml" "build"
-          "--dev-pkg" "%{dev}%"
-          "--with-sqlite3" "%{sqlite3:installed}%"
-]]
+license: ["ISC"]
+tags: ["database" "query" "SQL" "org:erratique"]
+depends: ["ocaml" {>= "4.08.0"}
+          "ocamlfind" {build}
+          "ocamlbuild" {build}
+          "topkg" {build & >= "1.0.3"}
+          "conf-sqlite3" {build}
+          "cmdliner" {>= "1.0.0"}]
+build: [["ocaml" "pkg/pkg.ml" "build" "--dev-pkg" "%{dev}%"
+          "--with-sqlite3" "%{sqlite3:installed}%" ]]
+description: """
+Ask is a library for programming with relational databases in OCaml.
+It provides:
+
+* Typed combinators to describe tables and their representation 
+  by client-defined OCaml values.
+* Automatic database row and OCaml values translations from 
+  the table descriptions.
+* SQL data definition generation from the table descriptions.
+* A mechanism for typing SQL statement parameters and results.
+* SQL generation helpers.
+* A query language embedded in *plain* OCaml. Queries are typed,
+  composable and compile to a single, flat, SQL query (experimental).
+* Support for SQLite3 databases (optional). Run SQL statements 
+  and generate OCaml table descriptions for existing databases.
+
+Ask is distributed under the ISC license. The basic library has no
+dependencies. The SQLite support depends on the C SQLite3 library and
+[sqlite3-ocaml](https://mmottl.github.io/sqlite3-ocaml/).
+
+Homepage: https://erratique.ch/software/ask"""

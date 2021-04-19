@@ -1,3 +1,12 @@
 {0 Sqlite3 howto}
 
 Show how to get a hand on the chinook database, dump the schema
+
+
+
+{1:write Write heavy}
+
+{ul
+{- set a busy timeout}
+{- set wal mode}
+{- begin immediate}}

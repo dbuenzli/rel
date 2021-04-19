@@ -12,10 +12,22 @@ package "sqlite3" (
   description = "Ask sqlite3"
   version = "%%VERSION_NUM%%"
   directory = "sqlite3"
-  requires = "ask"
+  requires = "sqlite3 ask"
   archive(byte) = "ask_sqlite3.cma"
   archive(native) = "ask_sqlite3.cmxa"
   plugin(byte) = "ask_sqlite3.cma"
   plugin(native) = "ask_sqlite3.cmxs"
   exists_if = "ask_sqlite3.cma"
+)
+
+package "pool" (
+  description = "Ask resource pool"
+  version = "%%VERSION_NUM%%"
+  directory = "pool"
+  requires = "threads.posix"
+  archive(byte) = "ask_pool.cma"
+  archive(native) = "ask_pool.cmxa"
+  plugin(byte) = "ask_pool.cma"
+  plugin(native) = "ask_pool.cmxs"
+  exists_if = "ask_pool.cma"
 )

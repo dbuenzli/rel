@@ -3,32 +3,28 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-
 module Sqlite3 = struct
   type db = Sqlite3.db
   type stmt = Sqlite3.stmt
-
-  module Rc = struct
-    type unknown = Sqlite3.Rc.unknown
-    type t = Sqlite3.Rc.t =
-    | OK | ERROR | INTERNAL | PERM | ABORT | BUSY | LOCKED | NOMEM | READONLY
-    | INTERRUPT | IOERR | CORRUPT | NOTFOUND | FULL | CANTOPEN | PROTOCOL
-    | EMPTY | SCHEMA | TOOBIG | CONSTRAINT | MISMATCH | MISUSE | NOFLS
-    | AUTH | FORMAT | RANGE | NOTADB | ROW | DONE | UNKNOWN of unknown
-
-    let to_string =
-    Sqlite3.Rc.to_string end
-
-  let finalize = Sqlite3.finalize
-
   exception SqliteError = Sqlite3.SqliteError
   exception Error = Sqlite3.Error
   exception RangeError = Sqlite3.RangeError
+  module Rc = struct
+    type unknown = Sqlite3.Rc.unknown
+    type t = Sqlite3.Rc.t =
+      | OK | ERROR | INTERNAL | PERM | ABORT | BUSY | LOCKED | NOMEM | READONLY
+      | INTERRUPT | IOERR | CORRUPT | NOTFOUND | FULL | CANTOPEN | PROTOCOL
+      | EMPTY | SCHEMA | TOOBIG | CONSTRAINT | MISMATCH | MISUSE | NOFLS
+      | AUTH | FORMAT | RANGE | NOTADB | ROW | DONE | UNKNOWN of unknown
+
+    let to_string = Sqlite3.Rc.to_string
+  end
 
   let db_open = Sqlite3.db_open
   let db_close = Sqlite3.db_close
   let errmsg = Sqlite3.errmsg
   let exec = Sqlite3.exec
+  let finalize = Sqlite3.finalize
   let prepare = Sqlite3.prepare
   let reset = Sqlite3.reset
   let step = Sqlite3.step
@@ -41,6 +37,7 @@ module Sqlite3 = struct
   let bind_text = Sqlite3.bind_text
   let bind_blob = Sqlite3.bind_blob
   let bind = Sqlite3.bind
+
   let clear_bindings = Sqlite3.clear_bindings
   let column_int = Sqlite3.column_int
   let column_int64 = Sqlite3.column_int64
@@ -60,6 +57,119 @@ module Sqlite3 = struct
   end
 end
 
+(* Thin bindings to SQLite3 *)
+
+module Tsqlite3 = struct
+
+  external version_number : unit -> int = "ocaml_ask_sqlite3_version_number"
+  let version () =
+    let v = version_number () and s = string_of_int in
+    let mmaj = 1000000 and mmin = 1000 in
+    let maj = v / mmaj and min = (v mod mmaj) / mmin in
+    let patch = (v mod mmaj) mod mmin in
+    String.concat "." [s maj; s min; s patch]
+
+  (* Errors, note that open' sets the connection to always return
+     extended error code. *)
+
+  type error = int
+  (* N.B. sqlite defines these as int32 but the do not exceed 2**31-1 for
+     now so tht should work on 32-bit platforms too. *)
+
+  let ok = 0
+  external errstr : error -> string = "ocaml_ask_sqlite3_errstr"
+
+  (* Database connection *)
+
+  type mode = Read | Read_write | Read_write_create | Memory
+  type mutex = No | Full
+  type t (* Boxed pointer to sqlite3 struct *)
+
+  external _open' :
+    string -> uri:bool -> mode:mode -> mutex:mutex -> vfs:string ->
+    (t, error) result = "ocaml_ask_sqlite3_open"
+
+  let open'
+      ?(vfs = "") ?(uri = false) ?(mutex = Full) ?(mode = Read_write_create) f
+    =
+    _open' ~vfs ~uri ~mode ~mutex f
+
+  external close : t -> error = "ocaml_ask_sqlite3_close"
+  external errmsg : t -> string = "ocaml_ask_sqlite3_errmsg"
+  external busy_timeout : t -> int -> error = "ocaml_ask_sqlite3_busy_timeout"
+
+  (* Queries *)
+
+  external exec : t -> string -> (unit, string) result =
+    "ocaml_ask_sqlite3_exec"
+
+  (* Pepared statements *)
+
+  type stmt (* Boxed pointer to sqlite3_stmt struct *)
+
+  external prepare : t -> string -> (stmt, error) result =
+    "ocaml_ask_sqlite3_prepare"
+
+  external finalize : stmt -> error = "ocaml_ask_sqlite3_finalize"
+  external reset : stmt -> error = "ocaml_ask_sqlite3_reset"
+  external step : stmt -> error = "ocaml_ask_sqlite3_step"
+  external column_count : stmt -> int = "ocaml_ask_sqlite3_column_count"
+  external bind_parameter_count : stmt -> int =
+    "ocaml_ask_sqlite3_bind_paramater_count"
+
+  external bind_null : stmt -> int -> error =
+    "ocaml_ask_sqlite3_bind_null"
+
+  external bind_bool : stmt -> int -> bool -> error =
+    "ocaml_ask_sqlite3_bind_bool"
+
+  external bind_int : stmt -> int -> int -> error =
+    "ocaml_ask_sqlite3_bind_int"
+
+  external bind_int64 : stmt -> int -> int64 -> error =
+    "ocaml_ask_sqlite3_bind_int64"
+
+  external bind_double : stmt -> int -> float -> error =
+    "ocaml_ask_sqlite3_bind_double"
+
+  external bind_text : stmt -> int -> string -> error =
+    "ocaml_ask_sqlite3_bind_text"
+
+  external bind_blob : stmt -> int -> string -> error =
+    "ocaml_ask_sqlite3_bind_blob"
+
+  external clear_bindings : stmt -> error =
+    "ocaml_ask_sqlite3_clear_bindings"
+
+  external column_is_null : stmt -> int -> bool =
+    "ocaml_ask_sqlite3_column_is_null"
+
+  external column_bool : stmt -> int -> bool =
+    "ocaml_ask_sqlite3_column_bool"
+
+  external column_int : stmt -> int -> int =
+    "ocaml_ask_sqlite3_column_int"
+
+  external column_int64 : stmt -> int -> int64 =
+    "ocaml_ask_sqlite3_column_int64"
+
+  external column_double : stmt -> int -> float =
+    "ocaml_ask_sqlite3_column_double"
+
+  external column_text : stmt -> int -> string =
+    "ocaml_ask_sqlite3_column_text"
+
+  external column_blob : stmt -> int -> string =
+    "ocaml_ask_sqlite3_column_blob"
+
+  let error_to_string = errstr
+  let error_message = errmsg
+  let busy_timeout_ms db dur =
+    let err = busy_timeout db dur in
+    if err = ok then Ok () else Error err
+end
+
+let version = Tsqlite3.version
 
 open Ask
 
@@ -213,6 +323,9 @@ end
 (* Statement cache *)
 
 module Cache = struct
+
+  (* FIXME introduce an age for LRU *)
+
   let drop db ~count =
     if count <= 0 then () else
     let count = ref count in

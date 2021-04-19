@@ -27,11 +27,16 @@ These manuals are available:
 {!modules:
 Ask
 Ask_list
-Ask_sql
 }
 
 {1:ask_sqlite3 The [ask.sqlite3] library}
 
 {!modules:
 Ask_sqlite3
+}
+
+{1:ask_pool The [ask.pool] library}
+
+{!modules:
+Ask_pool
 }
