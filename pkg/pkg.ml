@@ -3,7 +3,7 @@
 #require "topkg"
 open Topkg
 
-let sqlite3 = Conf.with_pkg "sqlite3"
+let sqlite3 = Conf.with_pkg "conf-sqlite3"
 let () =
   Pkg.describe "ask" @@ fun c ->
   let sqlite3 = Conf.value c sqlite3 in

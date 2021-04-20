@@ -3,7 +3,6 @@ open B00_std
 
 (* OCaml library names *)
 
-let sqlite3 = B0_ocaml.libname "sqlite3"
 let threads = B0_ocaml.libname "threads.posix"
 let cmdliner = B0_ocaml.libname "cmdliner"
 
@@ -23,7 +22,7 @@ let ask_lib =
 
 let ask_sqlite3_lib =
   let srcs = mod_srcs "ask_sqlite3" in
-  let requires = [ask; sqlite3] in
+  let requires = [ask] in
   let name = "ask_sqlite3_lib" (* FIXME b0 map . to _ for name *) in
   B0_ocaml.lib ~name ask_sqlite3 ~doc:"Ask sqlite3 library" ~srcs ~requires
 
@@ -74,7 +73,7 @@ let default =
     |> add licenses ["ISC"]
     |> add B0_opam.Meta.build
       {|[["ocaml" "pkg/pkg.ml" "build" "--dev-pkg" "%{dev}%"
-          "--with-sqlite3" "%{sqlite3:installed}%" ]]|}
+          "--with-conf-sqlite3" "%{conf-sqlite3:installed}%" ]]|}
     |> add B0_opam.Meta.depends
       [ "ocaml", {|>= "4.08.0"|};
         "ocamlfind", {|build|};

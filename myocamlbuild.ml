@@ -27,13 +27,17 @@ let lib_with_clib ~lib ~clib ~has_lib ~src_dir ~stublib =
   let link_stub_archive = strf "link_%s_archive" stublib in
   let stub_ar = ar (strf "%s/lib%s" src_dir stublib) in
   let stub_l = A (strf "-l%s" stublib) in
+  let clib_l = pkg_config "libs-only-l" clib in
+  let clib_L = pkg_config "libs-only-L" clib in
   let clib_cflags = ccopts @@ (A has_lib) :: pkg_config "cflags" clib in
-  let clib_cclibs = cclibs @@ pkg_config "libs-only-l" clib in
-  let clib_ccopts = ccopts @@ pkg_config "libs-only-L" clib in
+  let clib_cclibs = cclibs @@ clib_l in
+  let clib_ccopts = ccopts @@ clib_L in
   begin
     dep [record_stub_lib] [stub_ar];
 
     flag ["c"; "compile"; use_clib] (S clib_cflags);
+
+    flag ["c"; "ocamlmklib"; use_clib] (S (clib_L @ clib_l));
 
     flag ["link"; "ocaml"; "library"; "byte"; record_stub_lib]
       (S (dllibs [stub_l] @ clib_ccopts @ clib_cclibs));

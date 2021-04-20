@@ -3,64 +3,9 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-module Sqlite3 = struct
-  type db = Sqlite3.db
-  type stmt = Sqlite3.stmt
-  exception SqliteError = Sqlite3.SqliteError
-  exception Error = Sqlite3.Error
-  exception RangeError = Sqlite3.RangeError
-  module Rc = struct
-    type unknown = Sqlite3.Rc.unknown
-    type t = Sqlite3.Rc.t =
-      | OK | ERROR | INTERNAL | PERM | ABORT | BUSY | LOCKED | NOMEM | READONLY
-      | INTERRUPT | IOERR | CORRUPT | NOTFOUND | FULL | CANTOPEN | PROTOCOL
-      | EMPTY | SCHEMA | TOOBIG | CONSTRAINT | MISMATCH | MISUSE | NOFLS
-      | AUTH | FORMAT | RANGE | NOTADB | ROW | DONE | UNKNOWN of unknown
-
-    let to_string = Sqlite3.Rc.to_string
-  end
-
-  let db_open = Sqlite3.db_open
-  let db_close = Sqlite3.db_close
-  let errmsg = Sqlite3.errmsg
-  let exec = Sqlite3.exec
-  let finalize = Sqlite3.finalize
-  let prepare = Sqlite3.prepare
-  let reset = Sqlite3.reset
-  let step = Sqlite3.step
-  let column_count = Sqlite3.column_count
-  let bind_parameter_count = Sqlite3.bind_parameter_count
-  let bind_bool = Sqlite3.bind_bool
-  let bind_int = Sqlite3.bind_int
-  let bind_int64 = Sqlite3.bind_int64
-  let bind_double = Sqlite3.bind_double
-  let bind_text = Sqlite3.bind_text
-  let bind_blob = Sqlite3.bind_blob
-  let bind = Sqlite3.bind
-
-  let clear_bindings = Sqlite3.clear_bindings
-  let column_int = Sqlite3.column_int
-  let column_int64 = Sqlite3.column_int64
-  let column_double = Sqlite3.column_double
-  let column_text = Sqlite3.column_text
-  let column_blob = Sqlite3.column_blob
-  let column = Sqlite3.column
-  module Data = struct
-    type t = Sqlite3.Data.t =
-    | NONE | NULL | INT of int64 | FLOAT of float | TEXT of string
-    | BLOB of string
-
-    let to_int_exn = Sqlite3.Data.to_int_exn
-    let to_float_exn = Sqlite3.Data.to_float_exn
-    let to_int64_exn = Sqlite3.Data.to_int64_exn
-    let to_string_exn = Sqlite3.Data.to_string_exn
-  end
-end
-
 (* Thin bindings to SQLite3 *)
 
 module Tsqlite3 = struct
-
   external version_number : unit -> int = "ocaml_ask_sqlite3_version_number"
   let version () =
     let v = version_number () and s = string_of_int in
@@ -69,14 +14,13 @@ module Tsqlite3 = struct
     let patch = (v mod mmaj) mod mmin in
     String.concat "." [s maj; s min; s patch]
 
-  (* Errors, note that open' sets the connection to always return
-     extended error code. *)
+  (* Errors, note that open' sets the connection to always return extended
+     error code. *)
 
   type error = int
-  (* N.B. sqlite defines these as int32 but the do not exceed 2**31-1 for
-     now so tht should work on 32-bit platforms too. *)
+  (* N.B. sqlite defines these as int32 but currently do not exceed 2**31-1
+     so that should work on 32-bit platforms too. *)
 
-  let ok = 0
   external errstr : error -> string = "ocaml_ask_sqlite3_errstr"
 
   (* Database connection *)
@@ -87,10 +31,11 @@ module Tsqlite3 = struct
 
   external _open' :
     string -> uri:bool -> mode:mode -> mutex:mutex -> vfs:string ->
-    (t, error) result = "ocaml_ask_sqlite3_open"
+    (t, error) result =
+    "ocaml_ask_sqlite3_open"
 
   let open'
-      ?(vfs = "") ?(uri = false) ?(mutex = Full) ?(mode = Read_write_create) f
+      ?(vfs = "") ?(uri = true) ?(mutex = Full) ?(mode = Read_write_create) f
     =
     _open' ~vfs ~uri ~mode ~mutex f
 
@@ -110,10 +55,18 @@ module Tsqlite3 = struct
   external prepare : t -> string -> (stmt, error) result =
     "ocaml_ask_sqlite3_prepare"
 
-  external finalize : stmt -> error = "ocaml_ask_sqlite3_finalize"
-  external reset : stmt -> error = "ocaml_ask_sqlite3_reset"
-  external step : stmt -> error = "ocaml_ask_sqlite3_step"
-  external column_count : stmt -> int = "ocaml_ask_sqlite3_column_count"
+  external finalize : stmt -> error =
+    "ocaml_ask_sqlite3_finalize"
+
+  external reset : stmt -> error =
+    "ocaml_ask_sqlite3_reset"
+
+  external step : stmt -> error =
+    "ocaml_ask_sqlite3_step"
+
+  external column_count : stmt -> int =
+    "ocaml_ask_sqlite3_column_count"
+
   external bind_parameter_count : stmt -> int =
     "ocaml_ask_sqlite3_bind_paramater_count"
 
@@ -161,34 +114,28 @@ module Tsqlite3 = struct
 
   external column_blob : stmt -> int -> string =
     "ocaml_ask_sqlite3_column_blob"
-
-  let error_to_string = errstr
-  let error_message = errmsg
-  let busy_timeout_ms db dur =
-    let err = busy_timeout db dur in
-    if err = ok then Ok () else Error err
 end
-
-let version = Tsqlite3.version
 
 open Ask
 
 let strf = Printf.sprintf
-let err_rc rc = failwith (Sqlite3.Rc.to_string rc)
-let err_var_rc idx rc  =
-  failwith (strf "var %d: %s" idx (Sqlite3.Rc.to_string rc))
-
+let err_rc rc = failwith (Tsqlite3.errstr rc)
+let err_var_rc idx rc  = failwith (strf "var %d: %s" idx (Tsqlite3.errstr rc))
 let err_var_mismatch ~expected:e ~given:g =
   failwith (strf "SQL statement has %d variables, only %d were given." e g)
 
+type error = Tsqlite3.error
+let error_to_string = Tsqlite3.errstr
+let version = Tsqlite3.version
+
 type stmt =
-  { stmt : Sqlite3.stmt;
+  { stmt : Tsqlite3.stmt;
     col_count : int;
     mutable finalized : bool; }
 
 type 'r step = stmt * 'r Sql.Stmt.t
 type t =
-  { d : Sqlite3.db;
+  { d : Tsqlite3.t;
     mutable stmt_cache_size : int;
     stmt_cache : (string, stmt) Hashtbl.t;
     mutable closed : bool; }
@@ -197,31 +144,28 @@ type t =
 
 module Stmt = struct
   let validate s = if s.finalized then failwith "finalized statement" else ()
-  let finalize s = match Sqlite3.finalize s.stmt with
-  | rc -> s.finalized <- true
-  | exception Sqlite3.SqliteError e -> failwith e
-  | exception Sqlite3.Error e -> failwith e
+  let finalize s = match Tsqlite3.finalize s.stmt with
+  | 0 -> s.finalized <- true | rc -> err_rc rc
 
   let finalize_noerr s = try finalize s with Failure _ -> ()
 
-  let prepare db sql = match Sqlite3.prepare db.d sql with
-  | stmt ->
-      let col_count = Sqlite3.column_count stmt in
+  let prepare db sql = match Tsqlite3.prepare db.d sql with
+  | Error rc -> err_rc rc
+  | Ok stmt ->
+      let col_count = Tsqlite3.column_count stmt in
       let finalized = false in
       { stmt; col_count; finalized }
-  | exception Sqlite3.SqliteError e -> failwith e
-  | exception Sqlite3.Error e -> failwith e
 
   let rec bind_arg st idx (Sql.Stmt.Arg (t, v)) = match t with
-  | Type.Bool -> Sqlite3.bind_bool st idx v
-  | Type.Int -> Sqlite3.bind_int st idx v
-  | Type.Int64 -> Sqlite3.bind_int64 st idx v
-  | Type.Float -> Sqlite3.bind_double st idx v
-  | Type.Text -> Sqlite3.bind_text st idx v
-  | Type.Blob -> Sqlite3.bind_blob st idx v
+  | Type.Bool -> Tsqlite3.bind_bool st idx v
+  | Type.Int -> Tsqlite3.bind_int st idx v
+  | Type.Int64 -> Tsqlite3.bind_int64 st idx v
+  | Type.Float -> Tsqlite3.bind_double st idx v
+  | Type.Text -> Tsqlite3.bind_text st idx v
+  | Type.Blob -> Tsqlite3.bind_blob st idx v
   | Type.Option t ->
       begin match v with
-      | None -> Sqlite3.bind st idx Sqlite3.Data.NULL
+      | None -> Tsqlite3.bind_null st idx
       | Some v -> bind_arg st idx (Sql.Stmt.Arg (t, v))
       end
   | _ -> Type.invalid_unknown ()
@@ -229,60 +173,39 @@ module Stmt = struct
   let bind_args st args =
     let rec loop idx st = function
     | [] ->
-        let expected = Sqlite3.bind_parameter_count st in
+        let expected = Tsqlite3.bind_parameter_count st in
         let given = idx - 1 in
         if expected = given then () else err_var_mismatch ~expected ~given
     | arg :: args ->
         match bind_arg st idx arg with
-        | Sqlite3.Rc.OK -> loop (idx + 1) st args
+        | 0 -> loop (idx + 1) st args
         | rc -> err_var_rc idx rc
     in
     loop 1 st args
 
   let bind s sb =
-    try
-      validate s;
-      match Sqlite3.reset s.stmt with
-      | Sqlite3.Rc.OK -> bind_args s.stmt (List.rev (Sql.Stmt.rev_args sb))
-      | rc -> err_rc rc
-    with
-    | Sqlite3.Error e -> failwith e
-    | Sqlite3.SqliteError e -> failwith e
-    | Sqlite3.RangeError (_, _) -> failwith "Too much bound variables"
+    validate s;
+    match Tsqlite3.reset s.stmt with
+    | 0 -> bind_args s.stmt (List.rev (Sql.Stmt.rev_args sb))
+    | rc -> err_rc rc
 
-  let sqlite3_column_bool s i = match Sqlite3.column_int s i with
-  | 0 -> false | _ -> true
-
-  let unpack_col : type r c. Sqlite3.stmt -> int -> (r, c) Col.t -> c =
-  fun s i c -> match Col.type' c with
-  | Type.Bool -> sqlite3_column_bool s i
-  | Type.Int -> Sqlite3.column_int s i
-  | Type.Int64 -> Sqlite3.column_int64 s i
-  | Type.Float -> Sqlite3.column_double s i
-  | Type.Text -> Sqlite3.column_text s i
-  | Type.Blob -> Sqlite3.column_blob s i
+  let rec unpack_col_type : type r c. Tsqlite3.stmt -> int -> c Type.t -> c =
+  fun s i t -> match t with
+  | Type.Bool -> Tsqlite3.column_bool s i
+  | Type.Int -> Tsqlite3.column_int s i
+  | Type.Int64 -> Tsqlite3.column_int64 s i
+  | Type.Float -> Tsqlite3.column_double s i
+  | Type.Text -> Tsqlite3.column_text s i
+  | Type.Blob -> Tsqlite3.column_blob s i
   | Type.Option t ->
-      (* TODO this could be streamlined to a recursive call if we just had a
-         check for NULL in the column via sqlite3_column_type. The FFI we
-         use does not propose that. Bindings should always be thin! *)
-      begin match Sqlite3.column s i with
-      | Sqlite3.Data.NULL -> None
-      | d ->
-          begin match t with
-          | Type.Bool -> Some (sqlite3_column_bool s i)
-          | Type.Int -> Some (Sqlite3.Data.to_int_exn d)
-          | Type.Int64 -> Some (Sqlite3.Data.to_int64_exn d)
-          | Type.Float -> Some (Sqlite3.Data.to_float_exn d)
-          | Type.Text -> Some (Sqlite3.Data.to_string_exn d)
-          | Type.Blob -> Some (Sqlite3.Data.to_string_exn d)
-          | Type.Option _ -> Type.invalid_nested_option ()
-          | _ -> Type.invalid_unknown ()
-          end
-      end
+      if Tsqlite3.column_is_null s i then None else Some (unpack_col_type s i t)
   | _ -> Type.invalid_unknown ()
 
+  let unpack_col : type r c. Tsqlite3.stmt -> int -> (r, c) Col.t -> c =
+  fun s i c -> unpack_col_type s i (Col.type' c)
+
   let unpack_row : type r. stmt -> r Sql.Stmt.t -> r = fun s st ->
-    let rec cols : type r a. Sqlite3.stmt -> int -> (r, a) Askt.prod -> a =
+    let rec cols : type r a. Tsqlite3.stmt -> int -> (r, a) Askt.prod -> a =
     fun s idx r -> match r with
     | Askt.Unit f -> f
     | Askt.Prod (cs, c) ->
@@ -292,32 +215,22 @@ module Stmt = struct
     let row = Askt.prod_to_prod (Sql.Stmt.result st) in
     cols s.stmt (s.col_count - 1) row
 
-  let step s sb =
-    try match Sqlite3.step s.stmt with
-    | Sqlite3.Rc.DONE -> ignore (Sqlite3.clear_bindings s.stmt); None
-    | Sqlite3.Rc.ROW -> Some (unpack_row s sb)
-    | rc -> err_rc rc
-    with
-    | Sqlite3.Error e -> failwith e
-    | Sqlite3.SqliteError e -> failwith e
+  let step s sb = match Tsqlite3.step s.stmt with
+  | 101 (* SQLITE_DONE *) -> ignore (Tsqlite3.clear_bindings s.stmt); None
+  | 100 (* SQLITE_ROW *) -> Some (unpack_row s sb)
+  | rc ->  err_rc rc
 
   let fold s st f acc =
-    try
-      let rec loop s st f acc = match Sqlite3.step s.stmt with
-      | Sqlite3.Rc.ROW -> loop s st f (f (unpack_row s st) acc)
-      | Sqlite3.Rc.DONE -> ignore (Sqlite3.clear_bindings s.stmt); acc
-      | rc -> err_rc rc
-      in
-      loop s st f acc
-    with
-    | Sqlite3.SqliteError e -> failwith e
-    | Sqlite3.Error e -> failwith e
+    let rec loop s st f acc = match Tsqlite3.step s.stmt with
+    | 100 (* SQLITE_ROW *) -> loop s st f (f (unpack_row s st) acc)
+    | 101 (* SQLITE_DONE *) -> ignore (Tsqlite3.clear_bindings s.stmt); acc
+    | rc -> err_rc rc
+    in
+    loop s st f acc
 
-  let cmd s = match Sqlite3.step s.stmt with
-  | Sqlite3.Rc.(DONE | ROW) -> ignore (Sqlite3.clear_bindings s.stmt)
+  let cmd s = match Tsqlite3.step s.stmt with
+  | 100 | 101 (* SQLITE_{ROW,DONE} *) -> ignore (Tsqlite3.clear_bindings s.stmt)
   | rc -> err_rc rc
-  | exception Sqlite3.SqliteError e -> failwith e
-  | exception Sqlite3.Error e -> failwith e
 end
 
 (* Statement cache *)
@@ -361,31 +274,32 @@ end
 
 let validate db = if db.closed then failwith "connection closed" else ()
 
-let open' ?(stmt_cache_size = 10) ?mode ?memory f =
-  match Sqlite3.db_open ?mode ?memory f with
-  | exception Sqlite3.SqliteError e -> Error e
-  | exception Sqlite3.Error e -> Error e
-  | d ->
+type mode = Tsqlite3.mode = Read | Read_write | Read_write_create | Memory
+type mutex = Tsqlite3.mutex = No | Full
+
+let open' ?(stmt_cache_size = 10) ?vfs ?uri ?mutex ?mode f =
+  match Tsqlite3.open' ?vfs ?uri ?mode ?mutex f with
+  | Error rc -> Error (Tsqlite3.errstr rc) (* FIXME keep error ? *)
+  | Ok d ->
       let stmt_cache = Hashtbl.create ~random:true stmt_cache_size in
       Ok { d; stmt_cache_size; stmt_cache; closed = false }
 
 let close db =
   Cache.clear db;
-  match Sqlite3.db_close db.d with
-  | exception Sqlite3.SqliteError e -> Error e
-  | exception Sqlite3.Error e -> Error e
-  | true -> db.closed <- true; Ok true
-  | false -> Ok false (* TODO can't we avoid this ?. *)
+  match Tsqlite3.close db.d with
+  | 0 -> Ok ()
+  | rc -> Error (Tsqlite3.errstr rc) (* FIXME keep error ? *)
+
+let busy_timeout_ms db dur = match Tsqlite3.busy_timeout db.d dur with
+| 0 -> Ok () | rc -> Error rc
+
+let last_error_message db = Tsqlite3.errmsg db.d
 
 (* SQL execution *)
 
-let db_error e db = Error (strf "%s: %s" e (Sqlite3.errmsg db.d))
+let exec db sql = Tsqlite3.exec db.d sql
 
-let exec db sql = match Sqlite3.exec db.d sql with
-| exception Sqlite3.SqliteError e -> Error e
-| exception Sqlite3.Error e -> Error e
-| Sqlite3.Rc.(OK | DONE) -> Ok ()
-| rc -> db_error (Sqlite3.Rc.to_string rc) db
+let db_error e db = Error (strf "%s: %s" e (Tsqlite3.errmsg db.d))
 
 let fold db sql sb f acc =
   try

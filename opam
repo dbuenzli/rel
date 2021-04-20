@@ -15,7 +15,7 @@ depends: ["ocaml" {>= "4.08.0"}
           "conf-sqlite3" {build}
           "cmdliner" {>= "1.0.0"}]
 build: [["ocaml" "pkg/pkg.ml" "build" "--dev-pkg" "%{dev}%"
-          "--with-sqlite3" "%{sqlite3:installed}%" ]]
+          "--with-conf-sqlite3" "%{conf-sqlite3:installed}%" ]]
 description: """
 Ask is a library for programming with relational databases in OCaml.
 It provides:
@@ -33,7 +33,7 @@ It provides:
   and generate OCaml table descriptions for existing databases.
 
 Ask is distributed under the ISC license. The basic library has no
-dependencies. The SQLite support depends on the C SQLite3 library and
-[sqlite3-ocaml](https://mmottl.github.io/sqlite3-ocaml/).
+dependencies. The SQLite support depends on the C SQLite3 library (at
+least v3.26.2).
 
 Homepage: https://erratique.ch/software/ask"""

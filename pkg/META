@@ -12,7 +12,7 @@ package "sqlite3" (
   description = "Ask sqlite3"
   version = "%%VERSION_NUM%%"
   directory = "sqlite3"
-  requires = "sqlite3 ask"
+  requires = "ask"
   archive(byte) = "ask_sqlite3.cma"
   archive(native) = "ask_sqlite3.cmxa"
   plugin(byte) = "ask_sqlite3.cma"

@@ -56,7 +56,7 @@ CAMLprim value ocaml_ask_sqlite3_open (value file, value uri, value mode,
   case 0: flags = SQLITE_OPEN_READONLY; break;
   case 1: flags = SQLITE_OPEN_READWRITE; break;
   case 2: flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE; break;
-  case 3: flags = SQLITE_OPEN_MEMORY; break;
+  case 3: flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_MEMORY; break;
   default: assert (false); break;
   }
   switch (Int_val (mutex)) {
@@ -64,7 +64,6 @@ CAMLprim value ocaml_ask_sqlite3_open (value file, value uri, value mode,
   case 1: flags |= SQLITE_OPEN_FULLMUTEX; break;
   default: assert (false); break;
   }
-
   if (Bool_val (uri)) { flags |= SQLITE_OPEN_URI; }
 
   sqlite3 *dbc = NULL;
@@ -88,7 +87,7 @@ CAMLprim value ocaml_ask_sqlite3_open (value file, value uri, value mode,
     Store_field (ret, 0, db);
   } else {
     ret = caml_alloc (1, 1);
-    Store_field (ret, 1, Val_sqlite3_rc (rc));
+    Store_field (ret, 0, Val_sqlite3_rc (rc));
   }
   CAMLreturn (ret);
 }
@@ -168,10 +167,10 @@ CAMLprim value ocaml_ask_sqlite3_prepare (value db, value sql)
     value stmt = caml_alloc (1, Abstract_tag);
     *((sqlite3_stmt **) Data_abstract_val(stmt)) = stmtc;
     ret = caml_alloc (1, 0);
-    Store_field (ret, 0, db);
+    Store_field (ret, 0, stmt);
   } else {
     ret = caml_alloc (1, 1);
-    Store_field (ret, 1, Val_sqlite3_rc (rc));
+    Store_field (ret, 0, Val_sqlite3_rc (rc));
   }
   CAMLreturn (ret);
 }

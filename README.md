@@ -18,8 +18,8 @@ It provides:
   and generate OCaml table descriptions for existing databases.
 
 Ask is distributed under the ISC license. The basic library has no
-dependencies. The SQLite support depends on the C SQLite3 library (at 
-least v3.26.2) and [sqlite3-ocaml](https://mmottl.github.io/sqlite3-ocaml/).
+dependencies. The SQLite support depends on the C SQLite3 library (at
+least v3.26.2).
 
 Homepage: https://erratique.ch/software/ask
 
@@ -28,7 +28,7 @@ Homepage: https://erratique.ch/software/ask
 ask can be installed with `opam`:
 
     opam install ask
-    opam install ask sqlite3-ocaml # with SQLite support
+    opam install ask conf-sqlite3 # with SQLite support
 
 If you don't use `opam` consult the [`opam`](opam) file for build
 instructions.

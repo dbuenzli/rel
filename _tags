@@ -2,14 +2,14 @@ true : bin_annot, safe_string
 <_b0> : -traverse
 <src> : include
 
-<src/ask_sqlite3*> : package(sqlite3)
 <src/ask_sqlite3_stubs.c> : use_sqlite3
 <src/ask_sqlite3.{cma,cmxa}> : record_ask_sqlite3_stubs
 <src/ask_sqlite3.cmxs> : link_ask_sqlite3_stubs_archive
+<src/libask_sqlite3_stubs.*> : use_sqlite3
 
 <src/ask_pool*> : thread, package(threads.posix)
 
-<test/ask_sqlite3*> : package(sqlite3), package(cmdliner), use_ask_sqlite3
-<test/test_sqlite3*> : package(sqlite3), use_ask_sqlite3
-<test/test_sql*> : package(sqlite3), use_ask_sqlite3
-<test/test_chinook*> : package(sqlite3), use_ask_sqlite3
+<test/ask_sqlite3*> : package(cmdliner), use_ask_sqlite3
+<test/test_sqlite3*> : use_ask_sqlite3
+<test/test_sql*> : use_ask_sqlite3
+<test/test_chinook*> : use_ask_sqlite3
