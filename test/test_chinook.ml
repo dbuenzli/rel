@@ -37,8 +37,8 @@ let run_tests db =
 let test db =
   let ( let* ) = Result.bind in
   log_if_error ~use:1 @@
-  let* db = Ask_sqlite3.open' db in
-  let finally () = log_if_error ~use:() (Ask_sqlite3.close db) in
+  let* db = Ask_sqlite3.(error_msg @@ open' db) in
+  let finally () = log_if_error ~use:() Ask_sqlite3.(error_msg @@ close db) in
   Fun.protect ~finally @@ fun () ->
   run_tests db;
   Ok 0

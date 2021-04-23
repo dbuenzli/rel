@@ -628,7 +628,7 @@ module Sql : sig
 
   (** Typed SQL statements.
 
-      This module provides a mechanism to type SQL statements and binding
+      This module provides a mechanism to type SQL statements and bind
       their arguments (parameters) to values. *)
   module Stmt : sig
 

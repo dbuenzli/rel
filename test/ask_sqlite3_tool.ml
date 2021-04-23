@@ -132,7 +132,6 @@ let ocaml_type_of_sql_col c =
       | true -> Some (t, "Type." ^ at)
       | false -> Some (t ^ " option", String.concat "" ["Type.(Option ";at;")"])
 
-
 let ocaml_col_of_sql_meta c =
   match ocaml_type_of_sql_col c with
   | None ->
@@ -232,7 +231,7 @@ let mem_db sql_file =
   Result.map_error (strf "%s: %s" sql_file) @@
   let* sql = string_of_file sql_file in
   let sql = Printf.sprintf "BEGIN;\n%s\nCOMMIT;" sql in
-  let* db = Ask_sqlite3.open' ~mode:Ask_sqlite3.Memory "" in
+  let* db = Ask_sqlite3.(error_msg @@ open' ~mode:Ask_sqlite3.Memory "") in
   let* () = Ask_sqlite3.exec db sql in
   Ok db
 
@@ -241,9 +240,9 @@ let sqlite3 db is_sql =
   let is_sql = is_sql || Filename.check_suffix db ".sql" in
   let* db = match is_sql with
   | true -> mem_db db
-  | false -> Ask_sqlite3.open' db
+  | false -> Ask_sqlite3.(error_msg @@ open' db)
   in
-  let finally () = log_if_error ~use:() (Ask_sqlite3.close db) in
+  let finally () = log_if_error ~use:() Ask_sqlite3.(error_msg @@ close db) in
   Fun.protect ~finally @@ fun () ->
   let* tables = Sql_meta.get_tables db in
   let add_table n cols acc = ocaml_table_of_sql_meta n cols :: acc in

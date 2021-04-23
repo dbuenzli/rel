@@ -22,6 +22,80 @@ module Tsqlite3 = struct
      so that should work on 32-bit platforms too. *)
 
   external errstr : error -> string = "ocaml_ask_sqlite3_errstr"
+  module Error = struct
+    (* See https://sqlite.org/rescode.html *)
+    let abort_rollback = 516
+    let busy_recovery = 261
+    let busy_snapshot = 517
+    let busy_timeout = 773
+    let cantopen_convpath = 1038
+    let cantopen_dirtywal = 1294
+    let cantopen_fullpath = 782
+    let cantopen_isdir = 526
+    let cantopen_notempdir = 270
+    let cantopen_symlink = 1550
+    let constraint_check = 275
+    let constraint_commithook = 531
+    let constraint_foreignkey = 787
+    let constraint_function = 1043
+    let constraint_notnull = 1299
+    let constraint_pinned = 2835
+    let constraint_primarykey = 1555
+    let constraint_rowid = 2579
+    let constraint_trigger = 1811
+    let constraint_unique = 2067
+    let constraint_vtab = 2323
+    let corrupt_index = 779
+    let corrupt_sequence = 523
+    let corrupt_vtab = 267
+    let error_missing_collseq = 257
+    let error_retry = 513
+    let error_snapshot = 769
+    let ioerr_access = 3338
+    let ioerr_auth = 7178
+    let ioerr_begin_atomic = 7434
+    let ioerr_blocked = 2826
+    let ioerr_checkreservedlock = 3594
+    let ioerr_close = 4106
+    let ioerr_commit_atomic = 7690
+    let ioerr_convpath = 6666
+    let ioerr_data = 8202
+    let ioerr_delete = 2570
+    let ioerr_delete_noent = 5898
+    let ioerr_dir_close = 4362
+    let ioerr_dir_fsync = 1290
+    let ioerr_fstat = 1802
+    let ioerr_fsync = 1034
+    let ioerr_gettemppath = 6410
+    let ioerr_lock = 3850
+    let ioerr_mmap = 6154
+    let ioerr_nomem = 3082
+    let ioerr_rdlock = 2314
+    let ioerr_read = 266
+    let ioerr_rollback_atomic = 7946
+    let ioerr_seek = 5642
+    let ioerr_shmlock = 5130
+    let ioerr_shmmap = 5386
+    let ioerr_shmopen = 4618
+    let ioerr_shmsize = 4874
+    let ioerr_short_read = 522
+    let ioerr_truncate = 1546
+    let ioerr_unlock = 2058
+    let ioerr_vnode = 6922
+    let ioerr_write = 778
+    let locked_sharedcache = 262
+    let locked_vtab = 518
+    let notice_recover_rollback = 539
+    let notice_recover_wal = 283
+    let ok_load_permanently = 256
+    let readonly_cantinit = 1288
+    let readonly_cantlock = 520
+    let readonly_dbmoved = 1032
+    let readonly_directory = 1544
+    let readonly_recovery = 264
+    let readonly_rollback = 776
+    let warning_autoindex = 284
+  end
 
   (* Database connection *)
 
@@ -126,6 +200,9 @@ let err_var_mismatch ~expected:e ~given:g =
 
 type error = Tsqlite3.error
 let error_to_string = Tsqlite3.errstr
+let error_msg r = Result.map_error error_to_string r
+module Error = Tsqlite3.Error
+
 let version = Tsqlite3.version
 
 type stmt =
@@ -236,9 +313,6 @@ end
 (* Statement cache *)
 
 module Cache = struct
-
-  (* FIXME introduce an age for LRU *)
-
   let drop db ~count =
     if count <= 0 then () else
     let count = ref count in
@@ -279,16 +353,14 @@ type mutex = Tsqlite3.mutex = No | Full
 
 let open' ?(stmt_cache_size = 10) ?vfs ?uri ?mutex ?mode f =
   match Tsqlite3.open' ?vfs ?uri ?mode ?mutex f with
-  | Error rc -> Error (Tsqlite3.errstr rc) (* FIXME keep error ? *)
+  | Error _ as v -> v
   | Ok d ->
       let stmt_cache = Hashtbl.create ~random:true stmt_cache_size in
       Ok { d; stmt_cache_size; stmt_cache; closed = false }
 
 let close db =
   Cache.clear db;
-  match Tsqlite3.close db.d with
-  | 0 -> Ok ()
-  | rc -> Error (Tsqlite3.errstr rc) (* FIXME keep error ? *)
+  match Tsqlite3.close db.d with 0 -> Ok () | rc -> Error rc
 
 let busy_timeout_ms db dur = match Tsqlite3.busy_timeout db.d dur with
 | 0 -> Ok () | rc -> Error rc
@@ -340,6 +412,42 @@ let stmt_cmd s sb = try (Stmt.bind s sb; Ok (Stmt.cmd s)) with
 
 let stmt_finalize s = try Ok (Stmt.finalize s) with
 | Failure e -> Error e
+
+(* System tables *)
+
+module Table = struct
+  open Ask
+  module Schema = struct
+    type t =
+      { type' : string;
+        name : string;
+        tbl_name : string;
+        rootpage : int;
+        sql : string }
+
+    let v type' name tbl_name rootpage sql =
+      { type'; name; tbl_name; rootpage; sql }
+
+    let type' s = s.type'
+    let name s = s.name
+    let tbl_name s = s.tbl_name
+    let rootpage s = s.rootpage
+    let sql s = s.sql
+
+    module C = struct
+      let type' = Col.v "type" Type.Text type'
+      let name = Col.v "name" Type.Text name
+      let tbl_name = Col.v "name" Type.Text tbl_name
+      let rootpage = Col.v "rootpage" Type.Int rootpage
+      let sql = Col.v "sql" Type.Text sql
+    end
+
+    let table =
+      Table.v "sqlite_schema"
+        Row.Cols.(unit v * C.type' * C.name * C.tbl_name * C.rootpage * C.sql)
+  end
+end
+
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The ask programmers
