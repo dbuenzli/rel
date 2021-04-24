@@ -18,9 +18,12 @@ It provides:
 {1:manuals Manuals}
 
 These manuals are available:
+
 {ul
 {- The {{!page-sqlite3_howto}Sqlite3 howto} explains how to get
-   started to query an existing sqlite database.}}
+   started to query an existing sqlite database.}
+{- The {{!page-conventions}[Ask] database modelling conventions} provides
+   conventions to model databases in OCaml with [Ask].}}
 
 {1:ask The [ask] library}
 

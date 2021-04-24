@@ -8,7 +8,8 @@
     {b Thread safety.} The connections exposed by this module are not
     thread safe. Besides using different connections with different
     threads provides proper
-    {{:https://sqlite.org/isolation.html}isolation}. {!Ask_pool} them.
+    {{:https://sqlite.org/isolation.html}isolation}. If you are using
+    multiple threads {!Ask_pool} the connections.
 
     {b Concurrency.} Reader and writer concurrency can be improved by
     setting your database in {{:https://sqlite.org/wal.html}WAL mode}.
@@ -20,281 +21,305 @@
     {ul
     {- Provide support for the {{:https://sqlite.org/errlog.html}
        errorlog}, the backup API (really ? look into VACUUM) and the blob API.}
-    {- For error handling we likely want some error {e codes}.}
     {- Have a look again at {{:https://sqlite.org/tclsqlite.html}tcl's binding}
        feature set.}
     {- Low-level statement interface provide support for the sql remainder.}} *)
+
+open Ask
 
 (** {1:err Errors} *)
 
 type error
 (** The type for errors. *)
 
-val error_to_string : error -> string
-(** [error_to_string e] is an english error message for [e]. *)
-
-val error_msg : ('a, error) result -> ('a, string) result
-(** [error_msg] is [Result.map_error error_to_string]. *)
-
-(** Error constants. *)
+(** Errors. *)
 module Error : sig
 
-  val abort_rollback : error
+  (** {1:codes Result codes} *)
+
+  type code
+  (** The type for result codes. [Ask_sqlite3] database connections
+      exposes only
+      {{:https://sqlite.org/rescode.html#primary_result_codes_versus_extended_result_codes}extended result} codes. See {{!Error.cst}constants}. *)
+
+  val code_to_string : code -> string
+  (** [code_to_string c] is an english message for result code [c]. *)
+
+  (** {1:errors Errors} *)
+
+  type t = error
+  (** The type for errors. *)
+
+  val code : t -> code
+  (** [code e] is the result code of [e]. *)
+
+  val message : t -> string
+  (** [message e] is the error message of [e]. This may be
+      more precise than {!code_to_string} on [e]'s code, it is the
+      result of {{:https://sqlite.org/c3ref/errcode.html}[sqlite3_errmsg]} on
+      the database connection that errored. *)
+
+  (** {1:cst Result code constants} *)
+
+  val abort_rollback : code
   (** {{:https://sqlite.org/rescode.html#abort_rollback}
       SQLITE_ABORT_ROLLBACK} *)
 
-  val busy_recovery : error
+  val busy_recovery : code
   (** {{:https://sqlite.org/rescode.html#busy_recovery}SQLITE_BUSY_RECOVERY} *)
 
-  val busy_snapshot : error
+  val busy_snapshot : code
   (** {{:https://sqlite.org/rescode.html#busy_snapshot}SQLITE_BUSY_SNAPSHOT} *)
 
-  val busy_timeout : error
+  val busy_timeout : code
   (** {{:https://sqlite.org/rescode.html#busy_timeout}SQLITE_BUSY_TIMEOUT} *)
 
-  val cantopen_convpath : error
+  val cantopen_convpath : code
   (** {{:https://sqlite.org/rescode.html#cantopen_convpath}
       SQLITE_CANTOPEN_CONVPATH} *)
 
-  val cantopen_dirtywal : error
+  val cantopen_dirtywal : code
   (** {{:https://sqlite.org/rescode.html#cantopen_dirtywal}
       SQLITE_CANTOPEN_DIRTYWAL} *)
 
-  val cantopen_fullpath : error
+  val cantopen_fullpath : code
   (** {{:https://sqlite.org/rescode.html#cantopen_fullpath}
       SQLITE_CANTOPEN_FULLPATH} *)
 
-  val cantopen_isdir : error
+  val cantopen_isdir : code
   (** {{:https://sqlite.org/rescode.html#cantopen_isdir}
       SQLITE_CANTOPEN_ISDIR} *)
 
-  val cantopen_notempdir : error
+  val cantopen_notempdir : code
   (** {{:https://sqlite.org/rescode.html#cantopen_notempdir}
       SQLITE_CANTOPEN_NOTEMPDIR} *)
 
-  val cantopen_symlink : error
+  val cantopen_symlink : code
   (** {{:https://sqlite.org/rescode.html#cantopen_symlink}
       SQLITE_CANTOPEN_SYMLINK} *)
 
-  val constraint_check : error
+  val constraint_check : code
   (** {{:https://sqlite.org/rescode.html#constraint_check}
       SQLITE_CONSTRAINT_CHECK} *)
 
-  val constraint_commithook : error
+  val constraint_commithook : code
   (** {{:https://sqlite.org/rescode.html#constraint_commithook}
       SQLITE_CONSTRAINT_COMMITHOOK} *)
 
-  val constraint_foreignkey : error
+  val constraint_foreignkey : code
   (** {{:https://sqlite.org/rescode.html#constraint_foreignkey}
       SQLITE_CONSTRAINT_FOREIGNKEY} *)
 
-  val constraint_function : error
+  val constraint_function : code
   (** {{:https://sqlite.org/rescode.html#constraint_function}
       SQLITE_CONSTRAINT_FUNCTION} *)
 
-  val constraint_notnull : error
+  val constraint_notnull : code
   (** {{:https://sqlite.org/rescode.html#constraint_notnull}
       SQLITE_CONSTRAINT_NOTNULL} *)
 
-  val constraint_pinned : error
+  val constraint_pinned : code
   (** {{:https://sqlite.org/rescode.html#constraint_pinned}
       SQLITE_CONSTRAINT_PINNED} *)
 
-  val constraint_primarykey : error
+  val constraint_primarykey : code
   (** {{:https://sqlite.org/rescode.html#constraint_primarykey}
       SQLITE_CONSTRAINT_PRIMARYKEY} *)
 
-  val constraint_rowid : error
+  val constraint_rowid : code
   (** {{:https://sqlite.org/rescode.html#constraint_rowid}
       SQLITE_CONSTRAINT_ROWID} *)
 
-  val constraint_trigger : error
+  val constraint_trigger : code
   (** {{:https://sqlite.org/rescode.html#constraint_trigger}
       SQLITE_CONSTRAINT_TRIGGER} *)
 
-  val constraint_unique : error
+  val constraint_unique : code
   (** {{:https://sqlite.org/rescode.html#constraint_unique}
       SQLITE_CONSTRAINT_UNIQUE} *)
 
-  val constraint_vtab : error
+  val constraint_vtab : code
   (** {{:https://sqlite.org/rescode.html#constraint_vtab}
       SQLITE_CONSTRAINT_VTAB} *)
 
-  val corrupt_index : error
+  val corrupt_index : code
   (** {{:https://sqlite.org/rescode.html#corrupt_index}SQLITE_CORRUPT_INDEX} *)
 
-  val corrupt_sequence : error
+  val corrupt_sequence : code
   (** {{:https://sqlite.org/rescode.html#corrupt_sequence}
       SQLITE_CORRUPT_SEQUENCE} *)
 
-  val corrupt_vtab : error
+  val corrupt_vtab : code
   (** {{:https://sqlite.org/rescode.html#corrupt_vtab}SQLITE_CORRUPT_VTAB} *)
 
-  val error_missing_collseq : error
+  val error_missing_collseq : code
   (** {{:https://sqlite.org/rescode.html#error_missing_collseq}
       SQLITE_ERROR_MISSING_COLLSEQ} *)
 
-  val error_retry : error
+  val error_retry : code
   (** {{:https://sqlite.org/rescode.html#error_retry}SQLITE_ERROR_RETRY} *)
 
-  val error_snapshot : error
+  val error_snapshot : code
   (** {{:https://sqlite.org/rescode.html#error_snapshot}
       SQLITE_ERROR_SNAPSHOT} *)
 
-  val ioerr_access : error
+  val ioerr_access : code
   (** {{:https://sqlite.org/rescode.html#ioerr_access}SQLITE_IOERR_ACCESS} *)
 
-  val ioerr_auth : error
+  val ioerr_auth : code
   (** {{:https://sqlite.org/rescode.html#ioerr_auth}SQLITE_IOERR_AUTH} *)
 
-  val ioerr_begin_atomic : error
+  val ioerr_begin_atomic : code
   (** {{:https://sqlite.org/rescode.html#ioerr_begin_atomic}
       SQLITE_IOERR_BEGIN_ATOMIC} *)
 
-  val ioerr_blocked : error
+  val ioerr_blocked : code
   (** {{:https://sqlite.org/rescode.html#ioerr_blocked}SQLITE_IOERR_BLOCKED} *)
 
-  val ioerr_checkreservedlock : error
+  val ioerr_checkreservedlock : code
   (** {{:https://sqlite.org/rescode.html#ioerr_checkreservedlock}
       SQLITE_IOERR_CHECKRESERVEDLOCK} *)
 
-  val ioerr_close : error
+  val ioerr_close : code
   (** {{:https://sqlite.org/rescode.html#ioerr_close}SQLITE_IOERR_CLOSE} *)
 
-  val ioerr_commit_atomic : error
+  val ioerr_commit_atomic : code
   (** {{:https://sqlite.org/rescode.html#ioerr_commit_atomic}
       SQLITE_IOERR_COMMIT_ATOMIC} *)
 
-  val ioerr_convpath : error
+  val ioerr_convpath : code
   (** {{:https://sqlite.org/rescode.html#ioerr_convpath}
       SQLITE_IOERR_CONVPATH} *)
 
-  val ioerr_data : error
+  val ioerr_data : code
   (** {{:https://sqlite.org/rescode.html#ioerr_data}SQLITE_IOERR_DATA} *)
 
-  val ioerr_delete : error
+  val ioerr_delete : code
   (** {{:https://sqlite.org/rescode.html#ioerr_delete}SQLITE_IOERR_DELETE} *)
 
-  val ioerr_delete_noent : error
+  val ioerr_delete_noent : code
   (** {{:https://sqlite.org/rescode.html#ioerr_delete_noent}
       SQLITE_IOERR_DELETE_NOENT} *)
 
-  val ioerr_dir_close : error
+  val ioerr_dir_close : code
   (** {{:https://sqlite.org/rescode.html#ioerr_dir_close}
       SQLITE_IOERR_DIR_CLOSE} *)
 
-  val ioerr_dir_fsync : error
+  val ioerr_dir_fsync : code
   (** {{:https://sqlite.org/rescode.html#ioerr_dir_fsync}
       SQLITE_IOERR_DIR_FSYNC} *)
 
-  val ioerr_fstat : error
+  val ioerr_fstat : code
   (** {{:https://sqlite.org/rescode.html#ioerr_fstat}SQLITE_IOERR_FSTAT} *)
 
-  val ioerr_fsync : error
+  val ioerr_fsync : code
   (** {{:https://sqlite.org/rescode.html#ioerr_fsync}SQLITE_IOERR_FSYNC} *)
 
-  val ioerr_gettemppath : error
+  val ioerr_gettemppath : code
   (** {{:https://sqlite.org/rescode.html#ioerr_gettemppath}
       SQLITE_IOERR_GETTEMPPATH} *)
 
-  val ioerr_lock : error
+  val ioerr_lock : code
   (** {{:https://sqlite.org/rescode.html#ioerr_lock}SQLITE_IOERR_LOCK} *)
 
-  val ioerr_mmap : error
+  val ioerr_mmap : code
   (** {{:https://sqlite.org/rescode.html#ioerr_mmap}SQLITE_IOERR_MMAP} *)
 
-  val ioerr_nomem : error
+  val ioerr_nomem : code
   (** {{:https://sqlite.org/rescode.html#ioerr_nomem}SQLITE_IOERR_NOMEM} *)
 
-  val ioerr_rdlock : error
+  val ioerr_rdlock : code
   (** {{:https://sqlite.org/rescode.html#ioerr_rdlock}SQLITE_IOERR_RDLOCK} *)
 
-  val ioerr_read : error
+  val ioerr_read : code
   (** {{:https://sqlite.org/rescode.html#ioerr_read}SQLITE_IOERR_READ} *)
 
-  val ioerr_rollback_atomic : error
+  val ioerr_rollback_atomic : code
   (** {{:https://sqlite.org/rescode.html#ioerr_rollback_atomic}
       SQLITE_IOERR_ROLLBACK_ATOMIC} *)
 
-  val ioerr_seek : error
+  val ioerr_seek : code
   (** {{:https://sqlite.org/rescode.html#ioerr_seek}SQLITE_IOERR_SEEK} *)
 
-  val ioerr_shmlock : error
+  val ioerr_shmlock : code
   (** {{:https://sqlite.org/rescode.html#ioerr_shmlock}SQLITE_IOERR_SHMLOCK} *)
 
-  val ioerr_shmmap : error
+  val ioerr_shmmap : code
   (** {{:https://sqlite.org/rescode.html#ioerr_shmmap}SQLITE_IOERR_SHMMAP} *)
 
-  val ioerr_shmopen : error
+  val ioerr_shmopen : code
   (** {{:https://sqlite.org/rescode.html#ioerr_shmopen}SQLITE_IOERR_SHMOPEN} *)
 
-  val ioerr_shmsize : error
+  val ioerr_shmsize : code
   (** {{:https://sqlite.org/rescode.html#ioerr_shmsize}SQLITE_IOERR_SHMSIZE} *)
 
-  val ioerr_short_read : error
+  val ioerr_short_read : code
   (** {{:https://sqlite.org/rescode.html#ioerr_short_read}
       SQLITE_IOERR_SHORT_READ} *)
 
-  val ioerr_truncate : error
+  val ioerr_truncate : code
   (** {{:https://sqlite.org/rescode.html#ioerr_truncate}
       SQLITE_IOERR_TRUNCATE} *)
 
-  val ioerr_unlock : error
+  val ioerr_unlock : code
   (** {{:https://sqlite.org/rescode.html#ioerr_unlock}SQLITE_IOERR_UNLOCK} *)
 
-  val ioerr_vnode : error
+  val ioerr_vnode : code
   (** {{:https://sqlite.org/rescode.html#ioerr_vnode}SQLITE_IOERR_VNODE} *)
 
-  val ioerr_write : error
+  val ioerr_write : code
   (** {{:https://sqlite.org/rescode.html#ioerr_write}SQLITE_IOERR_WRITE} *)
 
-  val locked_sharedcache : error
+  val locked_sharedcache : code
   (** {{:https://sqlite.org/rescode.html#locked_sharedcache}
       SQLITE_LOCKED_SHAREDCACHE} *)
 
-  val locked_vtab : error
+  val locked_vtab : code
   (** {{:https://sqlite.org/rescode.html#locked_vtab}SQLITE_LOCKED_VTAB} *)
 
-  val notice_recover_rollback : error
+  val notice_recover_rollback : code
   (** {{:https://sqlite.org/rescode.html#notice_recover_rollback}
       SQLITE_NOTICE_RECOVER_ROLLBACK} *)
 
-  val notice_recover_wal : error
+  val notice_recover_wal : code
   (** {{:https://sqlite.org/rescode.html#notice_recover_wal}
       SQLITE_NOTICE_RECOVER_WAL} *)
 
-  val ok_load_permanently : error
+  val ok_load_permanently : code
   (** {{:https://sqlite.org/rescode.html#ok_load_permanently}
       SQLITE_OK_LOAD_PERMANENTLY} *)
 
-  val readonly_cantinit : error
+  val readonly_cantinit : code
   (** {{:https://sqlite.org/rescode.html#readonly_cantinit}
       SQLITE_READONLY_CANTINIT} *)
 
-  val readonly_cantlock : error
+  val readonly_cantlock : code
   (** {{:https://sqlite.org/rescode.html#readonly_cantlock}
       SQLITE_READONLY_CANTLOCK} *)
 
-  val readonly_dbmoved : error
+  val readonly_dbmoved : code
   (** {{:https://sqlite.org/rescode.html#readonly_dbmoved}
       SQLITE_READONLY_DBMOVED} *)
 
-  val readonly_directory : error
+  val readonly_directory : code
   (** {{:https://sqlite.org/rescode.html#readonly_directory}
       SQLITE_READONLY_DIRECTORY} *)
 
-  val readonly_recovery : error
+  val readonly_recovery : code
   (** {{:https://sqlite.org/rescode.html#readonly_recovery}
       SQLITE_READONLY_RECOVERY} *)
 
-  val readonly_rollback : error
+  val readonly_rollback : code
   (** {{:https://sqlite.org/rescode.html#readonly_rollback}
       SQLITE_READONLY_ROLLBACK} *)
 
-  val warning_autoindex : error
+  val warning_autoindex : code
   (** {{:https://sqlite.org/rescode.html#warning_autoindex}
       SQLITE_WARNING_AUTOINDEX} *)
 end
+
+val error_message : ('a, error) result -> ('a, string) result
+(** [error_message] is [Result.map_error Error.message]. *)
 
 (** {1:library Library configuration and information} *)
 
@@ -312,15 +337,14 @@ type mode =
 (** The type for connection modes. *)
 
 type mutex =
-| No (** Corresponds to multi-threaded mode. *)
-| Full (** Corresponds to serialized mode. *)
+| No (** Multi-threaded mode (this is not a typo). *)
+| Full (** Serialized mode. *)
 (** The type for specifying the
     {{:https://sqlite.org/threadsafe.html}threading mode}. *)
 
 type t
-(** The type for SQLite3 connections. [Ask_sqlite3]'s abstraction
-    of connections is not thread-safe. If needed by mutiple clients,
-    {!Ask_pool} them.  *)
+(** The type for SQLite3 connections. {b Warning.} [Ask_sqlite3]'s
+    abstraction of connections is not thread-safe.  *)
 
 val open' :
   ?stmt_cache_size:int -> ?vfs:string -> ?uri:bool -> ?mutex:mutex ->
@@ -332,19 +356,19 @@ val open' :
     {- [uri], if [true] (default) the
        {{:https://sqlite.org/uri.html}URI syntax} is allowed for [file].}
     {- [vfs] is the {{:https://sqlite.org/vfs.html}vfs} to use.}
-    {- [stmt_cache_size] is [Ask_sqlite3]'s statement cache size,
+    {- [stmt_cache_size] is the connection's statement cache size,
        it defaults to [10].}}
 
     See {{:https://sqlite.org/c3ref/open.html}[sqlite3_open_v2]} for more
-    details about the parameters. *)
+    details about the parameters (except [stmt_cache_size]). *)
 
 val close : t -> (unit, error) result
 (** [close db] closes the connection to database [db].
 
     This will only ever error if there are ressources of [db] that
-    were not disposed properly. For example if you use the {{!low}low-level}
-    statement interface and forget to dispose the statements before
-    closing the database. *)
+    were not disposed properly. For example if you use the
+    {{!Ask_sqlite3.Stmt}low-level} statement interface and forget to
+    dispose the statements before closing the database. *)
 
 val busy_timeout_ms : t -> int -> (unit, error) result
 (** [busy_timout_ms db d] sets
@@ -353,28 +377,7 @@ val busy_timeout_ms : t -> int -> (unit, error) result
     should, {{!page-sqlite3_howto.write}among other things}, set this
     to a suitable amount. *)
 
-val last_error_message : t -> string
-(** [last_error_message db] is the last error message of [db]. *)
-
-(** {1:query SQL execution} *)
-
-val exec : t -> string -> (unit, string) result
-(** [exec d sql] executes the SQL statements [sql] on [d] and ignores
-    the result. [sql] is neither prepared nor cached. Use this to execute
-    SQL scripts. If you are doing lots of updates or inserts wrap
-    your SQL by [BEGIN] and [COMMIT] to ensure good performance. *)
-
-val fold : t -> string -> 'r Ask.Sql.Stmt.t ->
-  ('r -> 'c -> 'c) -> 'c -> ('c, string) result
-(** [fold d sql sb f acc] folds with [f] over the results of the {e single}
-    statement [sql] as bound by [r]. [sql] is compiled to a prepared
-    statement which is cached. *)
-
-val cmd : t -> string -> unit Ask.Sql.Stmt.t -> (unit, string) result
-(** [cmd d sql sb] is like {!fold} but executes statement [sql] only for
-    its side effect. *)
-
-(** {1:stmt Prepared statement cache} *)
+(** {2:stmt Prepared statement cache} *)
 
 val stmt_cache_size : t -> int
 (** [stmt_cache_size d] is [d]'s maximal number of cached prepared
@@ -387,40 +390,85 @@ val set_stmt_cache_size : t -> int -> unit
 val clear_stmt_cache : t -> unit
 (** [clear_stmt_cache d] clears the cache of prepared statements. *)
 
+(** {1:query SQL execution} *)
+
+val exec_sql : t -> string -> (unit, error) result
+(** [exec_sql db sql] executes the SQL statements [sql] on [db] and
+    ignores the result. [sql] is neither prepared nor cached. Use this
+    to execute SQL scripts. If you are doing lots of inserts or
+    updates make a {{!Ask_sqlite3.with_transaction}transaction} to
+    ensure good performance. *)
+
+val exec : t -> unit Sql.Stmt.t -> (unit, error) result
+(** [exec db st] is {!exec_sql} [ db (Sql.Stmt.src st)]. *)
+
+val fold : t -> 'r Sql.Stmt.t -> ('r -> 'c -> 'c) -> 'c -> ('c, error) result
+(** [fold db st f acc] folds with [f] over the results of the {e
+    single} statement [st] as bound by [r]. [st] is compiled to a
+    prepared statement which is cached. If [st] is made of more than
+    one statement subsequent statements are ignored. *)
+
+val cmd : t -> unit Sql.Stmt.t -> (unit, error) result
+(** [cmd db st] is like {!fold} but executes statement [sql] only for
+    its side effect. *)
+
+val with_transaction :
+  [`Deferred | `Immediate | `Exclusive] -> t ->
+  (unit -> ('a, 'b) result) -> (('a, 'b) result, error) result
+(** [with_transaction kind d f] wraps the call to [f] in an SQL
+    transaction of
+    {{:https://www.sqlite.org/lang_transaction.html#deferred_immediate_and_exclusive_transactions}given
+    [kind]}. If [f] raises, returns an error or if the commit fails
+    (including if the error was {!Error.busy_timeout}, FIXME should we
+    include a retry parameter ?) the transaction is rollback.
+
+    {b Note.} Nested transactions are not supported so [f] should not call
+    {!with_transaction} itself (use
+    {{:https://www.sqlite.org/lang_savepoint.html}savepoints} if you
+    need nested transactions). *)
+
 (** {1:stmt Low-level interface} *)
 
-type stmt
-(** The type for pepared statements. *)
+(** Low-level prepared statement interface. *)
+module Stmt : sig
 
-val stmt : t -> string -> (stmt, string) result
-(** [stmt d sql] is a statement for sql [sql] in database [d].
-    This statement is not part of the cache you have to {!stmt_finalize}
-    it yourself. *)
+  type db = t
+  (** See {!Ask_sqlite3.t}. *)
 
-type 'r step
-(** The type for stepping through row results of type ['r]. *)
+  type t
+  (** The type for pepared statements. *)
 
-val stmt_start : stmt -> 'r Ask.Sql.Stmt.t -> ('r step, string) result
-(** [start s sb] starts the statement [s] as bound by [sb]. This
-    {{:https://www.sqlite.org/c3ref/reset.html}resets} the prepared
-    statement and binds the arguments of [sb]. *)
+  val create : db -> string -> (t, error) result
+  (** [create db sql] is a statement for sql [sql] in database [db].  This
+      statement is not part of the cache of [db] you have to
+      {!finalize} it yourself. All statements should be finalized
+      before you {!close} [d], otherwise [close d] will error on close. *)
 
-val stmt_step : 'b step -> ('b option, string) result
-(** [step s] is the next result in [s], or [None] if the query has
-    finished executing. *)
+  type 'r step
+  (** The type for stepping through row results of type ['r]. *)
 
-val stmt_fold : stmt -> 'r Ask.Sql.Stmt.t ->
-  ('r -> 'c -> 'c) -> 'c -> ('c, string) result
-(** [fold st f acc] {{!stmt_start}starts} statement [st] with and folds
-    over all the results with [f] starting with [acc] by repateadly
-    applying {!stmt_step}. *)
+  val start : t -> 'r Sql.Stmt.t -> ('r step, error) result
+  (** [start s sb] starts the statement [s] as bound by [sb]. This
+      {{:https://www.sqlite.org/c3ref/reset.html}resets} the prepared
+      statement and binds the arguments of [sb]. *)
 
-val stmt_cmd : stmt -> unit Ask.Sql.Stmt.t -> (unit, string) result
-(** [stmt_cmd s sb] is like {!stmt_fold} but executes th statment
-    [s] only for its side effect. *)
+  val step : 'b step -> ('b option, error) result
+  (** [step s] is the next result in [s], or [None] if the query has
+      finished executing. *)
 
-val stmt_finalize : stmt -> (unit, string) result
-(** [stmt_finalize s] finalizes statement [st]. *)
+  val fold : t -> 'r Sql.Stmt.t ->
+    ('r -> 'c -> 'c) -> 'c -> ('c, error) result
+  (** [fold st f acc] {{!stmt_start}starts} statement [st] with and folds
+      over all the results with [f] starting with [acc] by repateadly
+      applying {!stmt_step}. *)
+
+  val cmd : t -> unit Sql.Stmt.t -> (unit, error) result
+  (** [cmd s sb] is like {!stmt_fold} but executes th statment
+      [s] only for its side effect. *)
+
+  val finalize : t -> (unit, error) result
+  (** [inalize s] finalizes statement [st]. *)
+end
 
 (** {1:system_tables System tables} *)
 
@@ -454,18 +502,17 @@ module Table : sig
 
     (** Columns. *)
     module C : sig
-      val type' : (t, string) Ask.Col.t
-      val name : (t, string) Ask.Col.t
-      val tbl_name : (t, string) Ask.Col.t
-      val rootpage : (t, int) Ask.Col.t
-      val sql : (t, string) Ask.Col.t
+      val type' : (t, string) Col.t
+      val name : (t, string) Col.t
+      val tbl_name : (t, string) Col.t
+      val rootpage : (t, int) Col.t
+      val sql : (t, string) Col.t
     end
 
-    val table : t Ask.Table.t
+    val table : t Table.t
     (** [table] is the {{:https://www.sqlite.org/schematab.html}
         schema table}. *)
   end
-
 end
 
 (*---------------------------------------------------------------------------

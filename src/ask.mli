@@ -48,8 +48,8 @@ end
 
 (** Column descriptions.
 
-    Columns are tupled into {{!Row}rows}. A column is defined
-    by its name, its type and how to project it from an OCaml value
+    Columns are tupled into {{!Row}rows}. A column is defined by its
+    name, its type and how to project it from an OCaml value
     representing a row.
 
     {b TODO.}
@@ -263,8 +263,9 @@ module Table : sig
   val row : 'r t -> 'r Row.t
   (** [row t] is the description of [t]'s rows. *)
 
-  val cols : 'a t -> Col.u list
-  (** [cols t] is {!Row.cols}[ row t]. *)
+  val cols : ?ignore:Col.u list -> 'a t -> Col.u list
+  (** [cols t] is {!Row.cols}[ (row t)] with columns in [ignore] ommited
+      from the result. *)
 end
 
 (** {1:query_lang Query language}
@@ -618,11 +619,7 @@ end
 
 (** {1:sql SQL} *)
 
-(** SQL helpers.
-
-    {b TODO.}
-    {ul
-    {- Maybe {!Stmt} is not such a good name. Bind ?}} *)
+(** SQL helpers. *)
 module Sql : sig
 
   (** {1:stmt Statements} *)
@@ -644,15 +641,14 @@ module Sql : sig
     (** The type for a closed (all arguments are bound) SQL statements
         returning rows of type ['r]. *)
 
+    val src : 'r t -> string
+    (** [src st] is the source SQL statement of [st]. *)
+
     val result : 'r t -> 'r Row.t
     (** [result s] is the result of [s]. *)
 
     val rev_args : 'r t -> arg list
     (** [rev_args st] is the reversed list of arguments of the statement. *)
-
-    val unit_to_unit : unit t
-    (** [unit_to_unit] is [func (ret Row.empty)]. For statements without
-        arguments and results. *)
 
     (** {1:bind Binding functions} *)
 
@@ -660,8 +656,9 @@ module Sql : sig
     (** The type for open SQL statements with argument binding
         function of type ['a]. *)
 
-    val func : 'a func -> 'a
-    (** [func f] is the binding function of [f]. *)
+    val func : string -> 'a func -> 'a
+    (** [func sql f] is the binding function of [f] used on the source
+        SQL statement [sql]. *)
 
     val ret : 'r Row.t -> 'r t func
     (** [ret st row] is an open SQL statement [st] returning values of
@@ -694,6 +691,10 @@ module Sql : sig
     val option : 'a Type.t -> 'a option Type.t
     (** [option t] is [!Type.option t]. *)
 
+    val unit_to_unit : string -> unit t
+    (** [unit_to_unit sql] is [func sql (ret Row.empty)]. For statements
+        without arguments and results. *)
+
     (** {2:cols Binding row columns}
 
         This avoids repeating the row argument once per column. *)
@@ -705,10 +706,7 @@ module Sql : sig
     (** [col c f] binds the projection on column [c] of a row. *)
   end
 
-  (** {1:data Data definition} *)
-
-  type 'a src = string * 'a
-  (** The type for SQL source statements and their binding function. *)
+  (** {1:schema Schema definition} *)
 
   type Col.param +=
   | Col of string
@@ -723,7 +721,7 @@ module Sql : sig
          are ignored, you are in control.}
       {- [Col_constraint sql] appends [sql]
          at the end of the column definition. Can be repeated.}
-      {- [Col_primary_key] is a PRIMARY KEY constraint}
+      {- [Col_primary_key] is a PRIMARY KEY NOT NULL constraint}
       {- [Col_references (t, c)] declares that the column references
          column [c] in [t].}
       {- [Col_unique] is a UNIQUE constraint}} *)
@@ -744,34 +742,36 @@ module Sql : sig
       {- [Table_primary_key cols], declares a primary key on columns [cols]}} *)
 
   val drop_table :
-    ?schema:string -> ?if_exists:bool -> 'a Table.t -> unit Stmt.t src
+    ?schema:string -> ?if_exists:bool -> 'a Table.t -> unit Stmt.t
   (** [drop_table ~if_exist ~schema t] is an SQL DROP TABLE statement to
       drops table [t] of schema [schema].  If [if_exists] is [true]
       (default) no error is reported if the table does not exist. *)
 
   val create_table :
-    ?schema:string -> ?if_not_exists:bool -> 'a Table.t -> unit Stmt.t src
+    ?schema:string -> ?if_not_exists:bool -> 'a Table.t -> unit Stmt.t
   (** [create_table t] is an SQL CREATE TABLE statement for [t].  If
       [if_not_exists] is [true] (default) the corresponding sentence
       is added to the create statement. *)
 
   val create_schema :
-    ?schema:string -> ?drop:bool -> Table.u list -> unit Stmt.t src
-  (** [create_schema ~drop ts] are {e multiple} SQL statements to create
-      the tables [ts] if they don't exist. If [drop] is true (defaults
-      to [false]) the table [ts] are dropped before if they exist. Make
-      sure to use {!Ask_sqlite3.exec} otherwise only the first statement
-      gets executed. *)
+    ?schema:string -> ?drop:bool -> Table.u list -> unit Stmt.t
+  (** [create_schema ~drop ts] are {e multiple} SQL statements to
+      create the tables [ts] if they don't exist. If [drop] is true
+      (defaults to [false]) the table [ts] are dropped before if they
+      exist.
 
-  (** {1:insert Inserting} *)
+      Make sure to use {!Ask_sqlite3.exec} otherwise only the first
+      statement gets executed, wrapping the whole thing in
+      {!Ask_sqlite3.with_transaction} is a good idea aswell. *)
+
+  (** {1:insupd Inserting and updating} *)
 
   val insert_row_into :
-    ?schema:string -> ?ignore:Col.u list -> 'r Table.t ->
-    ('r -> unit Stmt.t) src
-  (** [insert_row_into ~ignore t] is an SQL INSERT INTO statement which
-      inserts i [t] values draw from an value
-      values drawn from a provided OCaml table row. Columns
-      mentioned in [col] of the row are ignored for the insertion. *)
+    ?schema:string -> ?ignore:Col.u list -> 'r Table.t -> ('r -> unit Stmt.t)
+  (** [insert_row_into ~ignore t] is an SQL INSERT INTO statement
+      which inserts i [t] values draw from an value values drawn from
+      a provided OCaml table row. Columns mentioned in [col] of the
+      row are ignored for the insertion. *)
 
   (*
   val update_with_row : ?schema:string -> ?ignore:Col.u list ->

@@ -76,7 +76,7 @@ CAMLprim value ocaml_ask_sqlite3_open (value file, value uri, value mode,
   int rc = sqlite3_open_v2 (filec, &dbc, flags, vfsc);
   caml_stat_free (filec);
   if (vfsc != NULL) { caml_stat_free (vfsc); }
-  caml_acquire_runtime_system();
+  caml_acquire_runtime_system ();
 
   if (rc == SQLITE_OK)
   {
@@ -102,6 +102,11 @@ CAMLprim value ocaml_ask_sqlite3_errmsg (value db)
   return caml_copy_string (sqlite3_errmsg (Sqlite3_val (db)));
 }
 
+CAMLprim value ocaml_ask_sqlite3_extended_errcode (value db)
+{
+  return Val_int (sqlite3_extended_errcode (Sqlite3_val (db)));
+}
+
 CAMLprim value ocaml_ask_sqlite3_busy_timeout (value db, value ms)
 {
   return Val_sqlite3_rc (sqlite3_busy_timeout (Sqlite3_val(db), Int_val(ms)));
@@ -111,40 +116,26 @@ CAMLprim value ocaml_ask_sqlite3_busy_timeout (value db, value ms)
 
 CAMLprim value ocaml_ask_sqlite3_exec (value db, value sql)
 {
-  CAMLparam2 (db, sql);
-  CAMLlocal1 (ret);
-
   if (!caml_string_is_c_safe (sql))
     caml_invalid_argument ("sqlite3_exec: SQL string is not C safe.");
 
   sqlite3 *dbc = Sqlite3_val (db);
-  char *errmsg = NULL;
   char *sqlc = caml_stat_strdup (String_val (sql));
   caml_release_runtime_system ();
-  int rc = sqlite3_exec (dbc, sqlc, NULL, NULL, &errmsg);
+  int rc = sqlite3_exec (dbc, sqlc, NULL, NULL, NULL);
   caml_stat_free (sqlc);
   caml_acquire_runtime_system();
-
-  if (rc == SQLITE_OK)
-  {
-    if (errmsg != NULL) { /* should not happen */ sqlite3_free (errmsg); }
-    ret = caml_alloc (1, 0);
-    Store_field (ret, 0, Val_unit);
-  } else {
-    ret = caml_alloc (1, 1);
-    if (errmsg != NULL)
-    {
-      Store_field (ret, 0, caml_copy_string (errmsg));
-      sqlite3_free (errmsg);
-    } else {
-      /* unclear whether that can happen, we use the rc error string */
-      Store_field (ret, 0, caml_copy_string (sqlite3_errstr (rc)));
-    }
-  }
-  CAMLreturn (ret);
+  return Val_sqlite3_rc (rc);
 }
 
 /* Prepared statements */
+
+CAMLprim value ocaml_ask_sqlite3_stmt_errmsg (value stmt)
+{
+  sqlite3_stmt *stmtc = Sqlite3_stmt_val (stmt);
+  sqlite3 *dbc = sqlite3_db_handle (stmtc);
+  return caml_copy_string (sqlite3_errmsg (dbc));
+}
 
 CAMLprim value ocaml_ask_sqlite3_prepare (value db, value sql)
 {
@@ -190,7 +181,7 @@ CAMLprim value ocaml_ask_sqlite3_step (value stmt)
   sqlite3_stmt *stmtc = Sqlite3_stmt_val (stmt);
   caml_release_runtime_system ();
   int rc = sqlite3_step (stmtc);
-  caml_acquire_runtime_system();
+  caml_acquire_runtime_system ();
   return Val_sqlite3_rc (rc);
 }
 

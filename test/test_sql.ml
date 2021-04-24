@@ -14,13 +14,13 @@ let log_if_error ~use = function
 | Ok v -> v | Error e -> Format.eprintf "Error: %s@." e; use
 
 let create_schema db schema =
-  log_sql "schema" (fst schema);
-  Ask_sqlite3.exec db (fst schema)
+  log_sql "schema" (Sql.Stmt.src schema);
+  Ask_sqlite3.exec db schema
 
 let insert_row db sql r =
-  let sql = fst sql and bind = (snd sql) r in
-  log_sql "insert" sql;
-  Ask_sqlite3.cmd db sql bind
+  let st = sql r in
+  log_sql "insert" (Sql.Stmt.src st);
+  Ask_sqlite3.cmd db st
 
 let rec insert_rows db sql t = function
 | [] -> Ok ()
@@ -30,9 +30,9 @@ let rec insert_rows db sql t = function
     | Error _ as e -> e | Ok () -> insert_rows db sql t rs
 
 let select_rows db sql row =
-  let bind = Sql.Stmt.(func @@ ret row) in
-  log_sql "select" sql;
-  let* ops = Ask_sqlite3.fold db sql bind List.cons [] in
+  let st = Sql.Stmt.(func sql @@ ret row) in
+  log_sql "select" (Sql.Stmt.src st);
+  let* ops = Ask_sqlite3.fold db st List.cons [] in
   let ops = List.rev ops in
   log "@[<v>%a@,---@]" (Row.list_pp ~header:true row) ops;
   Ok ()
@@ -42,7 +42,7 @@ module Test_sql_src = struct
   open Ask.Syntax
 
   let sql = "SELECT * FROM product WHERE name = $1 and price = $2"
-  let req = Sql.Stmt.(func @@ text @-> int @-> ret (Table.row S.product))
+  let req = Sql.Stmt.(func sql @@ text @-> int @-> ret (Table.row S.product))
 
   let order2 = Q.get_order (Int.v 2)
   let order2_sales =
@@ -94,8 +94,11 @@ module Test_products = struct
 
   let run () =
     log "Testing Products schema";
-    let* db = Ask_sqlite3.(error_msg @@ open' ~mode:Ask_sqlite3.Memory "") in
-    let finally () = log_if_error ~use:() Ask_sqlite3.(error_msg @@ close db) in
+    Ask_sqlite3.error_message @@
+    let* db = Ask_sqlite3.(open' ~mode:Ask_sqlite3.Memory "") in
+    let finally () =
+      log_if_error ~use:() Ask_sqlite3.(error_message @@ close db)
+    in
     Fun.protect ~finally @@ fun () ->
     let* () = create_schema db schema in
     let* () = insert_rows db insert_product Product.table Data.products in
@@ -174,8 +177,11 @@ module Test_duos = struct
 
   let run () =
     log "Testing Duos schema";
-    let* db = Ask_sqlite3.(error_msg @@ open' ~mode:Ask_sqlite3.Memory "") in
-    let finally () = log_if_error ~use:() Ask_sqlite3.(error_msg @@ close db) in
+    Ask_sqlite3.error_message @@
+    let* db = Ask_sqlite3.open' ~mode:Ask_sqlite3.Memory "" in
+    let finally () =
+      log_if_error ~use:() Ask_sqlite3.(error_message @@ close db)
+    in
     Fun.protect ~finally @@ fun () ->
     let* () = create_schema db schema in
     let* () = insert_rows db insert_person Person.table Data.persons in
@@ -209,8 +215,11 @@ module Test_org = struct
 
   let run () =
     log "Testing Org schema";
-    let* db = Ask_sqlite3.(error_msg @@ open' ~mode:Ask_sqlite3.Memory "") in
-    let finally () = log_if_error ~use:() Ask_sqlite3.(error_msg @@ close db) in
+    Ask_sqlite3.error_message @@
+    let* db = Ask_sqlite3.open' ~mode:Ask_sqlite3.Memory "" in
+    let finally () =
+      log_if_error ~use:() Ask_sqlite3.(error_message @@ close db)
+    in
     Fun.protect ~finally @@ fun () ->
     let* () = create_schema db schema in
     let* () =

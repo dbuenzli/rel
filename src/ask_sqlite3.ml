@@ -17,85 +17,10 @@ module Tsqlite3 = struct
   (* Errors, note that open' sets the connection to always return extended
      error code. *)
 
-  type error = int
-  (* N.B. sqlite defines these as int32 but currently do not exceed 2**31-1
-     so that should work on 32-bit platforms too. *)
+  type rc = int (* N.B. sqlite defines these as int32 but they are small
+                   so that should work on 32-bit platforms too. *)
 
-  external errstr : error -> string = "ocaml_ask_sqlite3_errstr"
-  module Error = struct
-    (* See https://sqlite.org/rescode.html *)
-    let abort_rollback = 516
-    let busy_recovery = 261
-    let busy_snapshot = 517
-    let busy_timeout = 773
-    let cantopen_convpath = 1038
-    let cantopen_dirtywal = 1294
-    let cantopen_fullpath = 782
-    let cantopen_isdir = 526
-    let cantopen_notempdir = 270
-    let cantopen_symlink = 1550
-    let constraint_check = 275
-    let constraint_commithook = 531
-    let constraint_foreignkey = 787
-    let constraint_function = 1043
-    let constraint_notnull = 1299
-    let constraint_pinned = 2835
-    let constraint_primarykey = 1555
-    let constraint_rowid = 2579
-    let constraint_trigger = 1811
-    let constraint_unique = 2067
-    let constraint_vtab = 2323
-    let corrupt_index = 779
-    let corrupt_sequence = 523
-    let corrupt_vtab = 267
-    let error_missing_collseq = 257
-    let error_retry = 513
-    let error_snapshot = 769
-    let ioerr_access = 3338
-    let ioerr_auth = 7178
-    let ioerr_begin_atomic = 7434
-    let ioerr_blocked = 2826
-    let ioerr_checkreservedlock = 3594
-    let ioerr_close = 4106
-    let ioerr_commit_atomic = 7690
-    let ioerr_convpath = 6666
-    let ioerr_data = 8202
-    let ioerr_delete = 2570
-    let ioerr_delete_noent = 5898
-    let ioerr_dir_close = 4362
-    let ioerr_dir_fsync = 1290
-    let ioerr_fstat = 1802
-    let ioerr_fsync = 1034
-    let ioerr_gettemppath = 6410
-    let ioerr_lock = 3850
-    let ioerr_mmap = 6154
-    let ioerr_nomem = 3082
-    let ioerr_rdlock = 2314
-    let ioerr_read = 266
-    let ioerr_rollback_atomic = 7946
-    let ioerr_seek = 5642
-    let ioerr_shmlock = 5130
-    let ioerr_shmmap = 5386
-    let ioerr_shmopen = 4618
-    let ioerr_shmsize = 4874
-    let ioerr_short_read = 522
-    let ioerr_truncate = 1546
-    let ioerr_unlock = 2058
-    let ioerr_vnode = 6922
-    let ioerr_write = 778
-    let locked_sharedcache = 262
-    let locked_vtab = 518
-    let notice_recover_rollback = 539
-    let notice_recover_wal = 283
-    let ok_load_permanently = 256
-    let readonly_cantinit = 1288
-    let readonly_cantlock = 520
-    let readonly_dbmoved = 1032
-    let readonly_directory = 1544
-    let readonly_recovery = 264
-    let readonly_rollback = 776
-    let warning_autoindex = 284
-  end
+  external errstr : rc -> string = "ocaml_ask_sqlite3_errstr"
 
   (* Database connection *)
 
@@ -105,37 +30,39 @@ module Tsqlite3 = struct
 
   external _open' :
     string -> uri:bool -> mode:mode -> mutex:mutex -> vfs:string ->
-    (t, error) result =
-    "ocaml_ask_sqlite3_open"
+    (t, rc) result = "ocaml_ask_sqlite3_open"
 
   let open'
       ?(vfs = "") ?(uri = true) ?(mutex = Full) ?(mode = Read_write_create) f
     =
     _open' ~vfs ~uri ~mode ~mutex f
 
-  external close : t -> error = "ocaml_ask_sqlite3_close"
+  external close : t -> rc = "ocaml_ask_sqlite3_close"
+  external extended_errcode : t -> int = "ocaml_ask_sqlite3_extended_errcode"
   external errmsg : t -> string = "ocaml_ask_sqlite3_errmsg"
-  external busy_timeout : t -> int -> error = "ocaml_ask_sqlite3_busy_timeout"
+  external busy_timeout : t -> int -> rc = "ocaml_ask_sqlite3_busy_timeout"
 
   (* Queries *)
 
-  external exec : t -> string -> (unit, string) result =
-    "ocaml_ask_sqlite3_exec"
+  external exec : t -> string -> rc = "ocaml_ask_sqlite3_exec"
 
   (* Pepared statements *)
 
   type stmt (* Boxed pointer to sqlite3_stmt struct *)
 
-  external prepare : t -> string -> (stmt, error) result =
+  external stmt_errmsg : stmt -> string =
+    "ocaml_ask_sqlite3_stmt_errmsg"
+
+  external prepare : t -> string -> (stmt, rc) result =
     "ocaml_ask_sqlite3_prepare"
 
-  external finalize : stmt -> error =
+  external finalize : stmt -> rc =
     "ocaml_ask_sqlite3_finalize"
 
-  external reset : stmt -> error =
+  external reset : stmt -> rc =
     "ocaml_ask_sqlite3_reset"
 
-  external step : stmt -> error =
+  external step : stmt -> rc =
     "ocaml_ask_sqlite3_step"
 
   external column_count : stmt -> int =
@@ -144,28 +71,28 @@ module Tsqlite3 = struct
   external bind_parameter_count : stmt -> int =
     "ocaml_ask_sqlite3_bind_paramater_count"
 
-  external bind_null : stmt -> int -> error =
+  external bind_null : stmt -> int -> rc =
     "ocaml_ask_sqlite3_bind_null"
 
-  external bind_bool : stmt -> int -> bool -> error =
+  external bind_bool : stmt -> int -> bool -> rc =
     "ocaml_ask_sqlite3_bind_bool"
 
-  external bind_int : stmt -> int -> int -> error =
+  external bind_int : stmt -> int -> int -> rc =
     "ocaml_ask_sqlite3_bind_int"
 
-  external bind_int64 : stmt -> int -> int64 -> error =
+  external bind_int64 : stmt -> int -> int64 -> rc =
     "ocaml_ask_sqlite3_bind_int64"
 
-  external bind_double : stmt -> int -> float -> error =
+  external bind_double : stmt -> int -> float -> rc =
     "ocaml_ask_sqlite3_bind_double"
 
-  external bind_text : stmt -> int -> string -> error =
+  external bind_text : stmt -> int -> string -> rc =
     "ocaml_ask_sqlite3_bind_text"
 
-  external bind_blob : stmt -> int -> string -> error =
+  external bind_blob : stmt -> int -> string -> rc =
     "ocaml_ask_sqlite3_bind_blob"
 
-  external clear_bindings : stmt -> error =
+  external clear_bindings : stmt -> rc =
     "ocaml_ask_sqlite3_clear_bindings"
 
   external column_is_null : stmt -> int -> bool =
@@ -190,44 +117,140 @@ module Tsqlite3 = struct
     "ocaml_ask_sqlite3_column_blob"
 end
 
+(* Errors *)
+
+module Error = struct
+
+  (* Result codes *)
+
+  type code = Tsqlite3.rc
+  let code_to_string = Tsqlite3.errstr
+
+  (* Errors *)
+
+  type t = { code : code; message : string }
+  let v code message = { code; message }
+  let code e = e.code
+  let message e = e.message
+
+  (* See https://sqlite.org/rescode.html *)
+
+  let abort_rollback = 516
+  let busy_recovery = 261
+  let busy_snapshot = 517
+  let busy_timeout = 773
+  let cantopen_convpath = 1038
+  let cantopen_dirtywal = 1294
+  let cantopen_fullpath = 782
+  let cantopen_isdir = 526
+  let cantopen_notempdir = 270
+  let cantopen_symlink = 1550
+  let constraint_check = 275
+  let constraint_commithook = 531
+  let constraint_foreignkey = 787
+  let constraint_function = 1043
+  let constraint_notnull = 1299
+  let constraint_pinned = 2835
+  let constraint_primarykey = 1555
+  let constraint_rowid = 2579
+  let constraint_trigger = 1811
+  let constraint_unique = 2067
+  let constraint_vtab = 2323
+  let corrupt_index = 779
+  let corrupt_sequence = 523
+  let corrupt_vtab = 267
+  let error_missing_collseq = 257
+  let error_retry = 513
+  let error_snapshot = 769
+  let ioerr_access = 3338
+  let ioerr_auth = 7178
+  let ioerr_begin_atomic = 7434
+  let ioerr_blocked = 2826
+  let ioerr_checkreservedlock = 3594
+  let ioerr_close = 4106
+  let ioerr_commit_atomic = 7690
+  let ioerr_convpath = 6666
+  let ioerr_data = 8202
+  let ioerr_delete = 2570
+  let ioerr_delete_noent = 5898
+  let ioerr_dir_close = 4362
+  let ioerr_dir_fsync = 1290
+  let ioerr_fstat = 1802
+  let ioerr_fsync = 1034
+  let ioerr_gettemppath = 6410
+  let ioerr_lock = 3850
+  let ioerr_mmap = 6154
+  let ioerr_nomem = 3082
+  let ioerr_rdlock = 2314
+  let ioerr_read = 266
+  let ioerr_rollback_atomic = 7946
+  let ioerr_seek = 5642
+  let ioerr_shmlock = 5130
+  let ioerr_shmmap = 5386
+  let ioerr_shmopen = 4618
+  let ioerr_shmsize = 4874
+  let ioerr_short_read = 522
+  let ioerr_truncate = 1546
+  let ioerr_unlock = 2058
+  let ioerr_vnode = 6922
+  let ioerr_write = 778
+  let locked_sharedcache = 262
+  let locked_vtab = 518
+  let notice_recover_rollback = 539
+  let notice_recover_wal = 283
+  let ok_load_permanently = 256
+  let readonly_cantinit = 1288
+  let readonly_cantlock = 520
+  let readonly_dbmoved = 1032
+  let readonly_directory = 1544
+  let readonly_recovery = 264
+  let readonly_rollback = 776
+  let warning_autoindex = 284
+end
+
+type error = Error.t
+let error_message r = Result.map_error Error.message r
+let db_error rc db = Error.v rc (Tsqlite3.errmsg db)
+
 open Ask
 
 let strf = Printf.sprintf
-let err_rc rc = failwith (Tsqlite3.errstr rc)
-let err_var_rc idx rc  = failwith (strf "var %d: %s" idx (Tsqlite3.errstr rc))
-let err_var_mismatch ~expected:e ~given:g =
-  failwith (strf "SQL statement has %d variables, only %d were given." e g)
 
-type error = Tsqlite3.error
-let error_to_string = Tsqlite3.errstr
-let error_msg r = Result.map_error error_to_string r
-module Error = Tsqlite3.Error
+(* Library configuration and information. *)
 
 let version = Tsqlite3.version
 
-type stmt =
-  { stmt : Tsqlite3.stmt;
-    col_count : int;
-    mutable finalized : bool; }
+(* Low-level statement interface. *)
 
-type 'r step = stmt * 'r Sql.Stmt.t
-type t =
-  { d : Tsqlite3.t;
-    mutable stmt_cache_size : int;
-    stmt_cache : (string, stmt) Hashtbl.t;
-    mutable closed : bool; }
+module Stmt' = struct
 
-(* Statements low-level functions *)
+  let stmt_error rc st = Error.v rc (Tsqlite3.stmt_errmsg st)
+  let stmt_error_var idx rc st =
+    let msg = strf "var %d: %s" idx (Tsqlite3.stmt_errmsg st) in
+    Error.v rc msg
 
-module Stmt = struct
+  let stmt_error_mismatch ~expected:e ~given:g =
+    let msg = strf "SQL statement has %d variables, only %d were given." e g in
+    Error.v 1 msg
+
+  exception Error of Error.t
+  let error err = raise (Error err)
+
+  type t =
+    { stmt : Tsqlite3.stmt;
+      col_count : int;
+      mutable finalized : bool; }
+
+  type 'r step = t * 'r Sql.Stmt.t
+
   let validate s = if s.finalized then failwith "finalized statement" else ()
   let finalize s = match Tsqlite3.finalize s.stmt with
-  | 0 -> s.finalized <- true | rc -> err_rc rc
+  | 0 -> s.finalized <- true | rc -> error (stmt_error rc s.stmt)
 
   let finalize_noerr s = try finalize s with Failure _ -> ()
 
-  let prepare db sql = match Tsqlite3.prepare db.d sql with
-  | Error rc -> err_rc rc
+  let prepare db sql = match Tsqlite3.prepare db sql with
+  | Error rc -> error (db_error rc db)
   | Ok stmt ->
       let col_count = Tsqlite3.column_count stmt in
       let finalized = false in
@@ -252,11 +275,12 @@ module Stmt = struct
     | [] ->
         let expected = Tsqlite3.bind_parameter_count st in
         let given = idx - 1 in
-        if expected = given then () else err_var_mismatch ~expected ~given
+        if expected = given then () else
+        error (stmt_error_mismatch ~expected ~given)
     | arg :: args ->
         match bind_arg st idx arg with
         | 0 -> loop (idx + 1) st args
-        | rc -> err_var_rc idx rc
+        | rc -> error (stmt_error_var idx rc st)
     in
     loop 1 st args
 
@@ -264,7 +288,7 @@ module Stmt = struct
     validate s;
     match Tsqlite3.reset s.stmt with
     | 0 -> bind_args s.stmt (List.rev (Sql.Stmt.rev_args sb))
-    | rc -> err_rc rc
+    | rc -> error (stmt_error rc s.stmt)
 
   let rec unpack_col_type : type r c. Tsqlite3.stmt -> int -> c Type.t -> c =
   fun s i t -> match t with
@@ -281,7 +305,7 @@ module Stmt = struct
   let unpack_col : type r c. Tsqlite3.stmt -> int -> (r, c) Col.t -> c =
   fun s i c -> unpack_col_type s i (Col.type' c)
 
-  let unpack_row : type r. stmt -> r Sql.Stmt.t -> r = fun s st ->
+  let unpack_row : type r. t -> r Sql.Stmt.t -> r = fun s st ->
     let rec cols : type r a. Tsqlite3.stmt -> int -> (r, a) Askt.prod -> a =
     fun s idx r -> match r with
     | Askt.Unit f -> f
@@ -295,22 +319,28 @@ module Stmt = struct
   let step s sb = match Tsqlite3.step s.stmt with
   | 101 (* SQLITE_DONE *) -> ignore (Tsqlite3.clear_bindings s.stmt); None
   | 100 (* SQLITE_ROW *) -> Some (unpack_row s sb)
-  | rc ->  err_rc rc
+  | rc ->  error (stmt_error rc s.stmt)
 
   let fold s st f acc =
     let rec loop s st f acc = match Tsqlite3.step s.stmt with
     | 100 (* SQLITE_ROW *) -> loop s st f (f (unpack_row s st) acc)
     | 101 (* SQLITE_DONE *) -> ignore (Tsqlite3.clear_bindings s.stmt); acc
-    | rc -> err_rc rc
+    | rc -> error (stmt_error rc s.stmt)
     in
     loop s st f acc
 
   let cmd s = match Tsqlite3.step s.stmt with
   | 100 | 101 (* SQLITE_{ROW,DONE} *) -> ignore (Tsqlite3.clear_bindings s.stmt)
-  | rc -> err_rc rc
+  | rc -> error (stmt_error rc s.stmt)
 end
 
-(* Statement cache *)
+(* Database connection *)
+
+type t =
+  { db : Tsqlite3.t;
+    mutable stmt_cache_size : int;
+    stmt_cache : (string, Stmt'.t) Hashtbl.t;
+    mutable closed : bool; }
 
 module Cache = struct
   let drop db ~count =
@@ -318,7 +348,7 @@ module Cache = struct
     let count = ref count in
     let drop _ st = match !count > 0 with
     | false -> raise Exit
-    | true -> decr count; Stmt.finalize_noerr st; None
+    | true -> decr count; Stmt'.finalize_noerr st; None
     in
     try Hashtbl.filter_map_inplace drop db.stmt_cache with Exit -> ()
 
@@ -329,7 +359,7 @@ module Cache = struct
     drop db ~count:drop_count
 
   let clear db =
-    let drop _ st = Stmt.finalize_noerr st in
+    let drop _ st = Stmt'.finalize_noerr st in
     Hashtbl.iter drop db.stmt_cache;
     Hashtbl.reset db.stmt_cache
 
@@ -341,82 +371,117 @@ module Cache = struct
 
   let stmt db sql = match find db sql with
   | Some s -> s
-  | None -> let s = Stmt.prepare db sql in add db sql s; s
+  | None -> let s = Stmt'.prepare db.db sql in add db sql s; s
 end
-
-(* Connection *)
-
-let validate db = if db.closed then failwith "connection closed" else ()
 
 type mode = Tsqlite3.mode = Read | Read_write | Read_write_create | Memory
 type mutex = Tsqlite3.mutex = No | Full
 
+let[@inline] validate db =
+  if db.closed then invalid_arg "connection closed" else ()
+
 let open' ?(stmt_cache_size = 10) ?vfs ?uri ?mutex ?mode f =
   match Tsqlite3.open' ?vfs ?uri ?mode ?mutex f with
-  | Error _ as v -> v
-  | Ok d ->
+  | Error rc -> Error (Error.v rc (Error.code_to_string rc))
+  | Ok db ->
       let stmt_cache = Hashtbl.create ~random:true stmt_cache_size in
-      Ok { d; stmt_cache_size; stmt_cache; closed = false }
+      Ok { db; stmt_cache_size; stmt_cache; closed = false }
 
 let close db =
+  validate db;
   Cache.clear db;
-  match Tsqlite3.close db.d with 0 -> Ok () | rc -> Error rc
+  match Tsqlite3.close db.db with 0 -> Ok () | rc -> Error (db_error rc db.db)
 
-let busy_timeout_ms db dur = match Tsqlite3.busy_timeout db.d dur with
-| 0 -> Ok () | rc -> Error rc
-
-let last_error_message db = Tsqlite3.errmsg db.d
-
-(* SQL execution *)
-
-let exec db sql = Tsqlite3.exec db.d sql
-
-let db_error e db = Error (strf "%s: %s" e (Tsqlite3.errmsg db.d))
-
-let fold db sql sb f acc =
-  try
-    let s = Cache.stmt db sql in
-    Stmt.bind s sb; Ok (Stmt.fold s sb f acc)
-  with
-  | Failure e -> db_error e db
-
-let cmd db sql sb =
-  try
-    let s = Cache.stmt db sql in
-    Stmt.bind s sb; Ok (Stmt.cmd s)
-  with
-  | Failure e -> db_error e db
-
-(* Prepared statement cache *)
+let busy_timeout_ms db dur =
+  validate db;
+  match Tsqlite3.busy_timeout db.db dur with
+  | 0 -> Ok () | rc -> Error (db_error rc db.db)
 
 let stmt_cache_size = Cache.size
 let set_stmt_cache_size = Cache.set_size
 let clear_stmt_cache = Cache.clear
 
+(* SQL execution *)
+
+let exec_sql db sql =
+  validate db;
+  match Tsqlite3.exec db.db sql with
+  | 0 -> Ok () | rc -> Error (db_error rc db.db)
+
+let exec db st = exec_sql db (Sql.Stmt.src st)
+
+let fold db st f acc =
+  validate db;
+  try
+    let s = Cache.stmt db (Sql.Stmt.src st) in
+    Stmt'.bind s st; Ok (Stmt'.fold s st f acc)
+  with
+  | Stmt'.Error e -> Error e
+
+let cmd db st =
+  validate db;
+  try
+    let s = Cache.stmt db (Sql.Stmt.src st) in
+    Stmt'.bind s st; Ok (Stmt'.cmd s)
+  with
+  | Stmt'.Error e -> Error e
+
+let with_transaction kind db f =
+  validate db;
+  let kind = match kind with
+  | `Deferred -> "DEFERRED"
+  | `Immediate -> "IMMEDIATE"
+  | `Exclusive -> "EXCLUSIVE"
+  in
+  let start () = Tsqlite3.exec db.db (strf "BEGIN %s TRANSACTION" kind) in
+  let commit () = Tsqlite3.exec db.db "COMMIT TRANSACTION" in
+  let abort_noerr () = ignore (Tsqlite3.exec db.db "ROLLBACK TRANSACTION") in
+  match start () with
+  | rc when rc <> 0 -> Error (db_error rc db.db)
+  | _0 ->
+      match f () with
+      | exception exn ->
+          let bt = Printexc.get_raw_backtrace () in
+          abort_noerr ();
+          Printexc.raise_with_backtrace exn bt
+      | Error _ as e ->
+          abort_noerr (); Ok e
+      | Ok _ as v ->
+          match commit () with
+          | rc when rc <> 0 -> abort_noerr (); Error (db_error rc db.db)
+          | _0 -> Ok v
+
 (* Statements *)
 
-let stmt db sql = try Ok (Stmt.prepare db sql) with
-| Failure e -> db_error e db
+module Stmt = struct
+  type db = t
+  type t = Stmt'.t
+  type 'a step = 'a Stmt'.step
 
-let stmt_start s sb = try (Stmt.bind s sb; Ok (s, sb)) with
-| Failure e -> Error e (* XXX we need sqlite3_db_handle  *)
+  let create db sql =
+    validate db;
+    try Ok (Stmt'.prepare db.db sql) with
+    | Stmt'.Error e -> Error e
 
-let stmt_step (s, st) = try Ok (Stmt.step s st) with
-| Failure e -> Error e
+  let start s sb = try (Stmt'.bind s sb; Ok (s, sb)) with
+  | Stmt'.Error e -> Error e
 
-let stmt_fold s sb f acc = try (Stmt.bind s sb; Ok (Stmt.fold s sb f acc)) with
-| Failure e -> Error e
+  let step (s, st) = try Ok (Stmt'.step s st) with
+  | Stmt'.Error e -> Error e
 
-let stmt_cmd s sb = try (Stmt.bind s sb; Ok (Stmt.cmd s)) with
-| Failure e -> Error e
+  let fold s sb f acc = try (Stmt'.bind s sb; Ok (Stmt'.fold s sb f acc)) with
+  | Stmt'.Error e -> Error e
 
-let stmt_finalize s = try Ok (Stmt.finalize s) with
-| Failure e -> Error e
+  let cmd s sb = try (Stmt'.bind s sb; Ok (Stmt'.cmd s)) with
+  | Stmt'.Error e -> Error e
+
+  let finalize s = try Ok (Stmt'.finalize s) with
+  | Stmt'.Error e -> Error e
+end
 
 (* System tables *)
 
 module Table = struct
-  open Ask
   module Schema = struct
     type t =
       { type' : string;
@@ -447,7 +512,6 @@ module Table = struct
         Row.Cols.(unit v * C.type' * C.name * C.tbl_name * C.rootpage * C.sql)
   end
 end
-
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The ask programmers

@@ -18,8 +18,10 @@ It provides:
   and generate OCaml table descriptions for existing databases.
 
 Ask is distributed under the ISC license. The basic library has no
-dependencies. The SQLite support depends on the C SQLite3 library (at
-least v3.26.2).
+dependencies. 
+
+The SQLite support depends on the C SQLite3 library (at least
+v3.26.2).
 
 Homepage: https://erratique.ch/software/ask
 

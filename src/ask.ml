@@ -152,7 +152,13 @@ module Table = struct
   let name t = t.name
   let params t = t.params
   let row t = t.row
-  let cols t = Row.cols t.row
+  let cols ?(ignore = []) t = match ignore with
+  | [] -> Row.cols t.row
+  | icols ->
+      let keep (Col.V c) =
+        not (List.exists (fun (Col.V i) -> Col.equal_name i c) icols)
+      in
+      List.filter keep (Row.cols t.row)
 end
 
 module Askt = struct
@@ -352,7 +358,6 @@ module Syntax = struct
 end
 
 module Bag_to_sql = struct     (* FIXME merge into Sql module. *)
-
   module Sql = struct   (* Target SQL fragment to compile bags *)
     type table = string
     type var = string
@@ -592,15 +597,17 @@ end
 module Sql = struct
   module Stmt = struct
     type arg = Arg : 'a Type.t * 'a -> arg
-    type 'r t = { rev_args : arg list; result : 'r Row.t; }
+    type 'r t = { src : string; rev_args : arg list; result : 'r Row.t; }
+    let src st = st.src
     let result st = st.result
     let rev_args st = st.rev_args
-    let unit_to_unit = { rev_args = []; result = Row.empty }
-    type 'a func = arg list -> 'a
-    let func f = f []
-    let ret result = fun rev_args -> { rev_args; result}
-    let ret_rev result = fun args -> { rev_args = List.rev args; result }
-    let arg t f = fun rev_args v -> f (Arg (t, v) :: rev_args)
+    type 'a func = string -> arg list -> 'a
+    let func src f = f src []
+    let ret result = fun src rev_args -> { src; rev_args; result}
+    let ret_rev result =
+      fun src args -> { src; rev_args = List.rev args; result }
+
+    let arg t f = fun src rev_args v -> f src (Arg (t, v) :: rev_args)
     let ( @-> ) = arg
     let bool = Type.Bool
     let int = Type.Int
@@ -609,17 +616,21 @@ module Sql = struct
     let text = Type.Text
     let blob = Type.Blob
     let option v = (Type.Option v)
-
-    let nop f = fun rev_args v -> f rev_args
+    let unit_to_unit src = { src; rev_args = []; result = Row.empty }
+    let nop f = fun src rev_args v -> f src rev_args
     let col :
       type r a. (r, a) Col.t -> (r -> 'b) func -> (r -> 'b) func =
-      fun col f -> fun rev_args r ->
+      fun col f -> fun src rev_args r ->
       let arg = Arg (Col.type' col, (Col.proj col) r) in
-      f (arg :: rev_args) r
+      f src (arg :: rev_args) r
   end
 
-  (* Data definition, it's a bit unclear how portable we can make
-       that maybe we need to parametrize over the DB backend. *)
+  (* Schema definition.
+
+     It's a bit unclear how portable we can make
+     that maybe we need to parametrize over the DB backend. We should
+     likely make like a little AST and parameterize the functions
+     over a syntax value in charge of serializing the AST. *)
 
   let pp_id ppf id = Fmt.pf ppf "%S" id
   let pp_id_list = Fmt.hbox Fmt.(list ~sep:comma pp_id)
@@ -671,7 +682,9 @@ module Sql = struct
     | None ->
         let type', not_null = type_of_type (Col.type' col) in
         let not_null = if not_null && not pkey then " NOT NULL" else "" in
-        let primary_key = if pkey then " PRIMARY KEY" else "" in
+        (* Note the NOT NULL here is because of sqlite which does
+           not imply it on primary keys. *)
+        let primary_key = if pkey then " PRIMARY KEY NOT NULL" else "" in
         let unique = if unique && not pkey then " UNIQUE" else "" in
         let cs = if cs = [] then "" else String.concat " " (" " :: cs) in
         let r = match r with None -> "" | Some (t, c) -> references (t,[c]) in
@@ -708,25 +721,33 @@ module Sql = struct
     let n = in_schema ?schema t in
     let if_exists = if if_exists then " IF EXISTS" else "" in
     let sql = Fmt.str "DROP TABLE%s %a;" if_exists pp_id n in
-    sql, Stmt.unit_to_unit
+    Stmt.unit_to_unit sql
 
   let create_table ?schema ?(if_not_exists = true) t =
-    let name = Table.name t in
+    let n = in_schema ?schema t in
     let if_not_exists = if if_not_exists then " IF NOT EXISTS" else "" in
     let pp_sep ppf () = Fmt.pf ppf ",@," in
     let sql, cs, fks, pk = table_params t in
     let sql = match sql with
     | Some sql ->
         Fmt.str "@[<v2>CREATE TABLE%s %a (@,@[%a@]@]@,);"
-          if_not_exists pp_id name Fmt.lines sql
+          if_not_exists pp_id n Fmt.lines sql
     | None ->
         let pk = match pk with None -> [] | Some cols -> [primary_key cols] in
         let fks = List.map foreign_key fks in
         let defs = col_defs t @ pk @ fks @ cs in
-        Fmt.str "@[<v2>CREATE TABLE%s %a (@,%a@]@,);" if_not_exists pp_id name
+        Fmt.str "@[<v2>CREATE TABLE%s %a (@,%a@]@,);" if_not_exists pp_id n
           Fmt.(list ~sep:pp_sep string) defs
     in
-    sql, Stmt.unit_to_unit
+    Stmt.unit_to_unit sql
+
+  let create_schema ?schema ?(drop = false) ts =
+    let gen_drop (Table.V t) = Stmt.src (drop_table ?schema t) in
+    let gen_table (Table.V t) = Stmt.src (create_table ?schema t) in
+    let drops = if drop then List.map gen_drop ts else [] in
+    let creates = List.map gen_table ts in
+    let sql = String.concat "\n" (drops @ creates) in
+    Stmt.unit_to_unit sql
 
   let insert_row_into ?schema ?(ignore = []) t =
     (* TODO automatically ignore auto incremented *)
@@ -748,19 +769,9 @@ module Sql = struct
       Fmt.str "@[<v>INSERT INTO %a (%a)@,VALUES (%a)@]"
         pp_id n pp_id_list cs pp_vars vars
     in
-    sql, Stmt.func f
+    Stmt.func sql f
 
-  let create_schema ?schema ?(drop = true) ts =
-    let gen_drop (Table.V t) = fst (drop_table ?schema t) in
-    let gen_table (Table.V t) = fst (create_table ?schema t) in
-    let drops = if drop then List.map gen_drop ts else [] in
-    let creates = List.map gen_table ts in
-    let sql = String.concat "\n" (drops @ creates) in
-    sql, Stmt.unit_to_unit
-
-  module Private = struct
-    let type_of_type = type_of_type
-  end
+  (* Bags *)
 
   let normalize = Bag_to_sql.normalize
   let of_bag = Bag_to_sql.of_bag
