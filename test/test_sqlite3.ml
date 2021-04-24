@@ -21,7 +21,7 @@ module Playlist = struct
     let name = "Name", [], Type.Text, name
   end
 
-  let table = "playlists", [], Row.Cols.(unit v * C.playlistId * C.name)
+  let table = Table.v "playlists" Row.Cols.(unit v * C.playlistId * C.name)
   let pp = Row.value_pp (Table.row table)
 end
 

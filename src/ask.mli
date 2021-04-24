@@ -48,7 +48,7 @@ end
 
 (** Column descriptions.
 
-    Columns are tupled into rows. A column is defined
+    Columns are tupled into {{!Row}rows}. A column is defined
     by its name, its type and how to project it from an OCaml value
     representing a row.
 
@@ -65,11 +65,12 @@ module Col : sig
       some parameters. *)
 
   type ('r, 'a) t = string * param list * 'a Type.t * ('r -> 'a)
-  (** The type for a column of type ['a] part of a row stored in
-      an OCaml value of type ['r]. This is, in order, the name of the column,
-      additional parameters, its type and the row value accessor.
+  (** The type for a column of type ['a] which is part of a row stored
+      in an OCaml value of type ['r]. This is, in order, the name of
+      the column, additional parameters, its type and the row value
+      accessor.
 
-      {b Note.} The type definition is explicit otherwise row
+      {b Note.} The type definition is not abstract otherwise row
       variables of object projection functions can't generalize. *)
 
   type u = V : ('a, 'r) t -> u (** *)
@@ -116,13 +117,13 @@ end
 
 (** Row descriptions.
 
-    A row describe table or query results rows. It is defined by a cartesian
+    A row describe rows of table or query results. It is a cartesian
     product of {{!Col}columns} and an OCaml constructor for injecting
     rows into OCaml values. *)
 module Row : sig
 
   type ('r, 'a) prod
-  (** The type for a cartesian product in construction whose final result
+  (** The type for constructing a cartesian product whose final result
       will be represented by OCaml values of type ['r]. *)
 
   type 'r t = ('r, 'r) prod
@@ -163,7 +164,7 @@ module Row : sig
 
       {b WARNING.} Since by default these column constructors lack
       projection {!Row.pp} cannot be used on them. Those created with
-      {{!tuple}tuple constructors} do however (re)define projection. *)
+      {{!Quick.tuple}tuple constructors} do however (re)define projection. *)
   module Quick : sig
 
     val unit : 'a -> ('r, 'a) prod
@@ -244,7 +245,7 @@ module Table : sig
   (** The type for exensible table parameters. See {!Ask.Sql} for
       some parameters. *)
 
-  type 'r t = string * param list * 'r Row.t (** *)
+  type 'r t
   (** The type for a table represented by an OCaml of type ['a]. *)
 
   type u = V : 'r t -> u
@@ -263,7 +264,7 @@ module Table : sig
   (** [row t] is the description of [t]'s rows. *)
 
   val cols : 'a t -> Col.u list
-  (** [cols t] is {!Row.cols}[row t]. *)
+  (** [cols t] is {!Row.cols}[ row t]. *)
 end
 
 (** {1:query_lang Query language}

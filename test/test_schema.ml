@@ -63,9 +63,11 @@ module Products_flat_with_objects = struct
     end
 
     let product =
-      "product", [], Row.Cols.(unit product' * C.pid * C.name * C.price)
+      Table.v "product" Row.Cols.(unit product' * C.pid * C.name * C.price)
 
-    let order = "order", [], Row.Cols.(unit order' * C.oid * C.pid * C.qty)
+    let order =
+      Table.v "order" Row.Cols.(unit order' * C.oid * C.pid * C.qty)
+
     let sales = Row.Cols.(unit sales' * C.pid * C.name * C.sale)
 
     let name r = Bag.proj r C.name

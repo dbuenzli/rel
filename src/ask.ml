@@ -146,13 +146,13 @@ end
 
 module Table = struct
   type param = ..
-  type 'a t = string * param list * 'a Row.t
+  type 'a t = { name : string; params : param list; row : 'a Row.t }
   type u = V : 'a t -> u
-  let v ?(params = []) name r = name, params, r
-  let name (n, _, _) = n
-  let params (_, ps, _) = ps
-  let row (_, _, r) = r
-  let cols (_, _, r) = Row.cols r
+  let v ?(params = []) name row = { name; params; row }
+  let name t = t.name
+  let params t = t.params
+  let row t = t.row
+  let cols t = Row.cols t.row
 end
 
 module Askt = struct
@@ -241,7 +241,7 @@ module Askt = struct
   | Yield v -> Fmt.pf ppf "@[<2>Yield@ @[<1>(%a)@]@]" (pp_value id) v
   | Union (a, b) ->
       Fmt.pf ppf "@[<2>Union@ @[<1>(%a,@ %a)@]@]" (pp_bag id) a (pp_bag id) b
-  | Table (n, _, _) -> Fmt.pf ppf "Table %s" n
+  | Table t -> Fmt.pf ppf "Table %s" (Table.name t)
   | Foreach (b, y) ->
       let var = "r" ^ string_of_int id in
       let id = id + 1 in
@@ -492,7 +492,7 @@ module Bag_to_sql = struct     (* FIXME merge into Sql module. *)
   and bag_to_sql : type r e. gen -> (r, e) Askt.bag -> Sql.t =
   fun g b -> match b with
   | Askt.Empty -> Empty
-  | Table (n, _, _) -> Sql.Select ([Sql.All n], [n,""], None)
+  | Table t -> Sql.Select ([Sql.All (Table.name t)], [Table.name t,""], None)
   | Yield v ->
       let cols = match value_to_sql g v with
       | Row cols -> cols
@@ -503,7 +503,7 @@ module Bag_to_sql = struct     (* FIXME merge into Sql module. *)
   | Union (b0, b1) -> Sql.Union_all (bag_to_sql g b0, bag_to_sql g b1)
   | Foreach (b, y) ->
       let t = match b with
-      | Table (n, _, _) -> n
+      | Table t -> (Table.name t)
       | b ->
           failwith
             (Format.asprintf "@[<v>Foreach normalization: not a table:@, %a@]"
