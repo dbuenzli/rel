@@ -55,7 +55,7 @@ end
 module Col = struct
   type param = ..
   type ('r, 'a) t = string * param list * 'a Type.t * ('r -> 'a)
-  type u = V : ('a, 'r) t -> u
+  type 'r u = V : ('r, 'a) t -> 'r u
   let v ?(params = []) n t p = n, params, t, p
   let name (n, _, _, _) = n
   let params (_, ps, _, _) = ps
@@ -80,7 +80,7 @@ module Row = struct
   let prod r c = Prod (r, c)
   let empty = unit ()
   let cols r =
-    let rec loop : type r a. (r, a) prod -> Col.u list = function
+    let rec loop : type r a. (r, a) prod -> r Col.u list = function
     | Unit _ -> [] | Prod (r, c) -> Col.V c :: loop r
     in
     List.rev (loop r)
@@ -660,8 +660,8 @@ module Sql = struct
     | Col sql :: ps -> loop (Some sql) cs pkey r unique ps
     | Col_constraint c :: ps -> loop sql (c :: cs) pkey r unique ps
     | Col_primary_key :: ps -> loop sql cs true r unique ps
-    | Col_references (t, c) :: ps ->
-        loop sql cs pkey (Some (Table.V t, Col.V c)) unique ps
+    | Col_references _ as ref :: ps ->
+        loop sql cs pkey (Some ref) unique ps
     | Col_unique :: ps -> loop sql cs pkey r true ps
     | _ :: ps -> loop sql cs pkey r true ps
     in
@@ -669,10 +669,10 @@ module Sql = struct
 
   let col_names cs = List.map (fun (Col.V c) -> Col.name c) cs
 
-  let references ((Table.V t), cs) =
-    if cs = [] then "" else
-    let ns = col_names cs in
-    Fmt.str " REFERENCES %a (%a)" pp_id (Table.name t) pp_id_list ns
+  let references = function
+  | Col_references (t, c) ->
+    Fmt.str " REFERENCES %a (%a)" pp_id (Table.name t) pp_id (Col.name c)
+  | _ -> assert false
 
   let col_def (Col.V col) =
     let n = Col.name col in
@@ -687,7 +687,7 @@ module Sql = struct
         let primary_key = if pkey then " PRIMARY KEY NOT NULL" else "" in
         let unique = if unique && not pkey then " UNIQUE" else "" in
         let cs = if cs = [] then "" else String.concat " " (" " :: cs) in
-        let r = match r with None -> "" | Some (t, c) -> references (t,[c]) in
+        let r = match r with None -> "" | Some ref -> references ref in
         Fmt.str "%a %s%s%s%s%s%s"
           pp_id n type' not_null primary_key unique cs r
 
@@ -696,23 +696,38 @@ module Sql = struct
   type Table.param +=
   | Table of string
   | Table_constraint of string
-  | Table_foreign_key of Col.u list * (Table.u * Col.u list)
-  | Table_primary_key of Col.u list
+  | Table_foreign_key : 'r Col.u list * ('a Table.t * 'a Col.u list) ->
+      Table.param
+  | Table_primary_key : 'r Col.u list -> Table.param
 
   let table_params t =
     let rec loop sql cs fks pk = function
     | [] -> sql, List.rev cs, List.rev fks, pk
     | Table sql :: ps -> loop (Some sql) cs fks pk ps
     | Table_constraint c :: ps -> loop sql (c :: cs) fks pk ps
-    | Table_foreign_key (c,r) :: ps -> loop sql cs ((c,r) :: fks) pk ps
-    | Table_primary_key pk :: ps -> loop sql cs fks (Some pk) ps
+    | Table_foreign_key _ as fk :: ps -> loop sql cs (fk :: fks) pk ps
+    | Table_primary_key _ as pk :: ps -> loop sql cs fks (Some pk) ps
     | _ :: ps -> loop sql cs fks pk ps
     in
     loop None [] [] None (Table.params t)
 
-  let primary_key cs = Fmt.str "PRIMARY KEY (%a)" pp_id_list (col_names cs)
-  let foreign_key (cs, ref) =
-    Fmt.str "FOREIGN KEY (%a)%s" pp_id_list (col_names cs) (references ref)
+  let primary_key = function
+  | Table_primary_key cs ->
+      Fmt.str "PRIMARY KEY (%a)" pp_id_list (col_names cs)
+  | _ -> assert false
+
+  let foreign_references = function
+  | Table_foreign_key (_, (t, cs)) ->
+    if cs = [] then "" else
+    let ns = col_names cs in
+    Fmt.str " REFERENCES %a (%a)" pp_id (Table.name t) pp_id_list ns
+  | _ -> assert false
+
+  let foreign_key = function
+  | Table_foreign_key (cs, ref) as fk ->
+      Fmt.str "FOREIGN KEY (%a)%s" pp_id_list (col_names cs)
+        (foreign_references fk)
+  | _ -> assert false
 
   let in_schema ?schema t = match schema with
   | None -> Table.name t | Some s -> Fmt.str "%s.%s" s (Table.name t)
@@ -733,7 +748,7 @@ module Sql = struct
         Fmt.str "@[<v2>CREATE TABLE%s %a (@,@[%a@]@]@,);"
           if_not_exists pp_id n Fmt.lines sql
     | None ->
-        let pk = match pk with None -> [] | Some cols -> [primary_key cols] in
+        let pk = match pk with None -> [] | Some pk -> [primary_key pk] in
         let fks = List.map foreign_key fks in
         let defs = col_defs t @ pk @ fks @ cs in
         Fmt.str "@[<v2>CREATE TABLE%s %a (@,%a@]@,);" if_not_exists pp_id n

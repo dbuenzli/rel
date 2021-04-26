@@ -73,8 +73,8 @@ module Col : sig
       {b Note.} The type definition is not abstract otherwise row
       variables of object projection functions can't generalize. *)
 
-  type u = V : ('a, 'r) t -> u (** *)
-  (** The type for untyped columns. *)
+  type 'r u = V : ('r, 'a) t -> 'r u (** *)
+  (** The type for untyped columns for a row of type ['r]. *)
 
   val v : ?params:param list -> string -> 'a Type.t -> ('r -> 'a) -> ('r, 'a) t
   (** [v name ~params t proj] is a columns with corresponding attributes. *)
@@ -140,7 +140,7 @@ module Row : sig
   (** [empty] is the empty product [unit ()]. A row specification for side
       effecting SQL statements, (e.g. UPDATE). *)
 
-  val cols : ('r, 'a) prod -> Col.u list
+  val cols : ('r, 'a) prod -> 'r Col.u list
   (** [cols r] are the columns in row [r], from left-to-right, untyped. *)
 
   (** Row specification syntax.
@@ -263,7 +263,7 @@ module Table : sig
   val row : 'r t -> 'r Row.t
   (** [row t] is the description of [t]'s rows. *)
 
-  val cols : ?ignore:Col.u list -> 'a t -> Col.u list
+  val cols : ?ignore:'r Col.u list -> 'r t -> 'r Col.u list
   (** [cols t] is {!Row.cols}[ (row t)] with columns in [ignore] ommited
       from the result. *)
 end
@@ -729,8 +729,9 @@ module Sql : sig
   type Table.param +=
   | Table of string
   | Table_constraint of string
-  | Table_foreign_key of Col.u list * (Table.u * Col.u list)
-  | Table_primary_key of Col.u list (** *)
+  | Table_foreign_key :
+      'r Col.u list * ('s Table.t * 's Col.u list) -> Table.param
+  | Table_primary_key : 'r Col.u list -> Table.param (** *)
   (** The type for table parameters.
       {ul
       {- [Table sql] is the full SQL table definition between the ().
@@ -767,7 +768,7 @@ module Sql : sig
   (** {1:insupd Inserting and updating} *)
 
   val insert_row_into :
-    ?schema:string -> ?ignore:Col.u list -> 'r Table.t -> ('r -> unit Stmt.t)
+    ?schema:string -> ?ignore:'r Col.u list -> 'r Table.t -> ('r -> unit Stmt.t)
   (** [insert_row_into ~ignore t] is an SQL INSERT INTO statement
       which inserts i [t] values draw from an value values drawn from
       a provided OCaml table row. Columns mentioned in [col] of the
