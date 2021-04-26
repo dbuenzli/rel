@@ -112,6 +112,11 @@ CAMLprim value ocaml_ask_sqlite3_busy_timeout (value db, value ms)
   return Val_sqlite3_rc (sqlite3_busy_timeout (Sqlite3_val(db), Int_val(ms)));
 }
 
+CAMLprim value ocaml_ask_sqlite3_changes (value db)
+{
+  return Val_int (sqlite3_changes (Sqlite3_val (db)));
+}
+
 /* Queries */
 
 CAMLprim value ocaml_ask_sqlite3_exec (value db, value sql)

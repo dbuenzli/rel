@@ -377,6 +377,12 @@ val busy_timeout_ms : t -> int -> (unit, error) result
     should, {{!page-sqlite3_howto.write}among other things}, set this
     to a suitable amount. *)
 
+val changes : t -> int
+(** [changes db] is the
+    {{:https://www.sqlite.org/c3ref/changes.html}number of rows}
+    modified, inserted or deleted by the last executed statement on
+    [db]. *)
+
 (** {2:stmt Prepared statement cache} *)
 
 val stmt_cache_size : t -> int
@@ -399,8 +405,9 @@ val exec_sql : t -> string -> (unit, error) result
     updates make a {{!Ask_sqlite3.with_transaction}transaction} to
     ensure good performance. *)
 
-val exec : t -> unit Sql.Stmt.t -> (unit, error) result
-(** [exec db st] is {!exec_sql} [ db (Sql.Stmt.src st)]. *)
+val exec_once : t -> unit Sql.Stmt.t -> (unit, error) result
+(** [exec_once db st] is {!exec_sql} [ db (Sql.Stmt.src st)]. Use {!exec}
+    if the source of [st] may be repeated in the future. *)
 
 val fold : t -> 'r Sql.Stmt.t -> ('r -> 'c -> 'c) -> 'c -> ('c, error) result
 (** [fold db st f acc] folds with [f] over the results of the {e
@@ -408,8 +415,8 @@ val fold : t -> 'r Sql.Stmt.t -> ('r -> 'c -> 'c) -> 'c -> ('c, error) result
     prepared statement which is cached. If [st] is made of more than
     one statement subsequent statements are ignored. *)
 
-val cmd : t -> unit Sql.Stmt.t -> (unit, error) result
-(** [cmd db st] is like {!fold} but executes statement [sql] only for
+val exec : t -> unit Sql.Stmt.t -> (unit, error) result
+(** [exec db st] is like {!fold} but executes statement [sql] only for
     its side effect. *)
 
 val with_transaction :

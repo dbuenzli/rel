@@ -14,7 +14,7 @@ module Tsqlite3 = struct
     let patch = (v mod mmaj) mod mmin in
     String.concat "." [s maj; s min; s patch]
 
-  (* Errors, note that open' sets the connection to always return extended
+  (* Errors, note that our open' sets the connection to always return extended
      error code. *)
 
   type rc = int (* N.B. sqlite defines these as int32 but they are small
@@ -41,6 +41,7 @@ module Tsqlite3 = struct
   external extended_errcode : t -> int = "ocaml_ask_sqlite3_extended_errcode"
   external errmsg : t -> string = "ocaml_ask_sqlite3_errmsg"
   external busy_timeout : t -> int -> rc = "ocaml_ask_sqlite3_busy_timeout"
+  external changes : t -> int = "ocaml_ask_sqlite3_changes"
 
   (* Queries *)
 
@@ -397,6 +398,8 @@ let busy_timeout_ms db dur =
   match Tsqlite3.busy_timeout db.db dur with
   | 0 -> Ok () | rc -> Error (db_error rc db.db)
 
+let changes db = validate db; Tsqlite3.changes db.db
+
 let stmt_cache_size = Cache.size
 let set_stmt_cache_size = Cache.set_size
 let clear_stmt_cache = Cache.clear
@@ -408,7 +411,7 @@ let exec_sql db sql =
   match Tsqlite3.exec db.db sql with
   | 0 -> Ok () | rc -> Error (db_error rc db.db)
 
-let exec db st = exec_sql db (Sql.Stmt.src st)
+let exec_once db st = exec_sql db (Sql.Stmt.src st)
 
 let fold db st f acc =
   validate db;
@@ -418,7 +421,7 @@ let fold db st f acc =
   with
   | Stmt'.Error e -> Error e
 
-let cmd db st =
+let exec db st =
   validate db;
   try
     let s = Cache.stmt db (Sql.Stmt.src st) in

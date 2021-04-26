@@ -76,6 +76,9 @@ module Col : sig
   type 'r u = V : ('r, 'a) t -> 'r u (** *)
   (** The type for untyped columns for a row of type ['r]. *)
 
+  type 'r value = Value : ('r, 'a) t * 'a -> 'r value (** *)
+  (** The type for a column value for a row of type ['r]. *)
+
   val v : ?params:param list -> string -> 'a Type.t -> ('r -> 'a) -> ('r, 'a) t
   (** [v name ~params t proj] is a columns with corresponding attributes. *)
 
@@ -110,6 +113,9 @@ module Col : sig
 
   val value_pp : ('r, 'a) t -> Format.formatter -> 'r -> unit
   (** [value_pp] formats a row's column value. *)
+
+  val pp_value : Format.formatter -> 'r value -> unit
+  (** [pp_value ppf v] formats [v]'s value. *)
 
   val pp_sep : Format.formatter -> unit -> unit
   (** [pp_sep] formats a separator for columns. *)
@@ -626,8 +632,12 @@ module Sql : sig
 
   (** Typed SQL statements.
 
-      This module provides a mechanism to type SQL statements and bind
-      their arguments (parameters) to values. *)
+      This module provides a low-level mechanism to type SQL
+      statements arguments (parameters) and bind their arguments to
+      value via an OCaml binding function.
+
+      See the {{!page-sql_stmt_howto}SQL statement typing howto}
+      for a short introduction. *)
   module Stmt : sig
 
     (** {1:arg Arguments} *)
@@ -670,6 +680,9 @@ module Sql : sig
     val ( @-> ) : 'a Type.t -> 'b func -> ('a -> 'b) func
     (** [t @-> f] is [arg t f] *)
 
+    val unit : unit t func
+    (** [unit] is [ret ]{!Row.empty}. *)
+
     val bool : bool Type.t
     (** [bool] is {!Type.Bool}. *)
 
@@ -691,16 +704,16 @@ module Sql : sig
     val option : 'a Type.t -> 'a option Type.t
     (** [option t] is [!Type.option t]. *)
 
-    val unit_to_unit : string -> unit t
-    (** [unit_to_unit sql] is [func sql (ret Row.empty)]. For statements
-        without arguments and results. *)
+    (** {2:projs Binding projections and row columns}
 
-    (** {2:cols Binding row columns}
-
-        This avoids repeating the row argument once per column. *)
+        See the {{!page-sql_stmt_howto.binding_projection}this section}
+        of the SQL statement typing howto for a short introduction. *)
 
     val nop : 'b func -> ('a -> 'b) func
     (** [nop f] adds an unused argument to [f]. *)
+
+    val proj : 'a Type.t -> ('r -> 'a) -> ('r -> 'b) func -> ('r -> 'b) func
+    (** [proj t p] binds the projection [p] of a value of type [t]. *)
 
     val col : ('r, 'a) Col.t -> ('r -> 'b) func -> ('r -> 'b) func
     (** [col c f] binds the projection on column [c] of a row. *)
@@ -774,14 +787,32 @@ module Sql : sig
       a provided OCaml table row. Columns mentioned in [col] of the
       row are ignored for the insertion. *)
 
-  (*
-  val update_with_row : ?schema:string -> ?ignore:Col.u list ->
-    'r Table.t -> where:string -> ('r -> unit Stmt.t) src
+  (** {1:bandaid Band aid}
 
-  val update_with_row_cols: ?schema:string -> cols:Col.u list -> 'r Table.t ->
-    where:string -> ('r -> unit Stmt.t) src
+      Remove these things. The [where] part should be fully integrated
+      with the query language. *)
 
-*)
+  val update_rows :
+    ?schema:string -> 'r Table.t -> 'r Col.value list ->
+    where:'r Col.value list -> unit Stmt.t
+  (** [update_cols t cols ~where] updates columns values [col]
+      of the rows of [t] where columns have all the values in [where] (AND). *)
+
+  val delete_rows :
+    ?schema:string -> 'r Table.t -> where:'r Col.value list -> unit Stmt.t
+  (** [delete_rows t ~where] deletes rows where columns have all the
+      values in [where] (AND). *)
+
+  val table_rows :
+    ?schema:string -> ?where:string -> 'r Table.t ->
+    ('r Stmt.t Stmt.func -> 'ret Stmt.func) ->
+    'ret
+  (** [select_rows t func ~where] are the rows of table [t]. [func row]
+      can be used to bind parameters of [where] (defaults to ["TRUE"]).
+      For example:
+      {[
+      select_rows t Stmt.(func row -> int @-> row) ~where:"id = ?1"
+      ]} *)
 
   (** {1:bag Bags}
 

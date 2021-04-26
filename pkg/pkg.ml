@@ -18,6 +18,7 @@ let () =
     Pkg.doc "doc/sqlite3_howto.mld" ~dst:"odoc-pages/sqlite3_howto.mld";
     Pkg.doc "doc/tutorial.mld" ~dst:"odoc-pages/tutorial.mld";
     Pkg.doc "doc/conventions.mld" ~dst:"odoc-pages/conventions.mld";
+    Pkg.doc "doc/sql_stmt_howto.mld" ~dst:"odoc-pages/sql_stmt_howto.mld";
     Pkg.test "test/test";
     Pkg.test "test/test_list";
     Pkg.test ~cond:sqlite3 "test/test_sqlite3_stub";

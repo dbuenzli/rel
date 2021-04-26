@@ -15,12 +15,12 @@ let log_if_error ~use = function
 
 let create_schema db schema =
   log_sql "schema" (Sql.Stmt.src schema);
-  Ask_sqlite3.exec db schema
+  Ask_sqlite3.exec_once db schema
 
 let insert_row db sql r =
   let st = sql r in
   log_sql "insert" (Sql.Stmt.src st);
-  Ask_sqlite3.cmd db st
+  Ask_sqlite3.exec db st
 
 let rec insert_rows db sql t = function
 | [] -> Ok ()

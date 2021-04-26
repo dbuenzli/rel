@@ -56,6 +56,7 @@ module Col = struct
   type param = ..
   type ('r, 'a) t = string * param list * 'a Type.t * ('r -> 'a)
   type 'r u = V : ('r, 'a) t -> 'r u
+  type 'r value = Value : ('r, 'a) t * 'a -> 'r value
   let v ?(params = []) n t p = n, params, t, p
   let name (n, _, _, _) = n
   let params (_, ps, _, _) = ps
@@ -67,6 +68,7 @@ module Col = struct
   let pp ppf (n, _, t, _) = Fmt.pf ppf "@[%a : %a@]" Fmt.string n Type.pp t
   let pp_name ppf (n, _, _ ,_) = Fmt.string ppf n
   let value_pp (_, _, t, p) ppf r = Type.value_pp t ppf (p r)
+  let pp_value ppf (Value ((_, _, t, _), v)) = Type.value_pp t ppf v
   let pp_sep ppf () = Format.pp_print_char ppf '|'
 end
 
@@ -357,7 +359,10 @@ module Syntax = struct
   let ( let* ) = Bag.foreach
 end
 
-module Bag_to_sql = struct     (* FIXME merge into Sql module. *)
+module Bag_to_sql = struct
+  (* FIXME merge into Sql module.
+     FIXME double quote and escape identifiers. *)
+
   module Sql = struct   (* Target SQL fragment to compile bags *)
     type table = string
     type var = string
@@ -595,12 +600,38 @@ module Bag_to_sql = struct     (* FIXME merge into Sql module. *)
 end
 
 module Sql = struct
+
+  (* It's a bit unclear how portable we can make that by sticking to
+     ANSI SQL. Maybe we need to parametrize over the DB backend. We
+     should likely make like a little AST and parameterize the
+     functions over a syntax value in charge of serializing the
+     AST. *)
+
+  let quote qchar s =
+    let len = String.length s in
+    let qlen = ref (len + 2) in
+    for i = 0 to len - 1 do if s.[i] = qchar then incr qlen done;
+    let b = Bytes.make !qlen qchar in
+    match !qlen = len + 2 with
+    | true -> Bytes.blit_string s 0 b 1 len; Bytes.unsafe_to_string b
+    | false ->
+        let k = ref 1 in
+        for i = 0 to len - 1 do
+          Bytes.set b !k s.[i];
+          k := !k + if s.[i] = qchar then 2 else 1;
+        done;
+        Bytes.unsafe_to_string b
+
+  let id s = quote '\"' s
+  let string s = quote '\'' s
+
   module Stmt = struct
     type arg = Arg : 'a Type.t * 'a -> arg
     type 'r t = { src : string; rev_args : arg list; result : 'r Row.t; }
     let src st = st.src
     let result st = st.result
     let rev_args st = st.rev_args
+
     type 'a func = string -> arg list -> 'a
     let func src f = f src []
     let ret result = fun src rev_args -> { src; rev_args; result}
@@ -609,6 +640,8 @@ module Sql = struct
 
     let arg t f = fun src rev_args v -> f src (Arg (t, v) :: rev_args)
     let ( @-> ) = arg
+
+    let unit = ret Row.empty
     let bool = Type.Bool
     let int = Type.Int
     let int64 = Type.Int64
@@ -616,8 +649,8 @@ module Sql = struct
     let text = Type.Text
     let blob = Type.Blob
     let option v = (Type.Option v)
-    let unit_to_unit src = { src; rev_args = []; result = Row.empty }
     let nop f = fun src rev_args v -> f src rev_args
+    let proj t p f = fun src rev_args r -> f src (Arg (t, p r) :: rev_args) r
     let col :
       type r a. (r, a) Col.t -> (r -> 'b) func -> (r -> 'b) func =
       fun col f -> fun src rev_args r ->
@@ -625,15 +658,12 @@ module Sql = struct
       f src (arg :: rev_args) r
   end
 
-  (* Schema definition.
+  (* Schema definition. *)
 
-     It's a bit unclear how portable we can make
-     that maybe we need to parametrize over the DB backend. We should
-     likely make like a little AST and parameterize the functions
-     over a syntax value in charge of serializing the AST. *)
-
-  let pp_id ppf id = Fmt.pf ppf "%S" id
-  let pp_id_list = Fmt.hbox Fmt.(list ~sep:comma pp_id)
+  let table_id t = id (Table.name t)
+  let col_id c = id (Col.name c)
+  let pp_col_id ppf (Col.V c) = Fmt.string ppf (col_id c)
+  let pp_col_ids ppf cs = Fmt.hbox Fmt.(list ~sep:comma pp_col_id) ppf cs
 
   let rec type_of_type : type a. a Type.t -> string * bool = function
   | Type.Bool -> "BOOL", true
@@ -667,18 +697,15 @@ module Sql = struct
     in
     loop None [] false None false (Col.params col)
 
-  let col_names cs = List.map (fun (Col.V c) -> Col.name c) cs
-
   let references = function
   | Col_references (t, c) ->
-    Fmt.str " REFERENCES %a (%a)" pp_id (Table.name t) pp_id (Col.name c)
+      Fmt.str " REFERENCES %s (%s)" (table_id t) (col_id c)
   | _ -> assert false
 
   let col_def (Col.V col) =
-    let n = Col.name col in
     let sql, cs, pkey, r, unique = col_params col in
     match sql with
-    | Some sql -> Fmt.str "%a %s" pp_id n sql
+    | Some sql -> Fmt.str "%s %s" (col_id col) sql
     | None ->
         let type', not_null = type_of_type (Col.type' col) in
         let not_null = if not_null && not pkey then " NOT NULL" else "" in
@@ -688,16 +715,16 @@ module Sql = struct
         let unique = if unique && not pkey then " UNIQUE" else "" in
         let cs = if cs = [] then "" else String.concat " " (" " :: cs) in
         let r = match r with None -> "" | Some ref -> references ref in
-        Fmt.str "%a %s%s%s%s%s%s"
-          pp_id n type' not_null primary_key unique cs r
+        Fmt.str "%s %s%s%s%s%s%s"
+          (col_id col) type' not_null primary_key unique cs r
 
   let col_defs t = List.map col_def (Table.cols t)
 
   type Table.param +=
   | Table of string
   | Table_constraint of string
-  | Table_foreign_key : 'r Col.u list * ('a Table.t * 'a Col.u list) ->
-      Table.param
+  | Table_foreign_key :
+      'r Col.u list * ('a Table.t * 'a Col.u list) -> Table.param
   | Table_primary_key : 'r Col.u list -> Table.param
 
   let table_params t =
@@ -712,49 +739,44 @@ module Sql = struct
     loop None [] [] None (Table.params t)
 
   let primary_key = function
-  | Table_primary_key cs ->
-      Fmt.str "PRIMARY KEY (%a)" pp_id_list (col_names cs)
+  | Table_primary_key cs -> Fmt.str "PRIMARY KEY (%a)" pp_col_ids cs
   | _ -> assert false
 
   let foreign_references = function
   | Table_foreign_key (_, (t, cs)) ->
     if cs = [] then "" else
-    let ns = col_names cs in
-    Fmt.str " REFERENCES %a (%a)" pp_id (Table.name t) pp_id_list ns
+    Fmt.str " REFERENCES %s (%a)" (table_id t) pp_col_ids cs
   | _ -> assert false
 
   let foreign_key = function
   | Table_foreign_key (cs, ref) as fk ->
-      Fmt.str "FOREIGN KEY (%a)%s" pp_id_list (col_names cs)
-        (foreign_references fk)
+      Fmt.str "FOREIGN KEY (%a)%s" pp_col_ids cs (foreign_references fk)
   | _ -> assert false
 
   let in_schema ?schema t = match schema with
-  | None -> Table.name t | Some s -> Fmt.str "%s.%s" s (Table.name t)
+  | None -> table_id t | Some s -> Fmt.str "%s.%s" (id s) (table_id t)
 
   let drop_table ?schema ?(if_exists = true) t =
-    let n = in_schema ?schema t in
     let if_exists = if if_exists then " IF EXISTS" else "" in
-    let sql = Fmt.str "DROP TABLE%s %a;" if_exists pp_id n in
-    Stmt.unit_to_unit sql
+    let sql = Fmt.str "DROP TABLE%s %s;" if_exists (in_schema ?schema t) in
+    Stmt.(func sql @@ unit)
 
   let create_table ?schema ?(if_not_exists = true) t =
-    let n = in_schema ?schema t in
     let if_not_exists = if if_not_exists then " IF NOT EXISTS" else "" in
     let pp_sep ppf () = Fmt.pf ppf ",@," in
     let sql, cs, fks, pk = table_params t in
     let sql = match sql with
     | Some sql ->
-        Fmt.str "@[<v2>CREATE TABLE%s %a (@,@[%a@]@]@,);"
-          if_not_exists pp_id n Fmt.lines sql
+        Fmt.str "@[<v2>CREATE TABLE%s %s (@,@[%a@]@]@,);"
+          if_not_exists (in_schema ?schema t) Fmt.lines sql
     | None ->
         let pk = match pk with None -> [] | Some pk -> [primary_key pk] in
         let fks = List.map foreign_key fks in
         let defs = col_defs t @ pk @ fks @ cs in
-        Fmt.str "@[<v2>CREATE TABLE%s %a (@,%a@]@,);" if_not_exists pp_id n
-          Fmt.(list ~sep:pp_sep string) defs
+        Fmt.str "@[<v2>CREATE TABLE%s %s (@,%a@]@,);"
+          if_not_exists (in_schema ?schema t) Fmt.(list ~sep:pp_sep string) defs
     in
-    Stmt.unit_to_unit sql
+    Stmt.(func sql @@ unit)
 
   let create_schema ?schema ?(drop = false) ts =
     let gen_drop (Table.V t) = Stmt.src (drop_table ?schema t) in
@@ -762,29 +784,57 @@ module Sql = struct
     let drops = if drop then List.map gen_drop ts else [] in
     let creates = List.map gen_table ts in
     let sql = String.concat "\n" (drops @ creates) in
-    Stmt.unit_to_unit sql
+    Stmt.(func sql @@ unit)
 
   let insert_row_into ?schema ?(ignore = []) t =
     (* TODO automatically ignore auto incremented *)
     let ignore c = List.exists (fun (Col.V i) -> Col.equal_name i c) ignore in
     let rec loop :
-      type r a. (r, a) Row.prod -> string list * (r -> unit Stmt.t) Stmt.func
+      type r a. (r, a) Row.prod -> r Col.u list * (r -> unit Stmt.t) Stmt.func
       = function
       | Row.Unit _ -> [], Stmt.nop (Stmt.ret_rev Row.empty)
       | Row.Prod (r, c) ->
           let ns, f = loop r in
-          if ignore c then ns, f else (Col.name c :: ns, Stmt.col c f)
+          if ignore c then ns, f else (Col.V c :: ns, Stmt.col c f)
     in
     let cs, f = loop (Table.row t) in
     let cs = List.rev cs in
     let vars = List.mapi (fun i _ -> "?" ^ string_of_int (i + 1)) cs in
-    let n = in_schema ?schema t in
     let sql =
       let pp_vars = Fmt.(hbox @@ list ~sep:comma string) in
-      Fmt.str "@[<v>INSERT INTO %a (%a)@,VALUES (%a)@]"
-        pp_id n pp_id_list cs pp_vars vars
+      Fmt.str "@[<v>INSERT INTO %s (%a)@,VALUES (%a)@]"
+        (in_schema ?schema t) pp_col_ids cs pp_vars vars
     in
     Stmt.func sql f
+
+  let rec bind_columns ~sep i rev_cols rev_args = function
+  | [] -> i, String.concat sep (List.rev rev_cols), rev_args
+  | Col.Value ((_, _, t, _) as col, v) :: cols ->
+      let set_col = String.concat "" [col_id col; " = ?"; string_of_int i] in
+      let arg = Stmt.Arg (t, v) in
+      bind_columns ~sep (i + 1) (set_col :: rev_cols) (arg :: rev_args) cols
+
+  let update_rows ?schema t cols ~where =
+    let table = in_schema ?schema t in
+    let i, columns, rev_args = bind_columns ~sep:", " 1 [] [] cols in
+    let _, where, rev_args = bind_columns ~sep:" AND " i [] rev_args where in
+    let sql = ["UPDATE "; table; " SET "; columns; " WHERE "; where ] in
+    { Stmt.src = String.concat "" sql; rev_args; result = Row.empty }
+
+  let delete_rows ?schema t ~where =
+    let table = in_schema ?schema t in
+    let _, where, rev_args = bind_columns ~sep:" AND " 1 [] [] where in
+    let sql = ["DELETE FROM "; table; " WHERE "; where ] in
+    { Stmt.src = String.concat "" sql; rev_args; result = Row.empty }
+
+  let table_rows ?schema ?(where = "TRUE") t func =
+    let row = Table.row t in
+    let cols = Fmt.str "%a" pp_col_ids (Row.cols row) in
+    let table = in_schema ?schema t in
+    let sql = ["SELECT "; cols; " FROM "; table; " WHERE "; where] in
+    let sql = String.concat "" sql in
+    let func = func (Stmt.ret row) in
+    Stmt.func sql func
 
   (* Bags *)
 

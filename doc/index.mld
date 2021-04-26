@@ -23,7 +23,9 @@ These manuals are available:
 {- The {{!page-sqlite3_howto}Sqlite3 howto} explains how to get
    started to query an existing sqlite database.}
 {- The {{!page-conventions}[Ask] database modelling conventions} provides
-   conventions to model databases in OCaml with [Ask].}}
+   conventions to model databases in OCaml with [Ask].}
+{- The {{!page-sql_stmt_howto}SQL statement typing howto} explains
+   the low-level mecanism to type SQL statements.}}
 
 {1:ask The [ask] library}
 
