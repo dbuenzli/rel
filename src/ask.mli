@@ -13,7 +13,7 @@ module Type : sig
   (** {1:types Base types} *)
 
   type 'a t = ..
-  (** The type for column types represented by ['a] values in OCaml. *)
+  (** The type for column types represented by value of type ['a] in OCaml. *)
 
   type 'a t +=
   | Bool : bool t (** Stored as [0] and [1] *)
@@ -27,7 +27,9 @@ module Type : sig
 
   (** {1:coded Coded types}
 
-      Types coded by other types. Provides arbitrary OCaml column types. *)
+      Types coded by other types. Provides arbitrary OCaml column
+      types.  Don't be too fancy if you expect other, non OCaml-based,
+      systems to access the database. *)
 
   (** Coded types. *)
   module Coded : sig
@@ -100,7 +102,7 @@ end
     {b TODO.}
     {ul
     {- Add default value.}
-    {- Turn the explicit tuple into a record ?}} *)
+    {- Remove explicit ('r, 't) definition ?}} *)
 module Col : sig
 
   (** {1:cols Columns} *)
@@ -111,21 +113,22 @@ module Col : sig
 
   type ('r, 'a) t = string * param list * 'a Type.t * ('r -> 'a)
   (** The type for a column of type ['a] which is part of a row stored
-      in an OCaml value of type ['r]. This is, in order, the name of
-      the column, additional parameters, its type and the row value
-      accessor.
+      in an OCaml value of type ['r]. See {!val-v}.
 
-      {b Note.} The type definition is not abstract otherwise row
-      variables of object projection functions can't generalize. *)
+      {b TODO.} The type definition is not abstract otherwise row
+      variables of object projection functions can't generalize.
+      This allowed to share column types among tables respestend
+      by objects but it may  not be such a good idea anyway. *)
 
-  type 'r u = V : ('r, 'a) t -> 'r u (** *)
-  (** The type for untyped columns for a row of type ['r]. *)
+  type 'r v = V : ('r, 'a) t -> 'r v (** *)
+  (** The type for existential columns for a row of type ['r]. *)
 
   type 'r value = Value : ('r, 'a) t * 'a -> 'r value (** *)
   (** The type for a column value for a row of type ['r]. *)
 
   val v : ?params:param list -> string -> 'a Type.t -> ('r -> 'a) -> ('r, 'a) t
-  (** [v name ~params t proj] is a columns with corresponding attributes. *)
+  (** [v name t proj ~params] is a column named [name] with type [t], row
+      projection function [proj] and parameters [params] (defaults to [[]]). *)
 
   val name : ('r, 'a) t -> string
   (** [name c] is the name of [c]. *)
@@ -145,8 +148,7 @@ module Col : sig
   (** {1:preds Predicates} *)
 
   val equal_name : ('r, 'a) t ->  ('s, 'b) t -> bool
-  (** [equal_name c0 c1] is [true] if [c0] and [c1] have the same
-      name. *)
+  (** [equal_name c0 c1] is [true] if [c0] and [c1] have the same name. *)
 
   (** {1:fmt Formatters} *)
 
@@ -191,7 +193,7 @@ module Row : sig
   (** [empty] is the empty product [unit ()]. A row specification for side
       effecting SQL statements, (e.g. UPDATE). *)
 
-  val cols : ('r, 'a) prod -> 'r Col.u list
+  val cols : ('r, 'a) prod -> 'r Col.v list
   (** [cols r] are the columns in row [r], from left-to-right, untyped. *)
 
   (** Row specification syntax.
@@ -296,11 +298,11 @@ module Table : sig
   (** The type for exensible table parameters. See {!Ask.Sql} for
       some parameters. *)
 
-  type 'r t
+  type 'r t = { name : string; params : param list; row : 'r Row.t }
   (** The type for a table represented by an OCaml of type ['a]. *)
 
-  type u = V : 'r t -> u
-  (** The type for untyped tables. *)
+  type v = V : 'r t -> v
+  (** The type for existential tables. *)
 
   val v : ?params:param list -> string -> 'r Row.t -> 'r t
   (** [v name ~params r] is a table with corresponding attributes. *)
@@ -314,7 +316,7 @@ module Table : sig
   val row : 'r t -> 'r Row.t
   (** [row t] is the description of [t]'s rows. *)
 
-  val cols : ?ignore:'r Col.u list -> 'r t -> 'r Col.u list
+  val cols : ?ignore:'r Col.v list -> 'r t -> 'r Col.v list
   (** [cols t] is {!Row.cols}[ (row t)] with columns in [ignore] ommited
       from the result. *)
 end
@@ -791,8 +793,8 @@ module Sql : sig
   | Table of string
   | Table_constraint of string
   | Table_foreign_key :
-      'r Col.u list * ('s Table.t * 's Col.u list) -> Table.param
-  | Table_primary_key : 'r Col.u list -> Table.param (** *)
+      'r Col.v list * ('s Table.t * 's Col.v list) -> Table.param
+  | Table_primary_key : 'r Col.v list -> Table.param (** *)
   (** The type for table parameters.
       {ul
       {- [Table sql] is the full SQL table definition between the ().
@@ -807,29 +809,32 @@ module Sql : sig
     ?schema:string -> ?if_exists:bool -> 'a Table.t -> unit Stmt.t
   (** [drop_table ~if_exist ~schema t] is an SQL DROP TABLE statement to
       drops table [t] of schema [schema].  If [if_exists] is [true]
-      (default) no error is reported if the table does not exist. *)
+      (default) no error is reported if the table does not exist.
+      FIXME the default is the converse of SQL maybe that's not a
+      a good idea. *)
 
   val create_table :
     ?schema:string -> ?if_not_exists:bool -> 'a Table.t -> unit Stmt.t
   (** [create_table t] is an SQL CREATE TABLE statement for [t].  If
       [if_not_exists] is [true] (default) the corresponding sentence
-      is added to the create statement. *)
+      is added to the create statement. FIXME the default is the
+      converse of SQL maybe that's not a good idea. *)
 
   val create_schema :
-    ?schema:string -> ?drop:bool -> Table.u list -> unit Stmt.t
-  (** [create_schema ~drop ts] are {e multiple} SQL statements to
+    ?schema:string -> ?drop_tables:bool -> Table.v list -> unit Stmt.t
+  (** [create_schema ~drop_tables ts] are {e multiple} SQL statements to
       create the tables [ts] if they don't exist. If [drop] is true
       (defaults to [false]) the table [ts] are dropped before if they
       exist.
 
       Make sure to use {!Ask_sqlite3.exec} otherwise only the first
       statement gets executed, wrapping the whole thing in
-      {!Ask_sqlite3.with_transaction} is a good idea aswell. *)
+      {!Ask_sqlite3.with_transaction} is a good idea as well. *)
 
   (** {1:insupd Inserting and updating} *)
 
   val insert_row_into :
-    ?schema:string -> ?ignore:'r Col.u list -> 'r Table.t -> ('r -> unit Stmt.t)
+    ?schema:string -> ?ignore:'r Col.v list -> 'r Table.t -> ('r -> unit Stmt.t)
   (** [insert_row_into ~ignore t] is an SQL INSERT INTO statement
       which inserts i [t] values draw from an value values drawn from
       a provided OCaml table row. Columns mentioned in [col] of the
@@ -864,11 +869,29 @@ module Sql : sig
 
   (** {1:bag Bags}
 
-      {b TODO.} Introduce a scheme to bind variables of type ['a value]
-      to prepared statement parameters and derive the {!Stmt.t} directly. *)
+      TODO remove these two fun. *)
 
   val normalize : ('a, 'e) Bag.t -> ('a, 'e) Askt.bag
   val of_bag : ('a, 'e) Bag.t -> string
+
+
+  module Bag : sig
+    type ('a, 'b) func
+    val func : (('b, 'e) Bag.t, 'a) func -> 'a
+    val arg :
+      'a Type.t -> ('a value -> 'c, 'b) func -> ('c, 'a -> 'b) func
+
+    val ( @-> ) : 'a Type.t -> ('a value -> 'c, 'b) func -> ('c, 'a -> 'b) func
+    val ret : 'r Row.t -> 'a -> ('a, 'r Stmt.t) func
+
+    val bool : bool Type.t
+    val int : int Type.t
+    val int64 : int64 Type.t
+    val float : float Type.t
+    val text : string Type.t
+    val blob : string Type.t
+    val option : 'a Type.t -> 'a option Type.t
+  end
 end
 
 (*---------------------------------------------------------------------------

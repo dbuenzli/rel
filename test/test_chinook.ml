@@ -14,17 +14,17 @@ let log_if_error ~use = function
 | Ok v -> v | Error e -> log_err "test_chinook: %s\n" e; use
 
 let select_track_all =
-  let* t = Bag.table Tracks.table in
+  let* t = Bag.table Track.table in
   Bag.yield t
 
 let select_track_cols =
-  let _r = Row.Quick.(Tracks.C.(t4 trackId name composer unitPrice)) in
-  let* t = Bag.table Tracks.table in
+  let _r = Row.Quick.(Track.(t4 trackId' name' composer' unitPrice')) in
+  let* t = Bag.table Track.table in
   Bag.yield (Bag.row (fun a b c d -> (a, b, c, d)) $
-             t #. Tracks.C.trackId $
-             t #. Tracks.C.name $
-             t #. Tracks.C.composer $
-             t #. Tracks.C.unitPrice)
+             t #. Track.trackId' $
+             t #. Track.name' $
+             t #. Track.composer' $
+             t #. Track.unitPrice')
 
 let run_bag b =
   let sql = Sql.of_bag b in
@@ -38,8 +38,7 @@ let test db =
   let ( let* ) = Result.bind in
   log_if_error ~use:1 @@
   let* db = Ask_sqlite3.(error_message @@ open' db) in
-  let finally () =
-    log_if_error ~use:() Ask_sqlite3.(error_message @@ close db)
+  let finally () = log_if_error ~use:() Ask_sqlite3.(error_message @@ close db)
   in
   Fun.protect ~finally @@ fun () ->
   run_tests db;

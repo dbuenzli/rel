@@ -6,6 +6,9 @@
 open Ask
 open Ask.Syntax
 
+(* TODO rewrite with new convention. Forget about
+   objects representation. *)
+
 (* Example from Suzuki et al *)
 
 module Products_flat_with_objects = struct
@@ -56,7 +59,7 @@ module Products_flat_with_objects = struct
     module C = struct
       let name = "name", [], Type.Text, fun o -> o # name
       let price = "price", [], Type.Int, fun o -> o # price
-      let pid = "pid", [], Type.Int, fun o -> o # pid
+      let pid =  "pid", [], Type.Int, fun o -> o # pid
       let oid = "oid", [], Type.Int, fun o -> o # oid
       let qty = "qty", [], Type.Int, fun o -> o # qty
       let sale = "sale", [], Type.Int, fun o -> o # sale

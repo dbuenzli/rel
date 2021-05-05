@@ -117,6 +117,12 @@ CAMLprim value ocaml_ask_sqlite3_changes (value db)
   return Val_int (sqlite3_changes (Sqlite3_val (db)));
 }
 
+CAMLprim value ocaml_ask_sqlite3_last_insert_rowid (value db)
+{
+  return caml_copy_int64
+    (sqlite3_last_insert_rowid (Sqlite3_val (db)));
+}
+
 /* Queries */
 
 CAMLprim value ocaml_ask_sqlite3_exec (value db, value sql)

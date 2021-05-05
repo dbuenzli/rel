@@ -33,7 +33,7 @@ let list_concat_map f l = (* available in 4.10 *)
 (* Evaluation error *)
 
 type error =
-[ `Undefined_table of Table.u
+[ `Undefined_table of Table.v
 | `Unknown_extension of string
 | `Unexpected_variable of string ]
 

@@ -383,6 +383,12 @@ val changes : t -> int
     modified, inserted or deleted by the last executed statement on
     [db]. *)
 
+val last_insert_rowid : t -> int64
+(** [last_insert_rowid db] is
+    {{:https://sqlite.org/c3ref/last_insert_rowid.html}the rowid} (or
+    INTEGER PRIMARY KEY) of the most recent successful INSERT into a
+    rowid table. *)
+
 (** {2:stmt Prepared statement cache} *)
 
 val stmt_cache_size : t -> int
@@ -411,9 +417,15 @@ val exec_once : t -> unit Sql.Stmt.t -> (unit, error) result
 
 val fold : t -> 'r Sql.Stmt.t -> ('r -> 'c -> 'c) -> 'c -> ('c, error) result
 (** [fold db st f acc] folds with [f] over the results of the {e
-    single} statement [st] as bound by [r]. [st] is compiled to a
+    single} statement [st]. [st] is compiled to a
     prepared statement which is cached. If [st] is made of more than
     one statement subsequent statements are ignored. *)
+
+val first : t -> 'r Sql.Stmt.t -> ('r option, error) result
+(** [first db st] is the first row (if any) of the result of the {e
+    single} statement [st]. Subsequent rows are discarded. [st] is
+    compiled to a prepred statement which is cached. If [st] is made
+    of more than one statement subsequent statements are ignored. *)
 
 val exec : t -> unit Sql.Stmt.t -> (unit, error) result
 (** [exec db st] is like {!fold} but executes statement [sql] only for
@@ -421,8 +433,8 @@ val exec : t -> unit Sql.Stmt.t -> (unit, error) result
 
 val with_transaction :
   [`Deferred | `Immediate | `Exclusive] -> t ->
-  (unit -> ('a, 'b) result) -> (('a, 'b) result, error) result
-(** [with_transaction kind d f] wraps the call to [f] in an SQL
+  (t -> ('a, 'b) result) -> (('a, 'b) result, error) result
+(** [with_transaction kind db f] wraps the call to [f db] in an SQL
     transaction of
     {{:https://www.sqlite.org/lang_transaction.html#deferred_immediate_and_exclusive_transactions}given
     [kind]}. If [f] raises, returns an error or if the commit fails
@@ -462,16 +474,6 @@ module Stmt : sig
   val step : 'b step -> ('b option, error) result
   (** [step s] is the next result in [s], or [None] if the query has
       finished executing. *)
-
-  val fold : t -> 'r Sql.Stmt.t ->
-    ('r -> 'c -> 'c) -> 'c -> ('c, error) result
-  (** [fold st f acc] {{!stmt_start}starts} statement [st] with and folds
-      over all the results with [f] starting with [acc] by repateadly
-      applying {!stmt_step}. *)
-
-  val cmd : t -> unit Sql.Stmt.t -> (unit, error) result
-  (** [cmd s sb] is like {!stmt_fold} but executes th statment
-      [s] only for its side effect. *)
 
   val finalize : t -> (unit, error) result
   (** [inalize s] finalizes statement [st]. *)

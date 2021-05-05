@@ -45,21 +45,21 @@ than on the issue tracker.
 [doc]: https://erratique.ch/software/ask/doc
 [ocaml-forum]: https://discuss.ocaml.org/
 
-# Acknowlegements
+# Acknowledgements
 
 The query language of Ask is based on the following line of papers.
 
 * Ezra Cooper. The Script-Writer’s Dream: How to Write Great SQL in Your 
-  Own Language, and Be Sure It Will Succeed. 2009 
-  [doi](https://doi.org/10.1007/978-3-642-03793-1_3)
+  Own Language, and Be Sure It Will Succeed. 2009.
+  [Full text](https://doi.org/10.1007/978-3-642-03793-1_3)
   
-* James Cheney et al. A practical theory of language-integrated query. 2013
-  [doi](https://doi.org/10.1145/2544174.2500586)
+* James Cheney et al. A practical theory of language-integrated query. 2013.
+  [Full text](https://doi.org/10.1145/2544174.2500586)
 
 * Suzuki et al. Finally, safely-extensible and efficient language-integrated 
-  query. 2016 
-  [doi](https://doi.org/10.1145/2847538.2847542)
+  query. 2016.
+  [Full text](https://doi.org/10.1145/2847538.2847542)
   
 * Oleg Kiselyov et al. Sound and Efficient Language-Integrated Query -- 
-  Maintaining the ORDER. 2017 
-  [doi](https://doi.org/10.1007/978-3-319-71237-6_18)
+  Maintaining the ORDER. 2017.
+  [Full text](https://doi.org/10.1007/978-3-319-71237-6_18)

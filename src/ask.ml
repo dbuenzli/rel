@@ -84,7 +84,7 @@ end
 module Col = struct
   type param = ..
   type ('r, 'a) t = string * param list * 'a Type.t * ('r -> 'a)
-  type 'r u = V : ('r, 'a) t -> 'r u
+  type 'r v = V : ('r, 'a) t -> 'r v
   type 'r value = Value : ('r, 'a) t * 'a -> 'r value
   let v ?(params = []) n t p = n, params, t, p
   let name (n, _, _, _) = n
@@ -111,7 +111,7 @@ module Row = struct
   let prod r c = Prod (r, c)
   let empty = unit ()
   let cols r =
-    let rec loop : type r a. (r, a) prod -> r Col.u list = function
+    let rec loop : type r a. (r, a) prod -> r Col.v list = function
     | Unit _ -> [] | Prod (r, c) -> Col.V c :: loop r
     in
     List.rev (loop r)
@@ -178,7 +178,7 @@ end
 module Table = struct
   type param = ..
   type 'a t = { name : string; params : param list; row : 'a Row.t }
-  type u = V : 'a t -> u
+  type v = V : 'a t -> v
   let v ?(params = []) name row = { name; params; row }
   let name t = t.name
   let params t = t.params
@@ -513,8 +513,8 @@ module Sql = struct
   | Table of string
   | Table_constraint of string
   | Table_foreign_key :
-      'r Col.u list * ('a Table.t * 'a Col.u list) -> Table.param
-  | Table_primary_key : 'r Col.u list -> Table.param
+      'r Col.v list * ('a Table.t * 'a Col.v list) -> Table.param
+  | Table_primary_key : 'r Col.v list -> Table.param
 
   let table_params t =
     let rec loop sql cs fks pk = function
@@ -567,10 +567,10 @@ module Sql = struct
     in
     Stmt.(func sql @@ unit)
 
-  let create_schema ?schema ?(drop = false) ts =
+  let create_schema ?schema ?(drop_tables = false) ts =
     let gen_drop (Table.V t) = Stmt.src (drop_table ?schema t) in
     let gen_table (Table.V t) = Stmt.src (create_table ?schema t) in
-    let drops = if drop then List.map gen_drop ts else [] in
+    let drops = if drop_tables then List.map gen_drop ts else [] in
     let creates = List.map gen_table ts in
     let sql = String.concat "\n" (drops @ creates) in
     Stmt.(func sql @@ unit)
@@ -579,7 +579,7 @@ module Sql = struct
     (* TODO automatically ignore auto incremented *)
     let ignore c = List.exists (fun (Col.V i) -> Col.equal_name i c) ignore in
     let rec loop :
-      type r a. (r, a) Row.prod -> r Col.u list * (r -> unit Stmt.t) Stmt.func
+      type r a. (r, a) Row.prod -> r Col.v list * (r -> unit Stmt.t) Stmt.func
       = function
       | Row.Unit _ -> [], Stmt.nop (Stmt.ret_rev Row.empty)
       | Row.Prod (r, c) ->
@@ -628,8 +628,7 @@ module Sql = struct
   (* Bags *)
 
   module Bag_to_sql = struct
-  (* FIXME double quote and escape identifiers.
-     FIXME integrate with typed statments. *)
+  (* FIXME double quote and escape identifiers. *)
 
     module Sql = struct   (* Target SQL fragment to compile bags *)
       type table = string
@@ -872,8 +871,37 @@ module Sql = struct
       Sql.to_string sql
   end
 
+
   let normalize = Bag_to_sql.normalize
   let of_bag = Bag_to_sql.of_bag
+
+  module Bag = struct
+    type ('a, 'b) func = { argc : int; bag : 'a; func : 'b Stmt.func }
+
+    let func f =
+      let sql = Bag_to_sql.of_bag f.bag in
+      Stmt.func sql f.func
+
+    let ret ret bag =
+      let func = Stmt.ret ret in
+      { argc = 0; bag; func }
+
+    let arg t f =
+      let argc = f.argc + 1 in
+      let func = Stmt.arg t f.func in
+      let bag = f.bag (Askt.Var (Printf.sprintf "?%d" argc)) in
+      { argc; bag; func }
+
+    let ( @-> ) = arg
+    let bool = Type.Bool
+    let int = Type.Int
+    let int64 = Type.Int64
+    let float = Type.Float
+    let text = Type.Text
+    let blob = Type.Blob
+    let option v = (Type.Option v)
+  end
+
 end
 
 (*---------------------------------------------------------------------------

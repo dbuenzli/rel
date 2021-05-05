@@ -3,10 +3,10 @@
 There's more than one way to model your database in OCaml with [Ask].
 The following defines a simple conventions you can follow.
 
-Except for naming conventions which are imposed by the existing
-schema, these conventions are followed by the [ask-sqlite3] tool when
+These conventions are followed by the [ask-sqlite3] tool when
 it outputs the OCaml code needed to support interaction with a
-pre-existing database schema.
+pre-existing database schema, except for the naming conventions
+which respect those found in the schema.
 
 {1:names Table and column names}
 
@@ -18,24 +18,22 @@ If you are not using a pre-existing schema:
 
 {1:table Tables representation}
 
-Given a table with name {e n} and columns named {e c{_0}, c{_1}, …} define a
+Given a table named {e n} with columns {e c{_0}, c{_1}, …} define a
 module [N] ({e n} capitalized) for it.  This module should have
 
 {ul
 {- An abstract type [N.t] for representing table rows.}
-{- An [N.row] constructor for the row with arguments in
-   the order of columns.}
+{- An [N.row] constructor for the row with arguments in the order of columns.}
 {- (Optional) A user friendly [N.v] constructor with labelled arguments.}
 {- Accessors [N.c]{_i} projecting the corresponding column {e c{_i}}
    from [N.t] values.}
-{- A submodule [N.C] with one [N.C.c]{_i} value of type
-   {!Ask.Col.t} for each column {e c{_i}}.}
+{- Values [N.c']{_i} of type {!Ask.Col.t} for each corresponding
+   column {e c{_i}}.}
 {- A value [N.table] of type {!Ask.Table.t} that defines the table.}}
 
 Note that once you have modelled your tables you can use
 {!Ask.Sql.create_schema} to output the corresponding schema in SQL's
 data definition language.
-
 
 {2:example Example}
 
@@ -65,20 +63,18 @@ module Person : sig
   val last_name : t -> string
   (** [last_name p] is the last name of [p]. *)
 
+  (** {1:table Table} *)
+
   open Ask
 
-  (** Columns *)
-  module C : sig
+  val id' : (t, int) Col.t
+  (** [id'] is the {!id} column. *)
 
-    val id : (t, int) Col.t
-    (** [id p] is the unique identifier of [p]. *)
+  val first_name' : (t, string) Col.t
+  (** [first_name'] is the {!first_name} column. *)
 
-    val first_name : (t, string) Col.t
-    (** [first_name p] is the first name of [p]. *)
-
-    val last_name : (t, string) Col.t
-    (** [last_name p] is the last name of [p]. *)
-  end
+  val last_name' : (t, string) Col.t
+  (** [last_name'] is the {!last_name} column. *)
 
   val table : t Table.t
   (** [table] is the person table. *)
@@ -89,7 +85,6 @@ The simplest way of implementing this signature is by using OCaml records.
 For example:
 
 {[
-
 module Person = struct
   type t = { id : int; first_name : string; last_name : string }
 
@@ -101,13 +96,12 @@ module Person = struct
   let last_name r = r.last_name
 
   open Ask
-  module C = struct
-    let id = Col.v "id" ~params:[Sql.Col_primary_key] Type.Int id
-    let first_name = Col.v "first_name" Type.Text first_name
-    let last_name = Col.v "last_name" Type.Text last_name
-  end
+
+  let id' = Col.v "id" ~params:[Sql.Col_primary_key] Type.Int id
+  let first_name' = Col.v "first_name" Type.Text first_name
+  let last_name' = Col.v "last_name" Type.Text last_name
 
  let table =
-   Table.v "person" Row.Cols.(unit row * C.id * C.first_name * C.last_name)
+   Table.v "person" Row.Cols.(unit row * id' * first_name' * last_name')
 end
 ]}

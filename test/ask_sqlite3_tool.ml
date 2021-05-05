@@ -90,7 +90,7 @@ module Sql_meta = struct
     Ok (Smap.map List.rev ts)
 end
 
-(* Schema gen *)
+(* OCaml representation of the schema *)
 
 type ocaml_col =
   { col_id : string; (* OCaml identifier. *)
@@ -139,16 +139,15 @@ let ocaml_type_of_sql_col c =
       | true -> Some (t, "Type." ^ at)
       | false -> Some (t ^ " option", String.concat "" ["Type.(Option ";at;")"])
 
-let ocaml_col_of_sql_meta c =
-  match ocaml_type_of_sql_col c with
-  | None ->
-      log_warn "Don't know what to do with %s.%s's type %s: ignoring column"
-        c.Sql_meta.table_name c.name c.type';
-      None
-  | Some (ocaml_type, ask_type_value) ->
-      let col_id = ocaml_id_of_sql c.Sql_meta.name in
-      let col_sql_name = c.Sql_meta.name in
-      Some { col_id; col_sql_name; ask_type_value; ocaml_type }
+let ocaml_col_of_sql_meta c = match ocaml_type_of_sql_col c with
+| None ->
+    log_warn "Don't know what to do with %s.%s's type %s: ignoring column"
+      c.Sql_meta.table_name c.name c.type';
+    None
+| Some (ocaml_type, ask_type_value) ->
+    let col_id = ocaml_id_of_sql c.Sql_meta.name in
+    let col_sql_name = c.Sql_meta.name in
+    Some { col_id; col_sql_name; ask_type_value; ocaml_type }
 
 let ocaml_table_of_sql_meta n cols =
   let table_id = ocaml_id_of_sql n in
@@ -156,90 +155,105 @@ let ocaml_table_of_sql_meta n cols =
   let cols = List.filter_map ocaml_col_of_sql_meta cols in
   { table_id; table_sql_name; cols }
 
-let pf = Format.fprintf
-let pp_list = Format.pp_print_list
-let pp_str = Format.pp_print_string
-let pp_sp = Format.pp_print_space
-let pp_cut = Format.pp_print_cut
-let pp_semi ppf () = pf ppf ";@ "
-let pp_arr ppf () = pf ppf " ->@ "
+(* OCaml Schema generation *)
 
-let pp_intf_of_table ~ml_only ppf t =
-  let pp_cons_intf ppf t =
-    let pp_col ppf c = pp_str ppf c.ocaml_type in
-    pp_list ~pp_sep:pp_arr pp_col ppf t.cols;
-    pp_arr ppf (); pf ppf "t"
-  in
-  let pp_ocaml_col_intf ppf c =
-    pf ppf "@[val %s : t -> %s@]" c.col_id c.ocaml_type
-  in
-  let pp_ask_col_intf ppf c =
-    pf ppf "@[val %s : (t, %s) Ask.Col.t@]" c.col_id c.ocaml_type
-  in
-  pf ppf "@[<v2>module %s : sig@," (String.capitalize_ascii t.table_id);
-  pf ppf "@[type t@]@,";
-  pf ppf "@[val row : @[%a@]@]@,@," pp_cons_intf t;
-  (pp_list pp_ocaml_col_intf) ppf t.cols;
-  pf ppf "@,@,";
-  pf ppf "@[<v2>module C : sig@,";
-  (pp_list pp_ask_col_intf) ppf t.cols;
-  pf ppf "@]@,end@,@,";
-  pf ppf "@[val table : t Ask.Table.t@]";
-  if ml_only
-  then pf ppf "@]@,@[<v2>end = struct@,"
-  else pf ppf "@]@,end"
+module Gen = struct
+  let pf = Format.fprintf
+  let pp_list = Format.pp_print_list
+  let pp_str = Format.pp_print_string
+  let pp_sp = Format.pp_print_space
+  let pp_cut = Format.pp_print_cut
+  let pp_semi ppf () = pf ppf ";@ "
+  let pp_arr ppf () = pf ppf " ->@ "
+  let pp_star ppf () = pf ppf " *@ "
 
-let pp_impl_of_table ~ml_only ppf t =
-  let pp_col_rec_field ppf c = pf ppf "%s : %s;" c.col_id c.ocaml_type; in
-  let pp_col_id ppf c = pp_str ppf c.col_id in
-  let pp_cons ppf t =
+  let pp_proj_intf ppf c = pf ppf "@[val %s : t -> %s@]" c.col_id c.ocaml_type
+  let pp_proj_impl ppf c = pf ppf "@[let %s t = t.%s@]" c.col_id c.col_id
+
+  let pp_col_name ppf c = pf ppf "%s'" c.col_id
+  let pp_col_intf ppf c =
+    pf ppf "@[val %a : (t, %s) Ask.Col.t@]" pp_col_name c c.ocaml_type
+
+  let pp_col_impl ppf c =
+    pf ppf "@[let %a = Col.v %S %s %s@]"
+      pp_col_name c c.col_sql_name c.ask_type_value c.col_id
+
+  let pp_record_field_name ppf c = pp_str ppf c.col_id
+  let pp_record_field ppf c =
+    pf ppf "%a : %s;" pp_record_field_name c c.ocaml_type
+
+  let pp_record_intf ppf t = pf ppf "@[type t@]"
+  let pp_record_impl ppf t =
+    pf ppf "@[<v2>type t =@,{ @[<v>%a@] }@,@]" (pp_list pp_record_field) t.cols
+
+  let pp_row_constructor_impl ppf t =
     pf ppf "@[let row @[%a@] =@ @[{ @[%a@] }@]@]"
-      (pp_list ~pp_sep:pp_sp pp_col_id) t.cols
-      (pp_list ~pp_sep:pp_semi pp_col_id) t.cols
-  in
-  let pp_col ppf c = pf ppf "@[let %s t = t.%s@]" c.col_id c.col_id in
-  let pp_ask_col_def ppf c =
-    pf ppf "@[let %s = Col.v %S %s %s@]" c.col_id c.col_sql_name
-      c.ask_type_value c.col_id
-  in
-  let pp_star ppf () = pf ppf " *@ " in
-  let pp_ask_col_ref ppf c = pf ppf "C.%s" c.col_id in
-  if ml_only
-  then ()
-  else pf ppf "@[<v2>module %s = struct@," (String.capitalize_ascii t.table_id);
-  pf ppf "@[<v2>type t =@,{ @[<v>";
-  (pp_list pp_col_rec_field) ppf t.cols;
-  pf ppf "@] }@,@]@,";
-  pp_cons ppf t;
-  pf ppf "@,@,";
-  (pp_list pp_col) ppf t.cols;
-  pf ppf "@,@,";
-  pf ppf "open Ask@,";
-  pf ppf "@[<v2>module C = struct@,";
-  (pp_list pp_ask_col_def) ppf t.cols;
-  pf ppf "@]@,end@,@,";
-  pf ppf "@[<v2>let table =@ @[<2>Table.v %S@ \
-          @[Row.Cols.@[<1>(unit row * %a)@]@]@]@]"
-    t.table_sql_name
-    (pp_list ~pp_sep:pp_star pp_ask_col_ref) t.cols;
-  pf ppf "@]@,end"
+      (pp_list ~pp_sep:pp_sp pp_record_field_name) t.cols
+      (pp_list ~pp_sep:pp_semi pp_record_field_name) t.cols
 
-let pp_schema ~ml_only ppf tables =
-  let pp_sep ppf () = pp_cut ppf (); pp_cut ppf () in
-  let pp_table ppf t =
-    pp_intf_of_table ~ml_only ppf t;
-    pp_impl_of_table ~ml_only ppf t;
-  in
-  pf ppf "@[<v>";
-  pf ppf "(* Generated by ask-sqlite3 %%VERSION%% *)@,@,";
-  (pp_list ~pp_sep pp_table) ppf tables;
-  pf ppf "@]"
+  let pp_row_constructor_intf ppf t =
+    let pp_col_type ppf c = pp_str ppf c.ocaml_type in
+    pf ppf "@[val row : @[%a%at@]@]"
+      (pp_list ~pp_sep:pp_arr pp_col_type) t.cols pp_arr ()
 
-let mem_db sql_file =
+  let pp_table_intf ppf t = pf ppf "@[val table : t Ask.Table.t@]"
+  let pp_table_impl ppf t =
+    pf ppf "@[<v2>let table =@ @[<2>Table.v %S@ \
+            @[Row.Cols.@[<1>(unit row * %a)@]@]@]@]"
+      t.table_sql_name (pp_list ~pp_sep:pp_star pp_col_name) t.cols
+
+  let pp_module_name ppf t = pp_str ppf (String.capitalize_ascii t.table_id)
+
+  let pp_intf_of_table ~ml_only ppf t =
+    pf ppf "@[<v2>module %a : sig@," pp_module_name t;
+    pp_record_intf ppf t;
+    pf ppf "@,@,";
+    pp_row_constructor_intf ppf t;
+    pf ppf "@,@,";
+    (pp_list pp_proj_intf) ppf t.cols;
+    pf ppf "@,@,";
+    pf ppf "(** {1:table Table} *)";
+    pf ppf "@,@,";
+    (pp_list pp_col_intf) ppf t.cols;
+    pf ppf "@,@,";
+    pp_table_intf ppf t;
+    if ml_only
+    then pf ppf "@]@,@[<v2>end = struct@,"
+    else pf ppf "@]@,end"
+
+  let pp_impl_of_table ~ml_only ppf t =
+    if ml_only
+    then ()
+    else (pf ppf "@[<v2>module %a = struct@," pp_module_name t);
+    pp_record_impl ppf t;
+    pf ppf "@,";
+    pp_row_constructor_impl ppf t;
+    pf ppf "@,@,";
+    (pp_list pp_proj_impl) ppf t.cols;
+    pf ppf "@,@,";
+    pf ppf "open Ask@,@,";
+    (pp_list pp_col_impl) ppf t.cols;
+    pf ppf "@,@,";
+    pp_table_impl ppf t;
+    pf ppf "@]@,end"
+
+  let pp_schema ~ml_only ppf tables =
+    let pp_sep ppf () = pp_cut ppf (); pp_cut ppf () in
+    let pp_table ppf t =
+      pp_intf_of_table ~ml_only ppf t;
+      pp_impl_of_table ~ml_only ppf t;
+    in
+    pf ppf "@[<v>";
+    pf ppf "(* Generated by ask-sqlite3 %%VERSION%% *)@,@,";
+    (pp_list ~pp_sep pp_table) ppf tables;
+    pf ppf "@]"
+end
+
+let mem_db sql_file = (* Create an in-memory db for the sql file. *)
   let* sql = string_of_file sql_file in
   Ask_sqlite3.error_message @@ Result.join @@
   let* db = Ask_sqlite3.(open' ~mode:Memory "") in
-  Ask_sqlite3.with_transaction `Immediate db @@ fun () ->
+  Ask_sqlite3.with_transaction `Immediate db @@ fun db ->
   let* () = Ask_sqlite3.exec_sql db sql in
   Ok db
 
@@ -256,7 +270,7 @@ let sqlite3 file is_sql =
   let* tables = Sql_meta.get_tables db in
   let add_table n cols acc = ocaml_table_of_sql_meta n cols :: acc in
   let ocaml_tables = Smap.fold add_table tables [] in
-  pp_schema ~ml_only:true Format.std_formatter ocaml_tables;
+  Gen.pp_schema ~ml_only:true Format.std_formatter ocaml_tables;
   Ok 0
 
 open Cmdliner

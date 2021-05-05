@@ -42,6 +42,8 @@ module Tsqlite3 = struct
   external errmsg : t -> string = "ocaml_ask_sqlite3_errmsg"
   external busy_timeout : t -> int -> rc = "ocaml_ask_sqlite3_busy_timeout"
   external changes : t -> int = "ocaml_ask_sqlite3_changes"
+  external last_insert_rowid : t -> int64 =
+    "ocaml_ask_sqlite3_last_insert_rowid"
 
   (* Queries *)
 
@@ -298,10 +300,10 @@ module Stmt' = struct
     in
     loop 1 st args
 
-  let bind s sb =
+  let bind s st =
     validate s;
     match Tsqlite3.reset s.stmt with
-    | 0 -> bind_args s.stmt (List.rev (Sql.Stmt.rev_args sb))
+    | 0 -> bind_args s.stmt (List.rev (Sql.Stmt.rev_args st))
     | rc -> error (stmt_error rc s.stmt)
 
   let rec unpack_col_type : type r c. Tsqlite3.stmt -> int -> c Type.t -> c =
@@ -335,9 +337,9 @@ module Stmt' = struct
     let row = Askt.prod_to_prod (Sql.Stmt.result st) in
     cols s.stmt (s.col_count - 1) row
 
-  let step s sb = match Tsqlite3.step s.stmt with
+  let step s st = match Tsqlite3.step s.stmt with
   | 101 (* SQLITE_DONE *) -> ignore (Tsqlite3.clear_bindings s.stmt); None
-  | 100 (* SQLITE_ROW *) -> Some (unpack_row s sb)
+  | 100 (* SQLITE_ROW *) -> Some (unpack_row s st)
   | rc ->  error (stmt_error rc s.stmt)
 
   let fold s st f acc =
@@ -348,7 +350,11 @@ module Stmt' = struct
     in
     loop s st f acc
 
-  let cmd s = match Tsqlite3.step s.stmt with
+  let first s st =
+    let r = step s st in
+    ignore (Tsqlite3.clear_bindings s.stmt); r
+
+  let exec s = match Tsqlite3.step s.stmt with
   | 100 | 101 (* SQLITE_{ROW,DONE} *) -> ignore (Tsqlite3.clear_bindings s.stmt)
   | rc -> error (stmt_error rc s.stmt)
 end
@@ -417,6 +423,7 @@ let busy_timeout_ms db dur =
   | 0 -> Ok () | rc -> Error (db_error rc db.db)
 
 let changes db = validate db; Tsqlite3.changes db.db
+let last_insert_rowid db = validate db; Tsqlite3.last_insert_rowid db.db
 
 let stmt_cache_size = Cache.size
 let set_stmt_cache_size = Cache.set_size
@@ -439,11 +446,19 @@ let fold db st f acc =
   with
   | Stmt'.Error e -> Error e
 
+let first db st =
+  validate db;
+  try
+    let s = Cache.stmt db (Sql.Stmt.src st) in
+    Stmt'.bind s st; Ok (Stmt'.first s st)
+  with
+  | Stmt'.Error e -> Error e
+
 let exec db st =
   validate db;
   try
     let s = Cache.stmt db (Sql.Stmt.src st) in
-    Stmt'.bind s st; Ok (Stmt'.cmd s)
+    Stmt'.bind s st; Ok (Stmt'.exec s)
   with
   | Stmt'.Error e -> Error e
 
@@ -460,7 +475,7 @@ let with_transaction kind db f =
   match start () with
   | rc when rc <> 0 -> Error (db_error rc db.db)
   | _0 ->
-      match f () with
+      match f db with
       | exception exn ->
           let bt = Printexc.get_raw_backtrace () in
           abort_noerr ();
@@ -488,12 +503,6 @@ module Stmt = struct
   | Stmt'.Error e -> Error e
 
   let step (s, st) = try Ok (Stmt'.step s st) with
-  | Stmt'.Error e -> Error e
-
-  let fold s sb f acc = try (Stmt'.bind s sb; Ok (Stmt'.fold s sb f acc)) with
-  | Stmt'.Error e -> Error e
-
-  let cmd s sb = try (Stmt'.bind s sb; Ok (Stmt'.cmd s)) with
   | Stmt'.Error e -> Error e
 
   let finalize s = try Ok (Stmt'.finalize s) with
