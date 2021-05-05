@@ -34,6 +34,27 @@ module Type = struct
   | Bool : bool t | Int : int t | Int64 : int64 t | Float : float t
   | Text : string t | Blob : string t | Option : 'a t -> 'a option t
 
+  module Coded = struct
+    type 'a repr = 'a t
+    type ('a, 'b) map = 'a -> ('b, string) result
+    type ('a, 'b) t =
+      { name : string;
+      enc : ('a, 'b) map;
+      dec : ('b, 'a) map;
+      repr : 'b repr;
+      pp : 'a Fmt.t option; }
+
+    let v ?pp ~name enc dec repr = { name; enc; dec; repr; pp }
+    let name c = c.name
+    let enc c = c.enc
+    let dec c = c.dec
+    let repr c = c.repr
+    let pp c = c.pp
+  end
+
+  type 'a t +=
+  | Coded : ('a, 'b) Coded.t -> 'a t
+
   let invalid_unknown () = invalid_arg "Unknown 'a Ask.Type.t case."
   let invalid_nested_option () =
     invalid_arg "Nested option in 'a Ask.Type.t are unsupported."
@@ -43,12 +64,20 @@ module Type = struct
   | Int64 -> Fmt.string ppf "int64" | Float -> Fmt.string ppf "float"
   | Text -> Fmt.string ppf "text" | Blob -> Fmt.string ppf "blob"
   | Option v -> pp ppf v; Fmt.string ppf " option"
+  | Coded { name; _ } -> Fmt.string ppf name
   | _ -> invalid_unknown ()
 
   let rec value_pp : type a. a t -> a Fmt.t = function
   | Bool -> Fmt.bool | Int -> Fmt.int | Int64 -> Fmt.int64
   | Float -> Fmt.float | Text -> Fmt.string | Blob -> Fmt.blob
   | Option t -> Fmt.nullable (value_pp t)
+  | Coded c ->
+      (fun ppf v -> match Coded.pp c with
+      | Some pp -> pp ppf v
+      | None ->
+          match Coded.enc c v with
+          | Ok v -> (value_pp (Coded.repr c)) ppf v
+          | Error e -> Fmt.pf ppf "<error: %s>" e)
   | _ -> invalid_unknown ()
 end
 
@@ -359,246 +388,6 @@ module Syntax = struct
   let ( let* ) = Bag.foreach
 end
 
-module Bag_to_sql = struct
-  (* FIXME merge into Sql module.
-     FIXME double quote and escape identifiers. *)
-
-  module Sql = struct   (* Target SQL fragment to compile bags *)
-    type table = string
-    type var = string
-    type col_name = string
-    type exp =
-    | Null (* XXX get rid of that. *)
-    | Var of string
-    | Const : 'a Type.t * 'a -> exp
-    | Unop of string * exp
-    | Binop of string * exp * exp
-    | Proj of var * string
-    | Exists of t
-    | Case of exp * exp * exp
-    | Row of sel list
-
-    and sel = Col of exp * var (* e AS l *) | All of table (* t.* *)
-    and from = (table * (* AS *) var) list
-    and where = exp
-    and t =
-    | Empty
-    | Union_all of t * t
-    | Select of sel list * from * where option
-
-    let empty_table : table * var = "(VALUES ('empty'))", "empty"
-
-    let rec const_to_string : type a. a Type.t -> a -> string = fun t v ->
-    match t with
-    | Type.Bool -> (match v with true -> "1" | false -> "0")
-    | Type.Int -> string_of_int v
-    | Type.Int64 -> Int64.to_string v
-    | Type.Float -> Float.to_string v
-    | Type.Text -> String.concat "" ["'"; v; "'"] (* FIXME escape *)
-    | Type.Blob (* hum *) -> String.concat "" ["'"; v; "'"] (* FIXME escape *)
-    | Type.Option t ->
-        (match v with
-        | None -> "NULL"
-        | Some v -> const_to_string t v)
-    | _ -> Type.invalid_unknown ()
-
-    let rec sel_to_string = function
-    | Col (exp, "") -> exp_to_string exp (* FIXME possible ? *)
-    | Col (exp, l) -> String.concat "" [exp_to_string exp; " as "; l]
-    | All t -> t ^ ".*"
-
-    and exp_to_string = function
-    | Null -> "NULL"
-    | Var v -> v
-    | Const (t, v) -> const_to_string t v
-    | Unop (op, e) ->
-        let e = exp_to_string e in
-        String.concat "" ["("; op; " "; e; ")"]
-    | Binop (op, e0, e1) ->
-        let e0 = exp_to_string e0 and e1 = exp_to_string e1 in
-        String.concat "" ["("; e0; " "; op; " "; e1; ")" ]
-    | Proj (t, l) -> String.concat "." [t; l]
-    | Exists sql ->
-        let s = to_string sql in
-        String.concat "" ["EXISTS ("; s; ")"]
-    | Case (c, e0, e1) ->
-        let c = exp_to_string c
-        and e0 = exp_to_string e0 and e1 = exp_to_string e1 in
-        String.concat ""
-          ["( CASE WHEN "; c; " THEN "; e0; " ELSE "; e1; " END)"]
-    | Row sl -> String.concat ", " (List.map sel_to_string sl)
-
-    and table_to_string (t, tas) =
-      String.concat "" [Printf.sprintf "%S" t; " as "; tas]
-
-    and to_string = function
-    | Empty -> "SELECT * FROM (VALUES ('empty')) WITH 1 = 0"
-    | Union_all (s0, s1) ->
-      let s0 = to_string s0 and s1 = to_string s1 in
-      String.concat "" [s0; "\nUNION ALL\n"; s1]
-    | Select (sels, ts, where) ->
-        let ss = String.concat ", " (List.map sel_to_string sels) in
-        let ts = String.concat ", " (List.map table_to_string ts) in
-        let w = match where with
-        | None -> ""
-        | Some w -> String.concat "" ["\nWHERE "; exp_to_string w;]
-        in
-        String.concat "" ["SELECT "; ss; "\nFROM "; ts; w]
-  end
-
-  let gen_sym pre =
-    let c = ref (-1) in fun () -> incr c; pre ^ (string_of_int !c)
-
-  type gen = { table_sym : unit -> string; col_sym : unit -> string }
-  let gen () = { table_sym = gen_sym "t"; col_sym = gen_sym "c" }
-
-  let unop_to_sql : type a r. (a, r) Askt.unop -> string =
-  fun op -> match op with
-  | Askt.Neg t ->
-      begin match t with
-      | Type.Bool -> "NOT"
-      | Type.(Int | Int64 | Float) -> "-"
-      | _ -> failwith "Ask_sql: unimplemented unary operation"
-      end
-  | _ -> failwith "Ask_sql: unimplemented unary operation"
-
-  let arith_to_sql = function
-  | Askt.Add -> "+" | Sub -> "-" | Mul -> "*" | Div -> "/"
-
-  let cmp_to_sql = function
-  | Askt.Eq -> "=" | Neq -> "<>" | Lt -> "<" | Leq -> "<=" | Gt -> ">"
-  | Geq -> ">="
-
-  let binop_to_sql : type a r. (a, r) Askt.binop -> string =
-  fun op -> match op with
-  | Askt.Arith (op, _) -> arith_to_sql op
-  | Askt.Cmp (cmp, _) -> cmp_to_sql cmp
-  | Askt.And -> "AND" | Askt.Or -> "OR"
-  | _ -> failwith "Ask_sql: unimplemented binary operation"
-
-  let rec value_to_sql : type r. gen -> r Askt.value -> Sql.exp =
-  fun g v -> match v with
-  | Askt.Var v -> Sql.Var v
-  | Askt.Const (t, v) -> Sql.Const (t, v)
-  | Askt.Unop (op, v) -> Sql.Unop (unop_to_sql op, value_to_sql g v)
-  | Askt.Binop (op, x, y) ->
-      let op = binop_to_sql op in
-      let x = value_to_sql g x and y = value_to_sql g y in
-      Sql.Binop (op, x, y)
-  | Askt.Proj (r, c) ->
-      let v = match value_to_sql g r with
-      | Sql.Var v -> v | _ -> assert false
-      in
-      Sql.Proj (v, Col.name c)
-  | Askt.Row f -> Sql.Row []
-  | Askt.Tuple (f, v) ->
-      let cols = match value_to_sql g f with
-      | Sql.Row cols -> cols | _ -> assert false
-      in
-      let v = value_to_sql g v in
-      Sql.Row (cols @ [Sql.Col (v, g.col_sym ())])
-  | Askt.Exists b -> Sql.Exists (bag_to_sql g b)
-
-  and bag_to_sql : type r e. gen -> (r, e) Askt.bag -> Sql.t =
-  fun g b -> match b with
-  | Askt.Empty -> Empty
-  | Table t -> Sql.Select ([Sql.All (Table.name t)], [Table.name t,""], None)
-  | Yield v ->
-      let cols = match value_to_sql g v with
-      | Row cols -> cols
-      | Var v -> [Sql.All v] (* FIXME we'll need to distinguish bind vars *)
-      | exp -> [Sql.Col (exp, g.col_sym ())]
-      in
-      Sql.Select (cols, [], None)
-  | Union (b0, b1) -> Sql.Union_all (bag_to_sql g b0, bag_to_sql g b1)
-  | Foreach (b, y) ->
-      let t = match b with
-      | Table t -> (Table.name t)
-      | b ->
-          failwith
-            (Format.asprintf "@[<v>Foreach normalization: not a table:@, %a@]"
-               Askt.pp_bag b)
-      in
-      let var = g.table_sym () in
-      let cols, ts, where = match bag_to_sql g (y (Var var)) with
-      | Sql.Select (cols, ts, where) -> cols, ts, where
-      | _ -> failwith "Foreach normalization error not a select"
-      in
-      Sql.Select (cols, (t, var) :: ts, where)
-  | Where (c, b) ->
-      let cols, ts, where = match bag_to_sql g b with
-      | Sql.Select (cols, ts, where) -> cols, ts, where
-      | _ -> failwith "Where normalization error"
-      in
-      let where = match where with
-      | None -> Some (value_to_sql g c)
-      | Some w -> Some (Sql.Binop ("AND", w, value_to_sql g c))
-      in
-      Sql.Select (cols, ts, where)
-
-  (* This follows Cooper et al. and quel, would be nice
-     to see what seql brings. *)
-
-  let rec stage1 : type a e. (a, e) Askt.bag -> (a, e) Askt.bag = function
-  | Askt.Table _ as b -> b
-  | Empty as b -> b
-  | Yield _ as b -> b
-  | Union (m, n) -> Union (stage1 m, stage1 n)
-  | Foreach (Empty, n) -> Empty (* ForEmpty1 *)
-  | Foreach (Yield m, y) -> stage1 (y m) (* ForYield *)
-  | Foreach (Union (l, m), n) -> (* ForUnionAll1 *)
-      let l' = stage1 l and m' = stage1 m and n' = fun y -> stage1 (n y) in
-      stage1 (Union (Foreach (l', n'), Foreach (m', n')))
-  | Foreach (Foreach (l, m), n) -> (* ForFor *)
-      let l' = stage1 l and n' = fun y -> stage1 (n y) in
-      stage1 (Foreach (l', fun y -> Foreach (stage1 (m y), n')))
-  | Foreach (Where (l, m), n) -> (* ForWhere1 *)
-      let m' = stage1 m and n' = fun y -> stage1 (n y) in
-      stage1 (Where (l, (Foreach (m', n'))))
-  | Foreach (m, n) -> Foreach (stage1 m, fun y -> stage1 (n y))
-  | Where (Const (Type.Bool, true), m) -> stage1 m (* WhereTrue *)
-  | Where (Const (Type.Bool, false), m) -> Empty (* WhereFalse *)
-  | Where (l, m) -> Where (l, stage1 m)
-
-  let rec stage2 : type a e. (a, e) Askt.bag -> (a, e) Askt.bag = function
-  | Table _ as b -> b
-  | Empty as b -> b
-  | Yield _ as b -> b
-  | Union (m, n) -> Union (stage2 m, stage2 n)
-  | Foreach (l, o) ->
-      let l' = stage2 l in
-      begin match o (Var "dummy") (* Dummy to explore the body *) with
-      | Union (_, _) -> (* ForUnionAll2 *)
-          let left y = match o y with
-          | Union (m, _) -> stage2 m | _ -> assert false
-          in
-          let right y = match o y with
-          | Union (_, n) -> stage2 n | _ -> assert false
-          in
-          stage2 (Union (Foreach (l', left), Foreach (l', right)))
-      | Empty -> Empty (* ForEmpty2 *)
-      | b -> Foreach (l', fun y -> stage2 (o y))
-      end
-  | Where (l, Union (m, n)) -> (* WhereUnion *)
-      let m' = stage2 m and n' = stage2 n in
-      stage2 (Union (Where (l, m'), Where (l, n')))
-  | Where (c, Empty) -> Empty (* WhereEmpty *)
-  | Where (l, Where (m, n)) -> (* WhereWhere *)
-      let n' = stage2 n in
-      stage2 (Where (Binop (Askt.And, l, m), n'))
-  | Where (l, (Foreach (m, n))) -> (* WhereFor *)
-      let m' = stage2 m and n' = fun y -> stage2 (n y) in
-      stage2 (Foreach (m', (fun y -> Where (l, n' y))))
-  | Where (l, m) -> Where (l, stage2 m)
-
-  let normalize b = stage2 (stage1 (Askt.bag_to_bag b))
-
-  let of_bag : type r e. (r, e) Bag.t -> string = fun b ->
-    let nb = normalize b in
-    let sql = bag_to_sql (gen ()) nb in
-    Sql.to_string sql
-end
-
 module Sql = struct
 
   (* It's a bit unclear how portable we can make that by sticking to
@@ -650,7 +439,7 @@ module Sql = struct
     let blob = Type.Blob
     let option v = (Type.Option v)
     let nop f = fun src rev_args v -> f src rev_args
-    let proj t p f = fun src rev_args r -> f src (Arg (t, p r) :: rev_args) r
+    let proj p t f = fun src rev_args r -> f src (Arg (t, p r) :: rev_args) r
     let col :
       type r a. (r, a) Col.t -> (r -> 'b) func -> (r -> 'b) func =
       fun col f -> fun src rev_args r ->
@@ -837,6 +626,251 @@ module Sql = struct
     Stmt.func sql func
 
   (* Bags *)
+
+  module Bag_to_sql = struct
+  (* FIXME double quote and escape identifiers.
+     FIXME integrate with typed statments. *)
+
+    module Sql = struct   (* Target SQL fragment to compile bags *)
+      type table = string
+      type var = string
+      type col_name = string
+      type exp =
+      | Null (* XXX get rid of that. *)
+      | Var of string
+      | Const : 'a Type.t * 'a -> exp
+      | Unop of string * exp
+      | Binop of string * exp * exp
+      | Proj of var * string
+      | Exists of t
+      | Case of exp * exp * exp
+      | Row of sel list
+
+      and sel = Col of exp * var (* e AS l *) | All of table (* t.* *)
+      and from = (table * (* AS *) var) list
+      and where = exp
+      and t =
+      | Empty
+      | Union_all of t * t
+      | Select of sel list * from * where option
+
+      let empty_table : table * var = "(VALUES ('empty'))", "empty"
+
+      let rec const_to_string : type a. a Type.t -> a -> string = fun t v ->
+        match t with
+        | Type.Bool -> (match v with true -> "1" | false -> "0")
+        | Type.Int -> string_of_int v
+        | Type.Int64 -> Int64.to_string v
+        | Type.Float -> Float.to_string v
+        | Type.Text -> string v
+        | Type.Blob (* FIXME nonsense *) -> string v
+        | Type.Option t ->
+            (match v with
+            | None -> "NULL"
+            | Some v -> const_to_string t v)
+        | Type.Coded c ->
+            (match Type.Coded.enc c v with
+            | Ok v -> const_to_string (Type.Coded.repr c) v
+            | Error e ->
+                invalid_arg (Fmt.str "invalid %s constant %s" c.name e))
+        | _ -> Type.invalid_unknown ()
+
+      let rec sel_to_string = function
+      | Col (exp, "") -> exp_to_string exp (* FIXME possible ? *)
+      | Col (exp, l) -> String.concat "" [exp_to_string exp; " as "; l]
+      | All t -> t ^ ".*"
+
+      and exp_to_string = function
+      | Null -> "NULL"
+      | Var v -> v
+      | Const (t, v) -> const_to_string t v
+      | Unop (op, e) ->
+          let e = exp_to_string e in
+          String.concat "" ["("; op; " "; e; ")"]
+      | Binop (op, e0, e1) ->
+          let e0 = exp_to_string e0 and e1 = exp_to_string e1 in
+          String.concat "" ["("; e0; " "; op; " "; e1; ")" ]
+      | Proj (t, l) -> String.concat "." [t; l]
+      | Exists sql ->
+          let s = to_string sql in
+          String.concat "" ["EXISTS ("; s; ")"]
+      | Case (c, e0, e1) ->
+          let c = exp_to_string c
+          and e0 = exp_to_string e0 and e1 = exp_to_string e1 in
+          String.concat ""
+            ["( CASE WHEN "; c; " THEN "; e0; " ELSE "; e1; " END)"]
+      | Row sl -> String.concat ", " (List.map sel_to_string sl)
+
+      and table_to_string (t, tas) =
+        String.concat "" [Printf.sprintf "%S" t; " as "; tas]
+
+      and to_string = function
+      | Empty -> "SELECT * FROM (VALUES ('empty')) WITH 1 = 0"
+      | Union_all (s0, s1) ->
+          let s0 = to_string s0 and s1 = to_string s1 in
+          String.concat "" [s0; "\nUNION ALL\n"; s1]
+      | Select (sels, ts, where) ->
+          let ss = String.concat ", " (List.map sel_to_string sels) in
+          let ts = String.concat ", " (List.map table_to_string ts) in
+          let w = match where with
+          | None -> ""
+          | Some w -> String.concat "" ["\nWHERE "; exp_to_string w;]
+          in
+          String.concat "" ["SELECT "; ss; "\nFROM "; ts; w]
+    end
+
+    let gen_sym pre =
+      let c = ref (-1) in fun () -> incr c; pre ^ (string_of_int !c)
+
+    type gen = { table_sym : unit -> string; col_sym : unit -> string }
+    let gen () = { table_sym = gen_sym "t"; col_sym = gen_sym "c" }
+
+    let unop_to_sql : type a r. (a, r) Askt.unop -> string =
+      fun op -> match op with
+      | Askt.Neg t ->
+          begin match t with
+          | Type.Bool -> "NOT"
+          | Type.(Int | Int64 | Float) -> "-"
+          | _ -> failwith "Ask_sql: unimplemented unary operation"
+          end
+      | _ -> failwith "Ask_sql: unimplemented unary operation"
+
+    let arith_to_sql = function
+    | Askt.Add -> "+" | Sub -> "-" | Mul -> "*" | Div -> "/"
+
+    let cmp_to_sql = function
+    | Askt.Eq -> "=" | Neq -> "<>" | Lt -> "<" | Leq -> "<=" | Gt -> ">"
+    | Geq -> ">="
+
+    let binop_to_sql : type a r. (a, r) Askt.binop -> string =
+    fun op -> match op with
+    | Askt.Arith (op, _) -> arith_to_sql op
+    | Askt.Cmp (cmp, _) -> cmp_to_sql cmp
+    | Askt.And -> "AND" | Askt.Or -> "OR"
+    | _ -> failwith "Ask_sql: unimplemented binary operation"
+
+    let rec value_to_sql : type r. gen -> r Askt.value -> Sql.exp =
+    fun g v -> match v with
+    | Askt.Var v -> Sql.Var v
+    | Askt.Const (t, v) -> Sql.Const (t, v)
+    | Askt.Unop (op, v) -> Sql.Unop (unop_to_sql op, value_to_sql g v)
+    | Askt.Binop (op, x, y) ->
+        let op = binop_to_sql op in
+        let x = value_to_sql g x and y = value_to_sql g y in
+        Sql.Binop (op, x, y)
+    | Askt.Proj (r, c) ->
+        let v = match value_to_sql g r with
+        | Sql.Var v -> v | _ -> assert false
+        in
+        Sql.Proj (v, Col.name c)
+    | Askt.Row f -> Sql.Row []
+    | Askt.Tuple (f, v) ->
+        let cols = match value_to_sql g f with
+        | Sql.Row cols -> cols | _ -> assert false
+        in
+        let v = value_to_sql g v in
+        Sql.Row (cols @ [Sql.Col (v, g.col_sym ())])
+    | Askt.Exists b -> Sql.Exists (bag_to_sql g b)
+
+    and bag_to_sql : type r e. gen -> (r, e) Askt.bag -> Sql.t =
+    fun g b -> match b with
+    | Askt.Empty -> Empty
+    | Table t -> Sql.Select ([Sql.All (Table.name t)], [Table.name t,""], None)
+    | Yield v ->
+        let cols = match value_to_sql g v with
+        | Row cols -> cols
+        | Var v -> [Sql.All v] (* FIXME we'll need to distinguish bind vars *)
+        | exp -> [Sql.Col (exp, g.col_sym ())]
+        in
+        Sql.Select (cols, [], None)
+    | Union (b0, b1) -> Sql.Union_all (bag_to_sql g b0, bag_to_sql g b1)
+    | Foreach (b, y) ->
+        let t = match b with
+        | Table t -> (Table.name t)
+        | b ->
+            failwith
+              (Format.asprintf "@[<v>Foreach normalization: not a table:@, %a@]"
+                 Askt.pp_bag b)
+        in
+        let var = g.table_sym () in
+        let cols, ts, where = match bag_to_sql g (y (Var var)) with
+        | Sql.Select (cols, ts, where) -> cols, ts, where
+        | _ -> failwith "Foreach normalization error not a select"
+        in
+      Sql.Select (cols, (t, var) :: ts, where)
+    | Where (c, b) ->
+        let cols, ts, where = match bag_to_sql g b with
+        | Sql.Select (cols, ts, where) -> cols, ts, where
+        | _ -> failwith "Where normalization error"
+        in
+        let where = match where with
+        | None -> Some (value_to_sql g c)
+        | Some w -> Some (Sql.Binop ("AND", w, value_to_sql g c))
+        in
+        Sql.Select (cols, ts, where)
+
+    (* This follows Cooper et al. and quel, would be nice
+       to see what seql brings. *)
+
+    let rec stage1 : type a e. (a, e) Askt.bag -> (a, e) Askt.bag = function
+    | Askt.Table _ as b -> b
+    | Empty as b -> b
+    | Yield _ as b -> b
+    | Union (m, n) -> Union (stage1 m, stage1 n)
+    | Foreach (Empty, n) -> Empty (* ForEmpty1 *)
+    | Foreach (Yield m, y) -> stage1 (y m) (* ForYield *)
+    | Foreach (Union (l, m), n) -> (* ForUnionAll1 *)
+        let l' = stage1 l and m' = stage1 m and n' = fun y -> stage1 (n y) in
+        stage1 (Union (Foreach (l', n'), Foreach (m', n')))
+    | Foreach (Foreach (l, m), n) -> (* ForFor *)
+        let l' = stage1 l and n' = fun y -> stage1 (n y) in
+      stage1 (Foreach (l', fun y -> Foreach (stage1 (m y), n')))
+    | Foreach (Where (l, m), n) -> (* ForWhere1 *)
+        let m' = stage1 m and n' = fun y -> stage1 (n y) in
+        stage1 (Where (l, (Foreach (m', n'))))
+    | Foreach (m, n) -> Foreach (stage1 m, fun y -> stage1 (n y))
+    | Where (Const (Type.Bool, true), m) -> stage1 m (* WhereTrue *)
+    | Where (Const (Type.Bool, false), m) -> Empty (* WhereFalse *)
+    | Where (l, m) -> Where (l, stage1 m)
+
+    let rec stage2 : type a e. (a, e) Askt.bag -> (a, e) Askt.bag = function
+    | Table _ as b -> b
+    | Empty as b -> b
+    | Yield _ as b -> b
+    | Union (m, n) -> Union (stage2 m, stage2 n)
+    | Foreach (l, o) ->
+        let l' = stage2 l in
+        begin match o (Var "dummy") (* Dummy to explore the body *) with
+        | Union (_, _) -> (* ForUnionAll2 *)
+            let left y = match o y with
+            | Union (m, _) -> stage2 m | _ -> assert false
+            in
+            let right y = match o y with
+            | Union (_, n) -> stage2 n | _ -> assert false
+            in
+            stage2 (Union (Foreach (l', left), Foreach (l', right)))
+        | Empty -> Empty (* ForEmpty2 *)
+        | b -> Foreach (l', fun y -> stage2 (o y))
+        end
+    | Where (l, Union (m, n)) -> (* WhereUnion *)
+        let m' = stage2 m and n' = stage2 n in
+        stage2 (Union (Where (l, m'), Where (l, n')))
+    | Where (c, Empty) -> Empty (* WhereEmpty *)
+    | Where (l, Where (m, n)) -> (* WhereWhere *)
+        let n' = stage2 n in
+        stage2 (Where (Binop (Askt.And, l, m), n'))
+    | Where (l, (Foreach (m, n))) -> (* WhereFor *)
+        let m' = stage2 m and n' = fun y -> stage2 (n y) in
+        stage2 (Foreach (m', (fun y -> Where (l, n' y))))
+    | Where (l, m) -> Where (l, stage2 m)
+
+    let normalize b = stage2 (stage1 (Askt.bag_to_bag b))
+
+    let of_bag : type r e. (r, e) Bag.t -> string = fun b ->
+      let nb = normalize b in
+      let sql = bag_to_sql (gen ()) nb in
+      Sql.to_string sql
+  end
 
   let normalize = Bag_to_sql.normalize
   let of_bag = Bag_to_sql.of_bag

@@ -224,14 +224,24 @@ let version = Tsqlite3.version
 (* Low-level statement interface. *)
 
 module Stmt' = struct
+  (* These functions throw exceptions. *)
 
   let stmt_error rc st = Error.v rc (Tsqlite3.stmt_errmsg st)
+
+  let stmt_error_mismatch ~expected:e ~given:g =
+    let msg = strf "SQL statement has %d variables, only %d were given." e g in
+    Error.v 1 msg
+
   let stmt_error_var idx rc st =
     let msg = strf "var %d: %s" idx (Tsqlite3.stmt_errmsg st) in
     Error.v rc msg
 
-  let stmt_error_mismatch ~expected:e ~given:g =
-    let msg = strf "SQL statement has %d variables, only %d were given." e g in
+  let stmt_error_var_encode idx typ err =
+    let msg = strf "var %d encode %s: %s" idx typ err in
+    Error.v 1 msg
+
+  let col_error_decode idx typ err =
+    let msg = strf "column %d decode %s: %s" idx typ err in
     Error.v 1 msg
 
   exception Error of Error.t
@@ -265,10 +275,13 @@ module Stmt' = struct
   | Type.Text -> Tsqlite3.bind_text st idx v
   | Type.Blob -> Tsqlite3.bind_blob st idx v
   | Type.Option t ->
-      begin match v with
+      (match v with
       | None -> Tsqlite3.bind_null st idx
-      | Some v -> bind_arg st idx (Sql.Stmt.Arg (t, v))
-      end
+      | Some v -> bind_arg st idx (Sql.Stmt.Arg (t, v)))
+  | Type.Coded c ->
+      (match Type.Coded.enc c v with
+      | Ok v -> bind_arg st idx (Sql.Stmt.Arg (Type.Coded.repr c, v))
+      | Error e -> error (stmt_error_var_encode idx (Type.Coded.name c) e))
   | _ -> Type.invalid_unknown ()
 
   let bind_args st args =
@@ -301,6 +314,11 @@ module Stmt' = struct
   | Type.Blob -> Tsqlite3.column_blob s i
   | Type.Option t ->
       if Tsqlite3.column_is_null s i then None else Some (unpack_col_type s i t)
+  | Type.Coded c ->
+      let v = unpack_col_type s i (Type.Coded.repr c) in
+      (match Type.Coded.dec c v with
+      | Ok v -> v
+      | Error e -> error (col_error_decode i (Type.Coded.name c) e))
   | _ -> Type.invalid_unknown ()
 
   let unpack_col : type r c. Tsqlite3.stmt -> int -> (r, c) Col.t -> c =

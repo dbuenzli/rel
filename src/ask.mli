@@ -10,10 +10,10 @@
 (** Column base types. *)
 module Type : sig
 
-  (** {1:types Types} *)
+  (** {1:types Base types} *)
 
   type 'a t = ..
-  (** The type for column base types represented by ['a] values in OCaml. *)
+  (** The type for column types represented by ['a] values in OCaml. *)
 
   type 'a t +=
   | Bool : bool t (** Stored as [0] and [1] *)
@@ -24,6 +24,51 @@ module Type : sig
   | Blob : string t
   | Option : 'a t -> 'a option t (** Nullable type. *)
   (** Base types supported by all database backends. *)
+
+  (** {1:coded Coded types}
+
+      Types coded by other types. Provides arbitrary OCaml column types. *)
+
+  (** Coded types. *)
+  module Coded : sig
+
+    type 'a repr = 'a t
+    (** See {!Ask.Type.t}. *)
+
+    type ('a, 'b) map = 'a -> ('b, string) result
+    (** The type for partially mapping values of type ['a] to values of
+        type ['b]. *)
+
+    type ('a, 'b) t
+    (** The type for coding values of type ['a] by values of type ['b]. *)
+
+    val v :
+      ?pp:(Format.formatter -> 'a -> unit) -> name:string ->
+      ('a, 'b) map -> ('b, 'a) map -> 'b repr -> ('a, 'b) t
+    (** [v ~pp ~name enc dec] is a coding using [enc] to encode values
+        and [dec] to decode them. [name] is a name for the coded type.
+        [pp] is an optional formatter.  *)
+
+    val name : ('a, 'b) t -> string
+    (** [name c] is [c]'s name. *)
+
+    val enc : ('a, 'b) t -> ('a, 'b) map
+    (** [enc c] is [c]'s encoder. *)
+
+    val dec : ('a, 'b) t -> ('b, 'a) map
+    (** [dec c] is [c]'s decoder. *)
+
+    val repr : ('a, 'b) t -> 'b repr
+    (** [repr c] is the coding target representation. *)
+
+    val pp : ('a, 'b) t -> (Format.formatter -> 'a -> unit) option
+    (** [pp c] is [c]'s pretty printer (if any). *)
+  end
+
+  type 'a t +=
+  | Coded : ('a, 'b) Coded.t -> 'a t (** *)
+  (** The types for a column coding values of type ['a] as values
+      of type ['b]. *)
 
   (** {1:invalid Invalid types} *)
 
@@ -678,10 +723,13 @@ module Sql : sig
     (** [arg t f] binds a new variable of type [t] to [f]. *)
 
     val ( @-> ) : 'a Type.t -> 'b func -> ('a -> 'b) func
-    (** [t @-> f] is [arg t f] *)
+    (** [t @-> f] is [arg t f]. *)
 
     val unit : unit t func
     (** [unit] is [ret ]{!Row.empty}. *)
+
+    (** The following constants get redefined here to allow consise
+        specification with the [Sql.Stmt.()] notation. *)
 
     val bool : bool Type.t
     (** [bool] is {!Type.Bool}. *)
@@ -704,19 +752,19 @@ module Sql : sig
     val option : 'a Type.t -> 'a option Type.t
     (** [option t] is [!Type.option t]. *)
 
-    (** {2:projs Binding projections and row columns}
+    (** {2:projs Binding projections}
 
         See the {{!page-sql_stmt_howto.binding_projection}this section}
-        of the SQL statement typing howto for a short introduction. *)
+        of the SQL statement typing howto. *)
 
     val nop : 'b func -> ('a -> 'b) func
     (** [nop f] adds an unused argument to [f]. *)
 
-    val proj : 'a Type.t -> ('r -> 'a) -> ('r -> 'b) func -> ('r -> 'b) func
-    (** [proj t p] binds the projection [p] of a value of type [t]. *)
+    val proj : ('r -> 'a) -> 'a Type.t -> ('r -> 'b) func -> ('r -> 'b) func
+    (** [proj p t] binds the projection [p] of a value of type [t]. *)
 
     val col : ('r, 'a) Col.t -> ('r -> 'b) func -> ('r -> 'b) func
-    (** [col c f] binds the projection on column [c] of a row. *)
+    (** [col c f] binds the projection on column [c] of a row of type ['r] *)
   end
 
   (** {1:schema Schema definition} *)
