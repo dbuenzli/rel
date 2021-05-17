@@ -163,8 +163,8 @@ module Products_with_adts = struct
     let price p = p.price
 
     module C = struct
-      let pid = Col.v "pid" Type.Int pid ~params:[Sql.Col_primary_key]
-      let name = Col.v "name" Type.Text name ~params:[Sql.Col_unique]
+      let pid = Col.v "pid" Type.Int pid ~params:[Col.Primary_key]
+      let name = Col.v "name" Type.Text name ~params:[Col.Unique]
       let price = Col.v "price" Type.Int price
     end
     let table = Table.v "product" Row.Cols.(unit v * C.pid * C.name * C.price)
@@ -259,7 +259,7 @@ module Duos = struct
     let name p = p.name
     let age p = p.age
     module C = struct
-      let name = Col.v "name" Type.Text name ~params:[Sql.Col_primary_key]
+      let name = Col.v "name" Type.Text name ~params:[Col.Primary_key]
       let age = Col.v "age" Type.Int age
     end
     let table = Table.v "person" Row.Cols.(unit v * C.name * C.age)
@@ -363,7 +363,7 @@ module Org = struct
     let v name = { name }
     let name p = p.name
     module C = struct
-      let name = Col.v "name" Type.Text name ~params:[Sql.Col_primary_key]
+      let name = Col.v "name" Type.Text name ~params:[Col.Primary_key]
     end
     let table = Table.v "department" Row.Cols.(unit v * C.name)
   end
@@ -384,7 +384,7 @@ module Org = struct
     let name p = p.name
     let department p = p.department
     module C = struct
-      let name = Col.v "name" Type.Text name ~params:[Sql.Col_primary_key]
+      let name = Col.v "name" Type.Text name ~params:[Col.Primary_key]
       let department = Col.v "department" Type.Text department
     end
     let table = Table.v "person" Row.Cols.(unit v * C.name * C.department)

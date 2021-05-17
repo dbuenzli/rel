@@ -108,19 +108,13 @@ module Col : sig
   (** {1:cols Columns} *)
 
   type param = ..
-  (** The type for extensible column parameters. See {!Ask.Sql} for
-      some parameters. *)
+  (** The type for extensible column parameters. See {!params}. *)
 
   type ('r, 'a) t =
-    { name : string; params : param list; type' : 'a Type.t;
-      proj : ('r -> 'a) }
+    { name : string; params : param list; type' : 'a Type.t; proj : ('r -> 'a) }
   (** The type for a column of type ['a] which is part of a row stored
-      in an OCaml value of type ['r]. See {!val-v}.
-
-      {b TODO.} The type definition is not abstract otherwise row
-      variables of object projection functions can't generalize.
-      This allowed to share column types among tables respestend
-      by objects but it may  not be such a good idea anyway. *)
+      in an OCaml value of type ['r]. Unless you get into recursive
+      trouble use constructor {!val-v}. *)
 
   type 'r v = V : ('r, 'a) t -> 'r v (** *)
   (** The type for existential columns for a row of type ['r]. *)
@@ -152,6 +146,18 @@ module Col : sig
   val equal_name : ('r, 'a) t ->  ('s, 'b) t -> bool
   (** [equal_name c0 c1] is [true] if [c0] and [c1] have the same name. *)
 
+  (** {1:params Parameters}
+
+      See {!Ask.Sql} for more parameters. *)
+
+  type param +=
+  | Primary_key
+  | Unique
+  (** Common column parameters.
+      {ul
+      {- [Primary_key] is a primary key constraint (PRIMARY KEY NOT NULL).}
+      {- [Unique] is a uniqueness constraint (UNIQUE).}} *)
+
   (** {1:fmt Formatters} *)
 
   val pp : Format.formatter -> ('r, 'a) t -> unit
@@ -177,9 +183,7 @@ end
     rows into OCaml values. *)
 module Row : sig
 
-  type ('r, 'a) prod =
-  | Unit : 'a -> ('r, 'a) prod
-  | Prod : ('r, 'a -> 'b) prod * ('r, 'a) Col.t -> ('r, 'b) prod
+  type ('r, 'a) prod
   (** The type for constructing a cartesian product whose final result
       will be represented by OCaml values of type ['r]. *)
 
@@ -298,12 +302,14 @@ end
     Tables simply give a name to {{!Row}rows}. *)
 module Table : sig
 
-  type param = ..
-  (** The type for exensible table parameters. See {!Ask.Sql} for
-      some parameters. *)
+  (** {1:tables Tables} *)
 
-  type 'r t = { name : string; params : param list; row : 'r Row.t }
-  (** The type for a table represented by an OCaml of type ['a]. *)
+  type param = ..
+  (** The type for exensible table parameters. See {!params}. *)
+
+  type 'r t = { name : string; params : param list; row : 'r Row.t Lazy.t}
+  (** The type for a table represented by an OCaml of type ['a]. Unless you
+      get into recursive trouble, use the constructor {!val-v}. *)
 
   type v = V : 'r t -> v
   (** The type for existential tables. *)
@@ -323,6 +329,19 @@ module Table : sig
   val cols : ?ignore:'r Col.v list -> 'r t -> 'r Col.v list
   (** [cols t] is {!Row.cols}[ (row t)] with columns in [ignore] ommited
       from the result. *)
+
+  (** {1:params Parameters}
+
+      See {!Ask.Sql} for more parameters. *)
+
+  type param +=
+  | Primary_key : 'r Col.v list -> param
+  | Foreign_key : 'r Col.v list * ('s t * 's Col.v list) -> param (** *)
+  (** Common table parameters.
+      {ul
+      {- [Primary_key cols], declares a table primary key on columns [cols]}
+      {- [Foreign_key (cols, (t, cols'))] declares a foreign key
+         between [cols] and the columns cols' of [t]. Can be repeated.}} *)
 end
 
 (** {1:query_lang Query language}
@@ -778,36 +797,26 @@ module Sql : sig
   type Col.param +=
   | Col of string
   | Col_constraint of string
-  | Col_primary_key
-  | Col_references : 'r Table.t * ('r, 'a) Col.t -> Col.param
-  | Col_unique (** *)
-  (** The type for column parameters.
+  | Col_references : 'r Table.t * ('r, 'a) Col.t -> Col.param (** *)
+  (** The type for column parameters. See also {!Col.param}.
       {ul
       {- [Col sql] is the full SQL column definition between the name
          and the comma (includes the type). All other parameters
          are ignored, you are in control.}
       {- [Col_constraint sql] appends [sql]
          at the end of the column definition. Can be repeated.}
-      {- [Col_primary_key] is a PRIMARY KEY NOT NULL constraint}
       {- [Col_references (t, c)] declares that the column references
-         column [c] in [t].}
-      {- [Col_unique] is a UNIQUE constraint}} *)
+         column [c] in [t].}} *)
 
   type Table.param +=
   | Table of string
   | Table_constraint of string
-  | Table_foreign_key :
-      'r Col.v list * ('s Table.t * 's Col.v list) -> Table.param
-  | Table_primary_key : 'r Col.v list -> Table.param (** *)
   (** The type for table parameters.
       {ul
       {- [Table sql] is the full SQL table definition between the ().
          All other parameters are ignored, you are in control.}
       {- [Table_constraint sql] is an SQL table contraint added at the end
-         of the table definition. Can be repeated.}
-      {- [Table_foreign_key (cols, (t, cols'))] declares a foreign key
-         between [cols] and the columns cols' of [t]. Can be repeated.}
-      {- [Table_primary_key cols], declares a primary key on columns [cols]}} *)
+         of the table definition. Can be repeated.}} *)
 
   val drop_table :
     ?schema:string -> ?if_exists:bool -> 'a Table.t -> unit Stmt.t

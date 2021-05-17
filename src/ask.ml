@@ -83,6 +83,7 @@ end
 
 module Col = struct
   type param = ..
+
   type ('r, 'a) t =
     { name : string; params : param list; type' : 'a Type.t;
       proj : ('r -> 'a) }
@@ -97,6 +98,11 @@ module Col = struct
   let with_proj proj c = { c with proj }
   let no_proj _ = invalid_arg "No projection defined"
   let equal_name c0 c1 = String.equal (name c0) (name c1)
+
+  type param +=
+  | Primary_key
+  | Unique
+
   let pp ppf c = Fmt.pf ppf "@[%a : %a@]" Fmt.string c.name Type.pp c.type'
   let pp_name ppf c = Fmt.string ppf c.name
   let value_pp c ppf r = Type.value_pp c.type' ppf (c.proj r)
@@ -180,19 +186,24 @@ end
 
 module Table = struct
   type param = ..
-  type 'a t = { name : string; params : param list; row : 'a Row.t }
+  type 'a t = { name : string; params : param list; row : 'a Row.t Lazy.t }
   type v = V : 'a t -> v
-  let v ?(params = []) name row = { name; params; row }
+  let v ?(params = []) name row = { name; params; row = Lazy.from_val row }
+  let v_rec ?(params = []) name row = { name; params; row }
   let name t = t.name
   let params t = t.params
-  let row t = t.row
+  let row t = Lazy.force t.row
   let cols ?(ignore = []) t = match ignore with
-  | [] -> Row.cols t.row
+  | [] -> Row.cols (Lazy.force t.row)
   | icols ->
       let keep (Col.V c) =
         not (List.exists (fun (Col.V i) -> Col.equal_name i c) icols)
       in
-      List.filter keep (Row.cols t.row)
+      List.filter keep (Row.cols (Lazy.force t.row))
+
+  type param +=
+  | Primary_key : 'r Col.v list -> param
+  | Foreign_key : 'r Col.v list * ('a t * 'a Col.v list) -> param
 end
 
 module Askt = struct
@@ -472,19 +483,17 @@ module Sql = struct
   type Col.param +=
   | Col of string
   | Col_constraint of string
-  | Col_primary_key
   | Col_references : 'r Table.t * ('r, 'a) Col.t -> Col.param
-  | Col_unique
 
   let col_params col =
     let rec loop sql cs pkey r unique = function
     | [] -> sql, List.rev cs, pkey, r, unique
     | Col sql :: ps -> loop (Some sql) cs pkey r unique ps
     | Col_constraint c :: ps -> loop sql (c :: cs) pkey r unique ps
-    | Col_primary_key :: ps -> loop sql cs true r unique ps
+    | Col.Primary_key :: ps -> loop sql cs true r unique ps
     | Col_references _ as ref :: ps ->
         loop sql cs pkey (Some ref) unique ps
-    | Col_unique :: ps -> loop sql cs pkey r true ps
+    | Col.Unique :: ps -> loop sql cs pkey r true ps
     | _ :: ps -> loop sql cs pkey r true ps
     in
     loop None [] false None false (Col.params col)
@@ -515,33 +524,30 @@ module Sql = struct
   type Table.param +=
   | Table of string
   | Table_constraint of string
-  | Table_foreign_key :
-      'r Col.v list * ('a Table.t * 'a Col.v list) -> Table.param
-  | Table_primary_key : 'r Col.v list -> Table.param
 
   let table_params t =
     let rec loop sql cs fks pk = function
     | [] -> sql, List.rev cs, List.rev fks, pk
     | Table sql :: ps -> loop (Some sql) cs fks pk ps
     | Table_constraint c :: ps -> loop sql (c :: cs) fks pk ps
-    | Table_foreign_key _ as fk :: ps -> loop sql cs (fk :: fks) pk ps
-    | Table_primary_key _ as pk :: ps -> loop sql cs fks (Some pk) ps
+    | Table.Foreign_key _ as fk :: ps -> loop sql cs (fk :: fks) pk ps
+    | Table.Primary_key _ as pk :: ps -> loop sql cs fks (Some pk) ps
     | _ :: ps -> loop sql cs fks pk ps
     in
     loop None [] [] None (Table.params t)
 
   let primary_key = function
-  | Table_primary_key cs -> Fmt.str "PRIMARY KEY (%a)" pp_col_ids cs
+  | Table.Primary_key cs -> Fmt.str "PRIMARY KEY (%a)" pp_col_ids cs
   | _ -> assert false
 
   let foreign_references = function
-  | Table_foreign_key (_, (t, cs)) ->
+  | Table.Foreign_key (_, (t, cs)) ->
     if cs = [] then "" else
     Fmt.str " REFERENCES %s (%a)" (table_id t) pp_col_ids cs
   | _ -> assert false
 
   let foreign_key = function
-  | Table_foreign_key (cs, ref) as fk ->
+  | Table.Foreign_key (cs, ref) as fk ->
       Fmt.str "FOREIGN KEY (%a)%s" pp_col_ids cs (foreign_references fk)
   | _ -> assert false
 
