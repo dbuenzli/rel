@@ -83,21 +83,24 @@ end
 
 module Col = struct
   type param = ..
-  type ('r, 'a) t = string * param list * 'a Type.t * ('r -> 'a)
+  type ('r, 'a) t =
+    { name : string; params : param list; type' : 'a Type.t;
+      proj : ('r -> 'a) }
+
   type 'r v = V : ('r, 'a) t -> 'r v
   type 'r value = Value : ('r, 'a) t * 'a -> 'r value
-  let v ?(params = []) n t p = n, params, t, p
-  let name (n, _, _, _) = n
-  let params (_, ps, _, _) = ps
-  let type' (_, _, t, _) = t
-  let proj  (_, _, _, p) = p
-  let with_proj p (n, ps, t, _) = (n, ps, t, p)
+  let v ?(params = []) name type' proj = { name; params; type'; proj }
+  let name c = c.name
+  let params c = c.params
+  let type' c = c.type'
+  let proj c = c.proj
+  let with_proj proj c = { c with proj }
   let no_proj _ = invalid_arg "No projection defined"
   let equal_name c0 c1 = String.equal (name c0) (name c1)
-  let pp ppf (n, _, t, _) = Fmt.pf ppf "@[%a : %a@]" Fmt.string n Type.pp t
-  let pp_name ppf (n, _, _ ,_) = Fmt.string ppf n
-  let value_pp (_, _, t, p) ppf r = Type.value_pp t ppf (p r)
-  let pp_value ppf (Value ((_, _, t, _), v)) = Type.value_pp t ppf v
+  let pp ppf c = Fmt.pf ppf "@[%a : %a@]" Fmt.string c.name Type.pp c.type'
+  let pp_name ppf c = Fmt.string ppf c.name
+  let value_pp c ppf r = Type.value_pp c.type' ppf (c.proj r)
+  let pp_value ppf (Value (c, v)) = Type.value_pp c.type' ppf v
   let pp_sep ppf () = Format.pp_print_char ppf '|'
 end
 
@@ -124,13 +127,13 @@ module Row = struct
   module Quick = struct
     let unit = unit
     let ( * ) = prod
-    let bool ?(proj = Col.no_proj) n = n, [], Type.Bool, proj
-    let int ?(proj = Col.no_proj) n = n, [], Type.Int, proj
-    let int64 ?(proj = Col.no_proj) n = n, [], Type.Int64, proj
-    let float ?(proj = Col.no_proj) n = n, [], Type.Float, proj
-    let text ?(proj = Col.no_proj) n = n, [], Type.Text, proj
-    let blob ?(proj = Col.no_proj) n = n, [], Type.Blob, proj
-    let option ?(proj = Col.no_proj) n t = n, [], (Type.Option t), proj
+    let bool ?(proj = Col.no_proj) n = Col.v n Type.Bool proj
+    let int ?(proj = Col.no_proj) n = Col.v n Type.Int proj
+    let int64 ?(proj = Col.no_proj) n = Col.v n Type.Int64 proj
+    let float ?(proj = Col.no_proj) n = Col.v n Type.Float proj
+    let text ?(proj = Col.no_proj) n = Col.v n Type.Text proj
+    let blob ?(proj = Col.no_proj) n = Col.v n Type.Blob proj
+    let option ?(proj = Col.no_proj) n t = Col.v n (Type.Option t) proj
 
     let t1 a = unit Fun.id * Col.with_proj Fun.id a
     let t2 a b =
@@ -598,9 +601,9 @@ module Sql = struct
 
   let rec bind_columns ~sep i rev_cols rev_args = function
   | [] -> i, String.concat sep (List.rev rev_cols), rev_args
-  | Col.Value ((_, _, t, _) as col, v) :: cols ->
+  | Col.Value (col, v) :: cols ->
       let set_col = String.concat "" [col_id col; " = ?"; string_of_int i] in
-      let arg = Stmt.Arg (t, v) in
+      let arg = Stmt.Arg (col.type', v) in
       bind_columns ~sep (i + 1) (set_col :: rev_cols) (arg :: rev_args) cols
 
   let update_rows ?schema t cols ~where =

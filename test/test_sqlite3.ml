@@ -17,8 +17,8 @@ module Playlist = struct
   let name p = p.name
 
   module C = struct
-    let playlistId = "PlaylistId", [], Type.Int, id
-    let name = "Name", [], Type.Text, name
+    let playlistId = Col.v "PlaylistId" Type.Int id
+    let name = Col.v "Name" Type.Text name
   end
 
   let table = Table.v "playlists" Row.Cols.(unit v * C.playlistId * C.name)

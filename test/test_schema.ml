@@ -57,12 +57,29 @@ module Products_flat_with_objects = struct
       object method pid = pid method name = name; method sale = sale end
 
     module C = struct
-      let name = "name", [], Type.Text, fun o -> o # name
-      let price = "price", [], Type.Int, fun o -> o # price
-      let pid =  "pid", [], Type.Int, fun o -> o # pid
-      let oid = "oid", [], Type.Int, fun o -> o # oid
-      let qty = "qty", [], Type.Int, fun o -> o # qty
-      let sale = "sale", [], Type.Int, fun o -> o # sale
+      let name =
+        { Col.name = "name"; params = []; type' = Type.Text;
+          proj = fun o -> o # name }
+
+      let price =
+        { Col.name = "price"; params = []; type' = Type.Int;
+          proj = fun o -> o # price }
+
+      let pid =
+        { Col.name = "pid"; params =  []; type' = Type.Int;
+          proj = fun o -> o # pid }
+
+      let oid =
+        { Col.name = "oid"; params = []; type' = Type.Int;
+          proj = fun o -> o # oid }
+
+      let qty =
+        { Col.name = "qty"; params =  []; type' =  Type.Int;
+          proj = fun o -> o # qty }
+
+      let sale =
+        { Col.name = "sale"; params = []; type' = Type.Int;
+          proj = fun o -> o # sale }
     end
 
     let product =

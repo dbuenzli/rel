@@ -111,7 +111,9 @@ module Col : sig
   (** The type for extensible column parameters. See {!Ask.Sql} for
       some parameters. *)
 
-  type ('r, 'a) t = string * param list * 'a Type.t * ('r -> 'a)
+  type ('r, 'a) t =
+    { name : string; params : param list; type' : 'a Type.t;
+      proj : ('r -> 'a) }
   (** The type for a column of type ['a] which is part of a row stored
       in an OCaml value of type ['r]. See {!val-v}.
 
@@ -175,7 +177,9 @@ end
     rows into OCaml values. *)
 module Row : sig
 
-  type ('r, 'a) prod
+  type ('r, 'a) prod =
+  | Unit : 'a -> ('r, 'a) prod
+  | Prod : ('r, 'a -> 'b) prod * ('r, 'a) Col.t -> ('r, 'b) prod
   (** The type for constructing a cartesian product whose final result
       will be represented by OCaml values of type ['r]. *)
 
