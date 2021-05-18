@@ -215,6 +215,9 @@ module Askt = struct
   type ('a, 'b) unop = ..
   type ('a, 'b) unop +=
   | Neg : 'a Type.t -> ('a, 'a) unop
+  | Get_some : ('a option, 'a) unop
+  | Is_null : ('a option, bool) unop
+  | Is_not_null : ('a option, bool) unop
 
   type arith = Add | Sub | Div | Mul
   type cmp = Eq | Neq | Lt | Leq | Gt | Geq
@@ -251,6 +254,9 @@ module Askt = struct
       | Type.(Int | Int64 | Float) -> "-"
       | _ -> "<unknown>"
       end
+  | Get_some -> "get-some"
+  | Is_not_null -> "IS NOT NULL"
+  | Is_null -> "IS NULL"
   | _ -> "<unknown>"
 
   let cmp_to_string = function
@@ -379,6 +385,13 @@ module Syntax = struct
   module String = struct
     let v s = Const (Type.Text, s)
     let ( = ) x y = Binop (Cmp (Eq, Type.Text), x, y)
+  end
+
+  module Option = struct
+    let v t o = Const (Type.Option t, o)
+    let is_none v = Unop (Is_null, v)
+    let is_some v = Unop (Is_not_null, v)
+    let get v = Unop (Get_some, v)
   end
 
   let ( && ) = Bool.( && )
@@ -647,7 +660,7 @@ module Sql = struct
       | Null (* XXX get rid of that. *)
       | Var of string
       | Const : 'a Type.t * 'a -> exp
-      | Unop of string * exp
+      | Unop of (bool * (* prefixed *) string) * exp
       | Binop of string * exp * exp
       | Proj of var * string
       | Exists of t
@@ -692,9 +705,12 @@ module Sql = struct
       | Null -> "NULL"
       | Var v -> v
       | Const (t, v) -> const_to_string t v
-      | Unop (op, e) ->
+      | Unop ((prefixed, op), e) ->
           let e = exp_to_string e in
-          String.concat "" ["("; op; " "; e; ")"]
+          if op = "" (* Id *) then e else
+          if prefixed
+          then String.concat "" ["("; op; " "; e; ")"]
+          else String.concat "" ["("; e; " "; op; ")"]
       | Binop (op, e0, e1) ->
           let e0 = exp_to_string e0 and e1 = exp_to_string e1 in
           String.concat "" ["("; e0; " "; op; " "; e1; ")" ]
@@ -733,14 +749,17 @@ module Sql = struct
     type gen = { table_sym : unit -> string; col_sym : unit -> string }
     let gen () = { table_sym = gen_sym "t"; col_sym = gen_sym "c" }
 
-    let unop_to_sql : type a r. (a, r) Askt.unop -> string =
+    let unop_to_sql : type a r. (a, r) Askt.unop -> bool * string =
       fun op -> match op with
       | Askt.Neg t ->
           begin match t with
-          | Type.Bool -> "NOT"
-          | Type.(Int | Int64 | Float) -> "-"
+          | Type.Bool -> true, "NOT"
+          | Type.(Int | Int64 | Float) -> true, "-"
           | _ -> failwith "Ask_sql: unimplemented unary operation"
           end
+      | Askt.Is_null -> false, "IS NULL"
+      | Askt.Is_not_null -> false, "IS NOT NULL"
+      | Askt.Get_some -> true, ""
       | _ -> failwith "Ask_sql: unimplemented unary operation"
 
     let arith_to_sql = function

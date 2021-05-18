@@ -515,7 +515,7 @@ module Syntax : sig
     (** [v x] is the literal float [x]. *)
 
     val ( = ) : float value -> float value -> bool value
-    (** [x = y] is floatint point equality. *)
+    (** [x = y] is floating point equality. *)
 
     (** {1:arith Arithmetic operators} *)
 
@@ -542,6 +542,17 @@ module Syntax : sig
 
     val ( = ) : string value -> string value -> bool value
     (** [x = y] is binary string equality. *)
+  end
+
+  (** Option. *)
+  module Option : sig
+
+    val v : 'a Type.t -> 'a option -> 'a option value
+    (** [v t o] is an option of type [t]. *)
+
+    val is_none : 'a option value -> bool value
+    val is_some : 'a option value -> bool value
+    val get : 'a option value -> 'a value
   end
 
   (** {1:boolops Boolean operators} *)
