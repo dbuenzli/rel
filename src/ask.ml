@@ -904,7 +904,7 @@ module Sql = struct
   let of_bag = Bag_to_sql.of_bag
 
   module Bag = struct
-    type ('a, 'b) func = { argc : int; bag : 'a; func : 'b Stmt.func }
+    type ('a, 'b, 'r) func = { argc : int; bag : 'a; func : 'b Stmt.func }
 
     let func f =
       let sql = Bag_to_sql.of_bag f.bag in

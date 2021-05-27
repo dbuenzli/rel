@@ -900,13 +900,19 @@ module Sql : sig
 
 
   module Bag : sig
-    type ('a, 'b) func
-    val func : (('b, 'e) Bag.t, 'a) func -> 'a
-    val arg :
-      'a Type.t -> ('a value -> 'c, 'b) func -> ('c, 'a -> 'b) func
 
-    val ( @-> ) : 'a Type.t -> ('a value -> 'c, 'b) func -> ('c, 'a -> 'b) func
-    val ret : 'r Row.t -> 'a -> ('a, 'r Stmt.t) func
+
+    (** {b FIXME.} Return type is unsafe. Add the parameter and match
+        it on func. *)
+
+    type ('a, 'f, 'r) func
+    val func : (('r, 'e) Bag.t, 'f, 'r) func -> 'f
+    val arg :
+      'a Type.t -> ('a value -> 'c, 'b, 'r) func -> ('c, 'a -> 'b, 'r) func
+
+    val ( @-> ) :
+      'a Type.t -> ('a value -> 'c, 'b, 'r) func -> ('c, 'a -> 'b, 'r) func
+    val ret : 'r Row.t -> 'a -> ('a, 'r Stmt.t, 'r) func
 
     val bool : bool Type.t
     val int : int Type.t
