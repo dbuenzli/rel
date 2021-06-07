@@ -333,8 +333,12 @@ module Stmt' = struct
     | Askt.Prod (cs, c) ->
         let f = cols s (idx - 1) cs in
         f (unpack_col s idx c)
+    | Askt.Cat (cs, _, row) ->
+        let f = cols s (idx - Row.col_count (Askt.prod_to_prod row)) cs in
+        let v = cols s idx row in
+        f v
     in
-    let row = Askt.prod_to_prod (Sql.Stmt.result st) in
+    let row = Askt.prod_of_prod (Sql.Stmt.result st) in
     cols s.stmt (s.col_count - 1) row
 
   let step s st = match Tsqlite3.step s.stmt with

@@ -114,16 +114,35 @@ module Row = struct
   type ('r, 'a) prod =
   | Unit : 'a -> ('r, 'a) prod
   | Prod : ('r, 'a -> 'b) prod * ('r, 'a) Col.t -> ('r, 'b) prod
+  | Cat : ('r, 'a -> 'b) prod * ('r -> 'a) * ('a, 'a) prod -> ('r, 'b) prod
 
   type 'r t = ('r, 'r) prod
   let unit f = Unit f
   let prod r c = Prod (r, c)
+  let cat r ~proj row = Cat (r, proj, row)
   let empty = unit ()
   let cols r =
     let rec loop : type r a. (r, a) prod -> r Col.v list = function
-    | Unit _ -> [] | Prod (r, c) -> Col.V c :: loop r
+    | Unit _ -> []
+    | Prod (r, c) -> Col.V c :: loop r
+    | Cat (r, proj, rows) ->
+        let reproj (Col.V c) =
+          Col.V (Col.with_proj (fun r -> Col.proj c (proj r)) c)
+        in
+        let row_cols = loop rows in
+        let row_cols = List.map reproj row_cols in
+        row_cols @ loop r
     in
     List.rev (loop r)
+
+  let col_count row =
+    let rec loop : type r a. int -> (r, a) prod -> int =
+    fun acc prod -> match prod with
+    | Unit _ -> acc
+    | Prod (r, c) -> loop (acc + 1) r
+    | Cat (r, _, row) ->  loop (acc + loop 0 row) r
+    in
+    loop 0 row
 
   module Cols = struct
     (* Own module to minimize clashes when using the Row.Cols.() notation *)
@@ -172,11 +191,13 @@ module Row = struct
   let rec pp_header : type r a. (r, a) prod Fmt.t = fun ppf r -> match r with
   | Unit _ -> Col.pp_sep ppf ()
   | Prod (r, c) -> pp_header ppf r; Col.pp_name ppf c; Col.pp_sep ppf ()
+  | Cat (r, _, row) -> pp_header ppf r; pp_header ppf row
 
   let rec value_pp : type r a. (r, a) prod -> r Fmt.t = fun r ppf v ->
     match r with
     | Unit _ -> Col.pp_sep ppf ()
     | Prod (r, c) -> value_pp r ppf v; Col.value_pp c ppf v; Col.pp_sep ppf ()
+    | Cat (r, proj, row) -> value_pp r ppf v; value_pp row ppf (proj v)
 
   let list_pp ?(header = false) r ppf rs =
     if header
@@ -210,7 +231,10 @@ module Askt = struct
   type ('r, 'a) prod = ('r, 'a) Row.prod =
   | Unit : 'a -> ('r, 'a) prod
   | Prod : ('r, 'a -> 'b) prod * ('r, 'a) Col.t -> ('r, 'b) prod
+  | Cat : ('r, 'a -> 'b) prod * ('r -> 'a) * ('a, 'a) prod -> ('r, 'b) prod
+
   let prod_to_prod = Fun.id
+  let prod_of_prod = Fun.id
 
   type ('a, 'b) unop = ..
   type ('a, 'b) unop +=
@@ -598,7 +622,7 @@ module Sql = struct
     Stmt.(func sql @@ unit)
 
   let insert_row_into ?schema ?(ignore = []) t =
-    (* TODO automatically ignore auto incremented *)
+    (* TODO automatically ignore auto incremented (? maybe not) *)
     let ignore c = List.exists (fun (Col.V i) -> Col.equal_name i c) ignore in
     let rec loop :
       type r a. (r, a) Row.prod -> r Col.v list * (r -> unit Stmt.t) Stmt.func
@@ -607,6 +631,7 @@ module Sql = struct
       | Row.Prod (r, c) ->
           let ns, f = loop r in
           if ignore c then ns, f else (Col.V c :: ns, Stmt.col c f)
+      | Row.Cat (r, proj', row) -> failwith "TODO"
     in
     let cs, f = loop (Table.row t) in
     let cs = List.rev cs in

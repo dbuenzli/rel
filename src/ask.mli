@@ -197,12 +197,20 @@ module Row : sig
   val prod : ('r, 'a -> 'b) prod -> ('r, 'a) Col.t -> ('r, 'b) prod
   (** [prod r c] is the product of columns [r] with [c]. *)
 
+  val cat : ('r, 'a -> 'b) prod -> proj:('r -> 'a) -> 'a t -> ('r, 'b) prod
+  (** [cat r ~proj row] is the product of columns [r] with the columns
+      of [row], [proj] is used to project [row] values from the result of
+      [r]. *)
+
   val empty : unit t
   (** [empty] is the empty product [unit ()]. A row specification for side
       effecting SQL statements, (e.g. UPDATE). *)
 
   val cols : ('r, 'a) prod -> 'r Col.v list
   (** [cols r] are the columns in row [r], from left-to-right, untyped. *)
+
+  val col_count : ('r, 'a) prod -> int
+  (** [col_count r] is the number of columns in row [r]. *)
 
   (** Row specification syntax.
 
@@ -630,10 +638,15 @@ module Askt : sig
   type ('r, 'a) prod =
   | Unit : 'a -> ('r, 'a) prod
   | Prod : ('r, 'a -> 'b) prod * ('r, 'a) Col.t -> ('r, 'b) prod (** *)
+  | Cat : ('r, 'a -> 'b) prod * ('r -> 'a) * ('a, 'a) prod -> ('r, 'b) prod
+  (** *)
   (** The type for products. See {!type:Row.prod}. *)
 
-  val prod_to_prod : ('r, 'a) Row.prod -> ('r, 'a) prod
-  (** [prod_to_prod p] is the representation  of [p]. *)
+  val prod_of_prod : ('r, 'a) Row.prod -> ('r, 'a) prod
+  (** [prod_of_prod p] is the representation  of [p]. *)
+
+  val prod_to_prod : ('r, 'a) prod -> ('r, 'a) Row.prod
+  (** [prod_to_prod p] is the representee  of [p]. *)
 
   (** {1:ops Operators} *)
 
