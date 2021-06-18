@@ -11,6 +11,7 @@ let log fmt = Printf.kfprintf (fun oc -> flush oc) stdout fmt
 let log_if_error ~use = function
 | Ok v -> v | Error e -> log_err "ask-sqlite3: %s\n" e; use
 
+module Sset = Set.Make (String)
 module Smap = struct
   include Map.Make (String)
   let add_to_list k v m = match find_opt k m with
@@ -103,7 +104,40 @@ type ocaml_table  =
     table_sql_name : string; (* SQL table name. *)
     cols : ocaml_col list; (* columns *) }
 
-let ocaml_id_of_sql = String.uncapitalize_ascii (* TODO There's likely more *)
+let ocaml_reserved = (* From the 4.12 manual *)
+  Sset.(empty
+        |> add "and" |> add "as" |> add "assert" |> add "asr" |> add "begin"
+        |> add "class" |> add "constraint" |> add "do" |> add "done"
+        |> add "downto" |> add "else" |> add "end" |> add "exception"
+        |> add "external" |> add "false" |> add "for" |> add "fun"
+        |> add "function" |> add "functor" |> add "if" |> add "in"
+        |> add "include" |> add "inherit" |> add "initializer" |> add "land"
+        |> add "lazy" |> add "let" |> add "lor" |> add "lsl" |> add "lsr"
+        |> add "lxor" |> add "match" |> add "method" |> add "mod"
+        |> add "module" |> add "mutable" |> add "new" |> add "nonrec"
+        |> add "object" |> add "of" |> add "open" |> add "or"
+        |> add "private" |> add "rec" |> add "sig" |> add "struct"
+        |> add "then" |> add "to" |> add "true" |> add "try" |> add "type"
+        |> add "val" |> add "virtual" |> add "when" |> add "while"
+        |> add "with")
+
+let row_module_ids =
+  Sset.(empty
+        |> add "unit" |> add "prod" |> add "cat" |> add "empty" |> add "fold"
+        |> add "cols" |> add "col_count" |> add "pp_header" |> add "list_pp")
+
+let idify = function ' ' -> '_' | c -> c (* There's likely more to it. *)
+let prime id = id ^ "'"
+
+let ocaml_table_id_of_sql id =
+  let id = String.map idify (String.uncapitalize_ascii id) in
+  if Sset.mem id ocaml_reserved then prime id else id
+
+let ocaml_col_id_of_sql id =
+  let id = String.map idify (String.uncapitalize_ascii id) in
+  if Sset.mem id ocaml_reserved || Sset.mem id row_module_ids
+  then prime id else id
+
 let ocaml_type_of_sql_col c =
   let base = match String.uppercase_ascii c.Sql_meta.type' with
   | "BOOL" ->
@@ -145,12 +179,12 @@ let ocaml_col_of_sql_meta c = match ocaml_type_of_sql_col c with
       c.Sql_meta.table_name c.name c.type';
     None
 | Some (ocaml_type, ask_type_value) ->
-    let col_id = ocaml_id_of_sql c.Sql_meta.name in
+    let col_id = ocaml_col_id_of_sql c.Sql_meta.name in
     let col_sql_name = c.Sql_meta.name in
     Some { col_id; col_sql_name; ask_type_value; ocaml_type }
 
 let ocaml_table_of_sql_meta n cols =
-  let table_id = ocaml_id_of_sql n in
+  let table_id = ocaml_table_id_of_sql n in
   let table_sql_name = n in
   let cols = List.filter_map ocaml_col_of_sql_meta cols in
   { table_id; table_sql_name; cols }
@@ -199,7 +233,7 @@ module Gen = struct
   let pp_table_intf ppf t = pf ppf "@[val table : t Ask.Table.t@]"
   let pp_table_impl ppf t =
     pf ppf "@[<v2>let table =@ @[<2>Table.v %S@ \
-            @[Row.Cols.@[<1>(unit row * %a)@]@]@]@]"
+            @[Row.@[<1>(unit row * %a)@]@]@]@]"
       t.table_sql_name (pp_list ~pp_sep:pp_star pp_col_name) t.cols
 
   let pp_module_name ppf t = pp_str ppf (String.capitalize_ascii t.table_id)

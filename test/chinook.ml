@@ -70,8 +70,8 @@ end = struct
   
   let table =
     Table.v "Track"
-      Row.Cols.(unit row * trackId' * name' * albumId' * mediaTypeId' *
-                genreId' * composer' * milliseconds' * bytes' * unitPrice')
+      Row.(unit row * trackId' * name' * albumId' * mediaTypeId' * genreId' *
+           composer' * milliseconds' * bytes' * unitPrice')
 end
 
 module PlaylistTrack : sig
@@ -104,7 +104,7 @@ end = struct
   let trackId' = Col.v "TrackId" Type.Int trackId
   
   let table =
-    Table.v "PlaylistTrack" Row.Cols.(unit row * playlistId' * trackId')
+    Table.v "PlaylistTrack" Row.(unit row * playlistId' * trackId')
 end
 
 module Playlist : sig
@@ -137,7 +137,7 @@ end = struct
   let name' = Col.v "Name" Type.(Option Text) name
   
   let table =
-    Table.v "Playlist" Row.Cols.(unit row * playlistId' * name')
+    Table.v "Playlist" Row.(unit row * playlistId' * name')
 end
 
 module MediaType : sig
@@ -170,7 +170,7 @@ end = struct
   let name' = Col.v "Name" Type.(Option Text) name
   
   let table =
-    Table.v "MediaType" Row.Cols.(unit row * mediaTypeId' * name')
+    Table.v "MediaType" Row.(unit row * mediaTypeId' * name')
 end
 
 module InvoiceLine : sig
@@ -220,8 +220,8 @@ end = struct
   
   let table =
     Table.v "InvoiceLine"
-      Row.Cols.(unit row * invoiceLineId' * invoiceId' * trackId' *
-                unitPrice' * quantity')
+      Row.(unit row * invoiceLineId' * invoiceId' * trackId' * unitPrice' *
+           quantity')
 end
 
 module Invoice : sig
@@ -294,9 +294,9 @@ end = struct
   
   let table =
     Table.v "Invoice"
-      Row.Cols.(unit row * invoiceId' * customerId' * invoiceDate' *
-                billingAddress' * billingCity' * billingState' *
-                billingCountry' * billingPostalCode' * total')
+      Row.(unit row * invoiceId' * customerId' * invoiceDate' *
+           billingAddress' * billingCity' * billingState' * billingCountry' *
+           billingPostalCode' * total')
 end
 
 module Genre : sig
@@ -329,7 +329,7 @@ end = struct
   let name' = Col.v "Name" Type.(Option Text) name
   
   let table =
-    Table.v "Genre" Row.Cols.(unit row * genreId' * name')
+    Table.v "Genre" Row.(unit row * genreId' * name')
 end
 
 module Employee : sig
@@ -435,9 +435,9 @@ end = struct
   
   let table =
     Table.v "Employee"
-      Row.Cols.(unit row * employeeId' * lastName' * firstName' * title' *
-                reportsTo' * birthDate' * hireDate' * address' * city' *
-                state' * country' * postalCode' * phone' * fax' * email')
+      Row.(unit row * employeeId' * lastName' * firstName' * title' *
+           reportsTo' * birthDate' * hireDate' * address' * city' * state' *
+           country' * postalCode' * phone' * fax' * email')
 end
 
 module Customer : sig
@@ -532,9 +532,9 @@ end = struct
   
   let table =
     Table.v "Customer"
-      Row.Cols.(unit row * customerId' * firstName' * lastName' * company' *
-                address' * city' * state' * country' * postalCode' * phone' *
-                fax' * email' * supportRepId')
+      Row.(unit row * customerId' * firstName' * lastName' * company' *
+           address' * city' * state' * country' * postalCode' * phone' *
+           fax' * email' * supportRepId')
 end
 
 module Artist : sig
@@ -567,7 +567,7 @@ end = struct
   let name' = Col.v "Name" Type.(Option Text) name
   
   let table =
-    Table.v "Artist" Row.Cols.(unit row * artistId' * name')
+    Table.v "Artist" Row.(unit row * artistId' * name')
 end
 
 module Album : sig
@@ -605,5 +605,5 @@ end = struct
   let artistId' = Col.v "ArtistId" Type.Int artistId
   
   let table =
-    Table.v "Album" Row.Cols.(unit row * albumId' * title' * artistId')
+    Table.v "Album" Row.(unit row * albumId' * title' * artistId')
 end

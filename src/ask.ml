@@ -111,6 +111,9 @@ module Col = struct
 end
 
 module Row = struct
+
+  (* Rows *)
+
   type ('r, 'a) prod =
   | Unit : 'a -> ('r, 'a) prod
   | Prod : ('r, 'a -> 'b) prod * ('r, 'a) Col.t -> ('r, 'b) prod
@@ -119,36 +122,10 @@ module Row = struct
   type 'r t = ('r, 'r) prod
   let unit f = Unit f
   let prod r c = Prod (r, c)
+  let ( * ) = prod
   let cat r ~proj row = Cat (r, proj, row)
   let empty = unit ()
-  let cols r =
-    let rec loop : type r a. (r, a) prod -> r Col.v list = function
-    | Unit _ -> []
-    | Prod (r, c) -> Col.V c :: loop r
-    | Cat (r, proj, rows) ->
-        let reproj (Col.V c) =
-          Col.V (Col.with_proj (fun r -> Col.proj c (proj r)) c)
-        in
-        let row_cols = loop rows in
-        let row_cols = List.map reproj row_cols in
-        row_cols @ loop r
-    in
-    List.rev (loop r)
 
-  let col_count row =
-    let rec loop : type r a. int -> (r, a) prod -> int =
-    fun acc prod -> match prod with
-    | Unit _ -> acc
-    | Prod (r, c) -> loop (acc + 1) r
-    | Cat (r, _, row) ->  loop (acc + loop 0 row) r
-    in
-    loop 0 row
-
-  module Cols = struct
-    (* Own module to minimize clashes when using the Row.Cols.() notation *)
-    let unit = unit
-    let ( * ) = prod
-  end
   module Quick = struct
     let unit = unit
     let ( * ) = prod
@@ -188,6 +165,35 @@ module Row = struct
       unit (fun a b c d e -> a, b, c, d, e) * a * b * c * d * e
   end
 
+  (* Traversal *)
+
+  let rec fold f acc r =
+    let rec loop : type a r b. (a -> r Col.v -> a) -> a -> (r, b) prod -> a =
+    fun f acc prod -> match prod with
+    | Unit _ -> acc
+    | Prod (r, c) -> loop f (f acc (Col.V c)) r
+    | Cat (r, proj, row) ->
+        let f' acc (Col.V c) =
+          f acc (Col.V (Col.with_proj (fun r -> Col.proj c (proj r)) c))
+        in
+        loop f (loop f' acc row) r
+    in
+    loop f acc r
+
+  (* Columns *)
+
+  let cols r = List.rev (fold (fun acc c -> c :: acc) [] r)
+  let col_count row =
+    let rec loop : type r a. int -> (r, a) prod -> int =
+    fun acc prod -> match prod with
+    | Unit _ -> acc
+    | Prod (r, c) -> loop (acc + 1) r
+    | Cat (r, _, row) ->  loop (loop acc row) r
+    in
+    loop 0 row
+
+  (* Formatters *)
+
   let rec pp_header : type r a. (r, a) prod Fmt.t = fun ppf r -> match r with
   | Unit _ -> Col.pp_sep ppf ()
   | Prod (r, c) -> pp_header ppf r; Col.pp_name ppf c; Col.pp_sep ppf ()
@@ -225,6 +231,8 @@ module Table = struct
   type param +=
   | Primary_key : 'r Col.v list -> param
   | Foreign_key : 'r Col.v list * ('a t * 'a Col.v list) -> param
+  | Sql of string
+  | Sql_constraint of string
 end
 
 module Askt = struct
@@ -558,15 +566,11 @@ module Sql = struct
 
   let col_defs t = List.map col_def (Table.cols t)
 
-  type Table.param +=
-  | Table of string
-  | Table_constraint of string
-
   let table_params t =
     let rec loop sql cs fks pk = function
     | [] -> sql, List.rev cs, List.rev fks, pk
-    | Table sql :: ps -> loop (Some sql) cs fks pk ps
-    | Table_constraint c :: ps -> loop sql (c :: cs) fks pk ps
+    | Table.Sql sql :: ps -> loop (Some sql) cs fks pk ps
+    | Table.Sql_constraint c :: ps -> loop sql (c :: cs) fks pk ps
     | Table.Foreign_key _ as fk :: ps -> loop sql cs (fk :: fks) pk ps
     | Table.Primary_key _ as pk :: ps -> loop sql cs fks (Some pk) ps
     | _ :: ps -> loop sql cs fks pk ps

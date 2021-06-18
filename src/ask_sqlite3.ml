@@ -514,7 +514,7 @@ module Stmt = struct
 end
 
 (* System tables *)
-
+(*
 module Table = struct
   module Schema = struct
     type t =
@@ -543,9 +543,10 @@ module Table = struct
 
     let table =
       Table.v "sqlite_schema"
-        Row.Cols.(unit v * C.type' * C.name * C.tbl_name * C.rootpage * C.sql)
+        Row.(unit v * C.type' * C.name * C.tbl_name * C.rootpage * C.sql)
   end
 end
+*)
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The ask programmers

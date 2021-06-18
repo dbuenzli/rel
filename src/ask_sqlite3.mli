@@ -479,6 +479,8 @@ module Stmt : sig
   (** [inalize s] finalizes statement [st]. *)
 end
 
+(*
+
 (** {1:system_tables System tables} *)
 
 (** SQLite system tables. *)
@@ -523,6 +525,7 @@ module Table : sig
         schema table}. *)
   end
 end
+*)
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The ask programmers

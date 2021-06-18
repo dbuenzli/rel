@@ -83,12 +83,12 @@ module Products_flat_with_objects = struct
     end
 
     let product =
-      Table.v "product" Row.Cols.(unit product' * C.pid * C.name * C.price)
+      Table.v "product" Row.(unit product' * C.pid * C.name * C.price)
 
     let order =
-      Table.v "order" Row.Cols.(unit order' * C.oid * C.pid * C.qty)
+      Table.v "order" Row.(unit order' * C.oid * C.pid * C.qty)
 
-    let sales = Row.Cols.(unit sales' * C.pid * C.name * C.sale)
+    let sales = Row.(unit sales' * C.pid * C.name * C.sale)
 
     let name r = Bag.proj r C.name
     let price r = Bag.proj r C.price
@@ -167,7 +167,7 @@ module Products_with_adts = struct
       let name = Col.v "name" Type.Text name ~params:[Col.Unique]
       let price = Col.v "price" Type.Int price
     end
-    let table = Table.v "product" Row.Cols.(unit v * C.pid * C.name * C.price)
+    let table = Table.v "product" Row.(unit v * C.pid * C.name * C.price)
   end
 
   module Order : sig
@@ -197,7 +197,7 @@ module Products_with_adts = struct
 
       let qty = Col.v "qty" Type.Int qty
     end
-    let table = Table.v "order" Row.Cols.(unit v * C.oid * C.pid * C.qty)
+    let table = Table.v "order" Row.(unit v * C.oid * C.pid * C.qty)
   end
 
   type sales = <pid:int; name:string; sale:int>
@@ -262,7 +262,7 @@ module Duos = struct
       let name = Col.v "name" Type.Text name ~params:[Col.Primary_key]
       let age = Col.v "age" Type.Int age
     end
-    let table = Table.v "person" Row.Cols.(unit v * C.name * C.age)
+    let table = Table.v "person" Row.(unit v * C.name * C.age)
   end
 
   module Duo : sig
@@ -284,7 +284,7 @@ module Duos = struct
       let fst = Col.v "fst" Type.Text fst
       let snd = Col.v "snd" Type.Text snd
     end
-    let table = Table.v "duo" Row.Cols.(unit v * C.fst * C.snd)
+    let table = Table.v "duo" Row.(unit v * C.fst * C.snd)
   end
 
   module Q = struct
@@ -365,7 +365,7 @@ module Org = struct
     module C = struct
       let name = Col.v "name" Type.Text name ~params:[Col.Primary_key]
     end
-    let table = Table.v "department" Row.Cols.(unit v * C.name)
+    let table = Table.v "department" Row.(unit v * C.name)
   end
 
   module Person : sig
@@ -387,7 +387,7 @@ module Org = struct
       let name = Col.v "name" Type.Text name ~params:[Col.Primary_key]
       let department = Col.v "department" Type.Text department
     end
-    let table = Table.v "person" Row.Cols.(unit v * C.name * C.department)
+    let table = Table.v "person" Row.(unit v * C.name * C.department)
   end
 
   module Task : sig
@@ -409,7 +409,7 @@ module Org = struct
       let person = Col.v "person" Type.Text person
       let task = Col.v "task" Type.Text task
     end
-    let table = Table.v "task" Row.Cols.(unit v * C.person * C.task)
+    let table = Table.v "task" Row.(unit v * C.person * C.task)
   end
 
   module Q = struct
@@ -534,7 +534,7 @@ module Xpath = struct
     end
     let table =
       Table.v "node"
-        Row.Cols.(unit v * C.id * C.parent * C.name * C.pre * C.post)
+        Row.(unit v * C.id * C.parent * C.name * C.pre * C.post)
   end
 
   type axis =

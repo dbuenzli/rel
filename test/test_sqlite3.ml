@@ -16,12 +16,10 @@ module Playlist = struct
   let id p = p.id
   let name p = p.name
 
-  module C = struct
-    let playlistId = Col.v "PlaylistId" Type.Int id
-    let name = Col.v "Name" Type.Text name
-  end
+  let id' = Col.v "PlaylistId" Type.Int id
+  let name' = Col.v "Name" Type.Text name
 
-  let table = Table.v "playlists" Row.Cols.(unit v * C.playlistId * C.name)
+  let table = Table.v "playlists" Row.(unit v * id' * name')
   let pp = Row.value_pp (Table.row table)
 end
 

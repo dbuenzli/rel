@@ -108,7 +108,7 @@ module Col : sig
   (** {1:cols Columns} *)
 
   type param = ..
-  (** The type for extensible column parameters. See {!params}. *)
+  (** The type for extensible column parameters. See {!section-params}. *)
 
   type ('r, 'a) t =
     { name : string; params : param list; type' : 'a Type.t; proj : ('r -> 'a) }
@@ -152,7 +152,7 @@ module Col : sig
 
   type param +=
   | Primary_key
-  | Unique
+  | Unique (** *)
   (** Common column parameters.
       {ul
       {- [Primary_key] is a primary key constraint (PRIMARY KEY NOT NULL).}
@@ -183,19 +183,24 @@ end
     rows into OCaml values. *)
 module Row : sig
 
+  (** {1:rows Rows} *)
+
   type ('r, 'a) prod
   (** The type for constructing a cartesian product whose final result
-      will be represented by OCaml values of type ['r]. *)
+      is represented by OCaml values of type ['r]. *)
 
   type 'r t = ('r, 'r) prod
   (** The type for a row represented by OCaml values of type ['r]. *)
 
   val unit : 'a -> ('r, 'a) prod
-  (** [unit f] is a (virtual) unit column with constructor [f]
-      to be saturated by {!val-prod}. *)
+  (** [unit f] is a (virtual) unit column with constructor [f] to be
+      saturated by {!val-prod}. *)
 
   val prod : ('r, 'a -> 'b) prod -> ('r, 'a) Col.t -> ('r, 'b) prod
   (** [prod r c] is the product of columns [r] with [c]. *)
+
+  val ( * ) : ('r, 'a -> 'b) prod -> ('r, 'a) Col.t -> ('r, 'b) prod
+  (** [*] is {!val:Row.prod}. *)
 
   val cat : ('r, 'a -> 'b) prod -> proj:('r -> 'a) -> 'a t -> ('r, 'b) prod
   (** [cat r ~proj row] is the product of columns [r] with the columns
@@ -206,30 +211,11 @@ module Row : sig
   (** [empty] is the empty product [unit ()]. A row specification for side
       effecting SQL statements, (e.g. UPDATE). *)
 
-  val cols : ('r, 'a) prod -> 'r Col.v list
-  (** [cols r] are the columns in row [r], from left-to-right, untyped. *)
-
-  val col_count : ('r, 'a) prod -> int
-  (** [col_count r] is the number of columns in row [r]. *)
-
-  (** Row specification syntax.
-
-      This is in its own module so that only [unit] may ever clash
-      if the [Row.Cols.()] notation is used. *)
-  module Cols : sig
-
-    val unit : 'a -> ('r, 'a) prod
-    (** [unit] is {!val:Row.unit}. *)
-
-    val ( * ) : ('r, 'a -> 'b) prod -> ('r, 'a) Col.t -> ('r, 'b) prod
-    (** ( * ) is {!val:Row.prod}. *)
-  end
-
   (** Quick row specification syntax for query results.
 
       These functions contructs rows with columns that have no
-      parameters and a default projection {!Col.no_proj}.
-      They can be used to quickly type SQL statement results.
+      parameters and a default projection {!Col.no_proj}. They can be
+      used to quickly type SQL statement results.
 
       {b WARNING.} Since by default these column constructors lack
       projection {!Row.pp} cannot be used on them. Those created with
@@ -292,6 +278,19 @@ module Row : sig
         types. This redefine the projections of the columns. *)
   end
 
+  (** {1:traversal Traversal} *)
+
+  val fold : ('a -> 'r Col.v -> 'a) -> 'a -> ('r, 'b) prod -> 'a
+  (** [fold f acc r] folds over the columns of [f] from left-to-right. *)
+
+  (** {1:cols Columns} *)
+
+  val cols : ('r, 'a) prod -> 'r Col.v list
+  (** [cols r] are the columns in row [r], from left-to-right, untyped. *)
+
+  val col_count : ('r, 'a) prod -> int
+  (** [col_count r] is the number of columns in row [r]. *)
+
   (** {1:fmt Formatters} *)
 
   val pp_header : Format.formatter -> 'r t -> unit
@@ -313,7 +312,7 @@ module Table : sig
   (** {1:tables Tables} *)
 
   type param = ..
-  (** The type for exensible table parameters. See {!params}. *)
+  (** The type for exensible table parameters. See {!section-params}. *)
 
   type 'r t = { name : string; params : param list; row : 'r Row.t Lazy.t}
   (** The type for a table represented by an OCaml of type ['a]. Unless you
@@ -335,21 +334,26 @@ module Table : sig
   (** [row t] is the description of [t]'s rows. *)
 
   val cols : ?ignore:'r Col.v list -> 'r t -> 'r Col.v list
-  (** [cols t] is {!Row.cols}[ (row t)] with columns in [ignore] ommited
+  (** [cols t] is {!Row.val-cols}[ (row t)] with columns in [ignore] ommited
       from the result. *)
 
-  (** {1:params Parameters}
-
-      See {!Ask.Sql} for more parameters. *)
+  (** {1:params Parameters} *)
 
   type param +=
   | Primary_key : 'r Col.v list -> param
-  | Foreign_key : 'r Col.v list * ('s t * 's Col.v list) -> param (** *)
+  | Foreign_key : 'r Col.v list * ('s t * 's Col.v list) -> param
+  | Sql of string
+  | Sql_constraint of string (** *)
   (** Common table parameters.
       {ul
       {- [Primary_key cols], declares a table primary key on columns [cols]}
       {- [Foreign_key (cols, (t, cols'))] declares a foreign key
-         between [cols] and the columns cols' of [t]. Can be repeated.}} *)
+         between [cols] and the columns cols' of [t]. Can be repeated.}
+      {- [Sql sql] is the complete {{:https://sqlite.org/lang_createtable.html}
+         CREATE TABLE} statement. All other
+         parameters are ignored, you are in control.}
+      {- [Sql_constraint sql] is an {{:https://sqlite.org/syntax/table-constraint.html}SQL table constraint} added at the end of the table definition.
+         Can be repeated.}} *)
 end
 
 (** {1:query_lang Query language}
@@ -714,7 +718,6 @@ module Askt : sig
 
   val pp_bag : Format.formatter -> ('a, 'e) bag -> unit
   (** [pp_bag] formats bags. *)
-
 end
 
 (** {1:sql SQL} *)
@@ -832,16 +835,6 @@ module Sql : sig
       {- [Col_references (t, c)] declares that the column references
          column [c] in [t].}} *)
 
-  type Table.param +=
-  | Table of string
-  | Table_constraint of string
-  (** The type for table parameters.
-      {ul
-      {- [Table sql] is the full SQL table definition between the ().
-         All other parameters are ignored, you are in control.}
-      {- [Table_constraint sql] is an SQL table contraint added at the end
-         of the table definition. Can be repeated.}} *)
-
   val drop_table :
     ?schema:string -> ?if_exists:bool -> 'a Table.t -> unit Stmt.t
   (** [drop_table ~if_exist ~schema t] is an SQL DROP TABLE statement to
@@ -911,12 +904,7 @@ module Sql : sig
   val normalize : ('a, 'e) Bag.t -> ('a, 'e) Askt.bag
   val of_bag : ('a, 'e) Bag.t -> string
 
-
   module Bag : sig
-
-
-    (** {b FIXME.} Return type is unsafe. Add the parameter and match
-        it on func. *)
 
     type ('a, 'f, 'r) func
     val func : (('r, 'e) Bag.t, 'f, 'r) func -> 'f
@@ -925,6 +913,7 @@ module Sql : sig
 
     val ( @-> ) :
       'a Type.t -> ('a value -> 'c, 'b, 'r) func -> ('c, 'a -> 'b, 'r) func
+
     val ret : 'r Row.t -> 'a -> ('a, 'r Stmt.t, 'r) func
 
     val bool : bool Type.t
