@@ -533,17 +533,14 @@ module Table = struct
     let rootpage s = s.rootpage
     let sql s = s.sql
 
-    module C = struct
-      let type' = Col.v "type" Type.Text type'
-      let name = Col.v "name" Type.Text name
-      let tbl_name = Col.v "name" Type.Text tbl_name
-      let rootpage = Col.v "rootpage" Type.Int rootpage
-      let sql = Col.v "sql" Type.Text sql
-    end
-
+    let type' = Col.v "type" Type.Text type'
+    let name' = Col.v "name" Type.Text name
+    let tbl_name' = Col.v "name" Type.Text tbl_name
+    let rootpage' = Col.v "rootpage" Type.Int rootpage
+    let sql' = Col.v "sql" Type.Text sql
     let table =
       Table.v "sqlite_schema"
-        Row.(unit v * C.type' * C.name * C.tbl_name * C.rootpage * C.sql)
+        Row.(unit v * type'' * name' * tbl_name' * rootpage' * sql')
   end
 end
 *)

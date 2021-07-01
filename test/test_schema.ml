@@ -23,25 +23,24 @@ module Products_flat_with_objects = struct
     val order' : int -> int -> int -> order
     val sales' : int -> string -> int -> sales
 
-    module C : sig
-      val name : (<name:string; ..>, string) Ask.Col.t
-      val price : (<price:int; ..>, int) Ask.Col.t
-      val pid : (<pid:int; ..>, int) Ask.Col.t
-      val oid : (<oid:int; ..>, int) Ask.Col.t
-      val qty : (<qty:int; ..>, int) Ask.Col.t
-      val sale : (<sale:int; ..>, int) Ask.Col.t
-    end
-
-    val product : product Ask.Table.t
-    val order : order Ask.Table.t
-    val sales : sales Ask.Row.t
-
     val name : <name:string; ..> value -> string value
     val price : <price:int; ..> value -> int value
     val pid : <pid:int; ..> value -> int value
     val oid : <oid:int; ..> value -> int value
     val qty : <qty:int; ..> value -> int value
     val sale : <sale:int; ..> value -> int value
+
+    val name' : (<name:string; ..>, string) Ask.Col.t
+    val price' : (<price:int; ..>, int) Ask.Col.t
+    val pid' : (<pid:int; ..>, int) Ask.Col.t
+    val oid' : (<oid:int; ..>, int) Ask.Col.t
+    val qty' : (<qty:int; ..>, int) Ask.Col.t
+    val sale' : (<sale:int; ..>, int) Ask.Col.t
+
+    val product_table : product Ask.Table.t
+    val order_table : order Ask.Table.t
+    val sales_row : sales Ask.Row.t
+
   end = struct
     type product = <pid:int; name:string; price:int>
     type order = <oid:int; pid:int; qty:int>
@@ -56,46 +55,46 @@ module Products_flat_with_objects = struct
     let sales' pid name sale =
       object method pid = pid method name = name; method sale = sale end
 
-    module C = struct
-      let name =
-        { Col.name = "name"; params = []; type' = Type.Text;
-          proj = fun o -> o # name }
 
-      let price =
-        { Col.name = "price"; params = []; type' = Type.Int;
-          proj = fun o -> o # price }
+    let name' =
+      { Col.name = "name"; params = []; type' = Type.Text;
+        proj = fun o -> o # name }
 
-      let pid =
-        { Col.name = "pid"; params =  []; type' = Type.Int;
-          proj = fun o -> o # pid }
+    let price' =
+      { Col.name = "price"; params = []; type' = Type.Int;
+        proj = fun o -> o # price }
 
-      let oid =
-        { Col.name = "oid"; params = []; type' = Type.Int;
-          proj = fun o -> o # oid }
+    let pid' =
+      { Col.name = "pid"; params =  []; type' = Type.Int;
+        proj = fun o -> o # pid }
 
-      let qty =
-        { Col.name = "qty"; params =  []; type' =  Type.Int;
-          proj = fun o -> o # qty }
+    let oid' =
+      { Col.name = "oid"; params = []; type' = Type.Int;
+        proj = fun o -> o # oid }
 
-      let sale =
-        { Col.name = "sale"; params = []; type' = Type.Int;
-          proj = fun o -> o # sale }
-    end
+    let qty' =
+      { Col.name = "qty"; params =  []; type' =  Type.Int;
+        proj = fun o -> o # qty }
 
-    let product =
-      Table.v "product" Row.(unit product' * C.pid * C.name * C.price)
+    let sale' =
+      { Col.name = "sale"; params = []; type' = Type.Int;
+        proj = fun o -> o # sale }
 
-    let order =
-      Table.v "order" Row.(unit order' * C.oid * C.pid * C.qty)
+    let name r = Bag.proj r name'
+    let price r = Bag.proj r price'
+    let pid r = Bag.proj r pid'
+    let oid r = Bag.proj r oid'
+    let qty r = Bag.proj r qty'
+    let sale r = Bag.proj r sale'
 
-    let sales = Row.(unit sales' * C.pid * C.name * C.sale)
 
-    let name r = Bag.proj r C.name
-    let price r = Bag.proj r C.price
-    let pid r = Bag.proj r C.pid
-    let oid r = Bag.proj r C.oid
-    let qty r = Bag.proj r C.qty
-    let sale r = Bag.proj r C.sale
+    let product_table =
+      Table.v "product" Row.(unit product' * pid' * name' * price')
+
+    let order_table =
+      Table.v "order" Row.(unit order' * oid' * pid' * qty')
+
+    let sales_row = Row.(unit sales' * pid' * name' * sale')
   end
   module Q : sig
     val get_order : int value -> (S.order, Ask.Bag.unordered) Ask.Bag.t
@@ -106,20 +105,20 @@ module Products_flat_with_objects = struct
   end = struct
 
     let get_order oid =
-      let* o = Bag.table S.order in
+      let* o = Bag.table S.order_table in
       Bag.where Int.(S.oid o = oid) @@
       Bag.yield o
 
     let get_order_sales o =
-      let* p = Bag.table S.product in
+      let* p = Bag.table S.product_table in
       Bag.where Int.(S.pid p = S.pid o) @@
       Bag.yield @@ S.(Bag.row sales' $ pid p $ name p $ price p * qty o)
 
     let get_order_sales o =
-      let* p = Bag.table S.product in
+      let* p = Bag.table S.product_table in
       Bag.where Int.(S.pid p = S.pid o) @@
-      let s = S.C.(p #. price * o #. qty) in
-      Bag.yield @@ S.(Bag.row sales' $ p #. C.pid $ p #. C.name $ s)
+      let s = S.(p #. price' * o #. qty') in
+      Bag.yield @@ S.(Bag.row sales' $ p #. pid' $ p #. name' $ s)
   end
 
   module Data = struct
@@ -149,11 +148,9 @@ module Products_with_adts = struct
     val name : t -> string
     val price : t -> int
 
-    module C : sig
-      val pid : (t, int) Ask.Col.t
-      val name : (t, string) Ask.Col.t
-      val price : (t, int) Ask.Col.t
-    end
+    val pid' : (t, int) Ask.Col.t
+    val name' : (t, string) Ask.Col.t
+    val price' : (t, int) Ask.Col.t
     val table : t Ask.Table.t
   end = struct
     type t = { pid : int; name : string; price : int }
@@ -162,12 +159,10 @@ module Products_with_adts = struct
     let name p = p.name
     let price p = p.price
 
-    module C = struct
-      let pid = Col.v "pid" Type.Int pid ~params:[Col.Primary_key]
-      let name = Col.v "name" Type.Text name ~params:[Col.Unique]
-      let price = Col.v "price" Type.Int price
-    end
-    let table = Table.v "product" Row.(unit v * C.pid * C.name * C.price)
+    let pid' = Col.v "pid" Type.Int pid ~params:[Col.Primary_key]
+    let name' = Col.v "name" Type.Text name ~params:[Col.Unique]
+    let price' = Col.v "price" Type.Int price
+    let table = Table.v "product" Row.(unit v * pid' * name' * price')
   end
 
   module Order : sig
@@ -177,11 +172,10 @@ module Products_with_adts = struct
     val pid : t -> int
     val qty : t -> int
 
-    module C : sig
-      val oid : (t, int) Ask.Col.t
-      val pid : (t, int) Ask.Col.t
-      val qty : (t, int) Ask.Col.t
-    end
+
+    val oid' : (t, int) Ask.Col.t
+    val pid' : (t, int) Ask.Col.t
+    val qty' : (t, int) Ask.Col.t
     val table : t Ask.Table.t
   end = struct
     type t = { oid : int; pid : int; qty : int }
@@ -189,15 +183,15 @@ module Products_with_adts = struct
     let oid o = o.oid
     let pid o = o.pid
     let qty o = o.qty
-    module C = struct
-      let oid = Col.v "oid" Type.Int oid
-      let pid =
-        let params = [Sql.Col_references (Product.table, Product.C.pid)] in
-        Col.v "pid" Type.Int pid ~params
 
-      let qty = Col.v "qty" Type.Int qty
-    end
-    let table = Table.v "order" Row.(unit v * C.oid * C.pid * C.qty)
+
+    let oid' = Col.v "oid" Type.Int oid
+    let pid' =
+      let params = [Sql.Col_references (Product.table, Product.pid')] in
+      Col.v "pid" Type.Int pid ~params
+
+    let qty' = Col.v "qty" Type.Int qty
+    let table = Table.v "order" Row.(unit v * oid' * pid' * qty')
   end
 
   type sales = <pid:int; name:string; sale:int>
@@ -210,15 +204,15 @@ module Products_with_adts = struct
   end = struct
     let get_order oid =
       let* o = Bag.table Order.table in
-      Bag.where Int.(o #. Order.C.oid = oid) @@
+      Bag.where Int.(o #. Order.oid' = oid) @@
       Bag.yield o
 
     let get_order_sales o =
       let* p = Bag.table Product.table in
-      Bag.where Int.(p #. Product.C.pid = o #. Order.C.pid) @@
-      let amount = p #. Product.C.price * o #. Order.C.qty in
+      Bag.where Int.(p #. Product.pid' = o #. Order.pid') @@
+      let amount = p #. Product.price' * o #. Order.qty' in
       Bag.yield @@ Bag.(row sales $
-                        p #. Product.C.pid $ p #. Product.C.name $ amount)
+                        p #. Product.pid' $ p #. Product.name' $ amount)
   end
 
   module Data = struct
@@ -248,21 +242,19 @@ module Duos = struct
     val v : string -> int -> t
     val name : t -> string
     val age : t -> int
-    module C : sig
-      val name : (t, string) Col.t
-      val age : (t, int) Col.t
-    end
+
+    val name' : (t, string) Col.t
+    val age' : (t, int) Col.t
     val table : t Table.t
   end = struct
     type t = { name : string; age : int }
     let v name age = { name; age }
     let name p = p.name
     let age p = p.age
-    module C = struct
-      let name = Col.v "name" Type.Text name ~params:[Col.Primary_key]
-      let age = Col.v "age" Type.Int age
-    end
-    let table = Table.v "person" Row.(unit v * C.name * C.age)
+
+    let name' = Col.v "name" Type.Text name ~params:[Col.Primary_key]
+    let age' = Col.v "age" Type.Int age
+    let table = Table.v "person" Row.(unit v * name' * age')
   end
 
   module Duo : sig
@@ -270,21 +262,20 @@ module Duos = struct
     val v : string -> string -> t
     val fst : t -> string
     val snd : t -> string
-    module C : sig
-      val fst : (t, string) Col.t
-      val snd : (t, string) Col.t
-    end
+
+    val fst' : (t, string) Col.t
+    val snd' : (t, string) Col.t
     val table : t Table.t
   end = struct
     type t = string * string
     let v fst snd = (fst, snd)
     let fst = fst
     let snd = snd
-    module C = struct
-      let fst = Col.v "fst" Type.Text fst
-      let snd = Col.v "snd" Type.Text snd
-    end
-    let table = Table.v "duo" Row.(unit v * C.fst * C.snd)
+
+
+    let fst' = Col.v "fst" Type.Text fst
+    let snd' = Col.v "snd" Type.Text snd
+    let table = Table.v "duo" Row.(unit v * fst' * snd')
   end
 
   module Q = struct
@@ -292,28 +283,28 @@ module Duos = struct
       let* d = Bag.table Duo.table in
       let* fst = Bag.table Person.table in
       let* snd = Bag.table Person.table in
-      let fst_name = fst #. Person.C.name and fst_age = fst #. Person.C.age in
-      let snd_name = snd #. Person.C.name and snd_age = snd #. Person.C.age in
-      Bag.where (String.(d #. Duo.C.fst = fst_name) &&
-                 String.(d #. Duo.C.snd = snd_name) &&
+      let fst_name = fst #. Person.name' and fst_age = fst #. Person.age' in
+      let snd_name = snd #. Person.name' and snd_age = snd #. Person.age' in
+      Bag.where (String.(d #. Duo.fst' = fst_name) &&
+                 String.(d #. Duo.snd' = snd_name) &&
                  Int.(fst_age > snd_age)) @@
       Bag.yield (Bag.row (fun n d -> n, d) $ fst_name $ fst_age - snd_age)
 
     let persons_in_age_range ~first ~last =
       let* p = Bag.table Person.table in
-      let age = p #. Person.C.age in
+      let age = p #. Person.age' in
       Bag.where Int.(first <= age && age <= last) @@
-      Bag.yield (p #. Person.C.name)
+      Bag.yield (p #. Person.name')
 
     let persons_sat ~sat =
       let* p = Bag.table Person.table in
       Bag.where (sat p) @@
-      Bag.yield (p #. Person.C.name)
+      Bag.yield (p #. Person.name')
 
     let person_age ~name =
       let* p = Bag.table Person.table in
-      Bag.where String.(p #. Person.C.name = name) @@
-      Bag.yield (p #. Person.C.age)
+      Bag.where String.(p #. Person.name' = name) @@
+      Bag.yield (p #. Person.age')
 
     type int_predicate =
     | Above of int
@@ -354,18 +345,14 @@ module Org = struct
     type t
     val v : string -> t
     val name : t -> string
-    module C :sig
-      val name : (t, string) Col.t
-    end
+    val name' : (t, string) Col.t
     val table : t Table.t
   end = struct
     type t = { name : string }
     let v name = { name }
     let name p = p.name
-    module C = struct
-      let name = Col.v "name" Type.Text name ~params:[Col.Primary_key]
-    end
-    let table = Table.v "department" Row.(unit v * C.name)
+    let name' = Col.v "name" Type.Text name ~params:[Col.Primary_key]
+    let table = Table.v "department" Row.(unit v * name')
   end
 
   module Person : sig
@@ -373,21 +360,17 @@ module Org = struct
     val v : string -> string -> t
     val name : t -> string
     val department : t -> string
-    module C : sig
-      val name : (t, string) Col.t
-      val department : (t, string) Col.t
-    end
+    val name' : (t, string) Col.t
+    val department' : (t, string) Col.t
     val table : t Table.t
   end = struct
     type t = { name : string; department : string }
     let v name department = { name; department }
     let name p = p.name
     let department p = p.department
-    module C = struct
-      let name = Col.v "name" Type.Text name ~params:[Col.Primary_key]
-      let department = Col.v "department" Type.Text department
-    end
-    let table = Table.v "person" Row.(unit v * C.name * C.department)
+    let name' = Col.v "name" Type.Text name ~params:[Col.Primary_key]
+    let department' = Col.v "department" Type.Text department
+    let table = Table.v "person" Row.(unit v * name' * department')
   end
 
   module Task : sig
@@ -395,21 +378,19 @@ module Org = struct
     val v : string -> string -> t
     val person : t -> string
     val task : t -> string
-    module C : sig
-      val person : (t, string) Col.t
-      val task : (t, string) Col.t
-    end
+
+    val person' : (t, string) Col.t
+    val task' : (t, string) Col.t
     val table : t Table.t
   end = struct
     type t = { person : string; task : string }
     let v person task = { person; task }
     let person p = p.person
     let task p = p.task
-    module C = struct
-      let person = Col.v "person" Type.Text person
-      let task = Col.v "task" Type.Text task
-    end
-    let table = Table.v "task" Row.(unit v * C.person * C.task)
+
+    let person' = Col.v "person" Type.Text person
+    let task' = Col.v "task" Type.Text task
+    let table = Table.v "task" Row.(unit v * person' * task')
   end
 
   module Q = struct
@@ -419,20 +400,20 @@ module Org = struct
       let person_can't ~task p =
         not @@ Bag.exists @@
         let* t = Bag.table Task.table in
-        let is_p = String.(t #. Task.C.person = p #. Person.C.name) in
-        let is_task = String.(t #. Task.C.task = task) in
+        let is_p = String.(t #. Task.person' = p #. Person.name') in
+        let is_task = String.(t #. Task.task' = task) in
         Bag.where (is_p && is_task) @@
         Bag.yield (Bool.v true)
       in
       let some_can't ~task =
         let* p = Bag.table Person.table in
-        let is_dep = String.(p #. Person.C.department = d #. Department.C.name)
+        let is_dep = String.(p #. Person.department' = d #. Department.name')
         in
         Bag.where (is_dep && person_can't ~task p) @@
         Bag.yield (Bool.v true)
       in
       Bag.where (not (Bag.exists (some_can't ~task))) @@
-      Bag.yield (d #. Department.C.name)
+      Bag.yield (d #. Department.name')
 
     module N = struct
       type member = { name : string; tasks : (string, Bag.unordered) Bag.t }
@@ -451,19 +432,19 @@ module Org = struct
     let nested_org =
       let person_tasks p =
         let* task = Bag.table Task.table in
-        Bag.where String.(task #. Task.C.person = p #. Person.C.name) @@
-        Bag.yield (task #. Task.C.task)
+        Bag.where String.(task #. Task.person' = p #. Person.name') @@
+        Bag.yield (task #. Task.task')
       in
       let member p =
-        let name = p #. Person.C.name in
+        let name = p #. Person.name' in
         let tasks = person_tasks p in
         Bag.row N.member $ name $ Bag.inj tasks
       in
       let* d = Bag.table Department.table in
-      let dept = d #. Department.C.name in
+      let dept = d #. Department.name' in
       let members =
         let* p = Bag.table Person.table in
-        Bag.where String.(p #. Person.C.department = dept) @@
+        Bag.where String.(p #. Person.department' = dept) @@
         Bag.yield (member p)
       in
       Bag.yield (Bag.row N.dept $ dept $ Bag.inj members)

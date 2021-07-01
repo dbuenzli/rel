@@ -42,7 +42,8 @@ module Test_sql_src = struct
   open Ask.Syntax
 
   let sql = "SELECT * FROM product WHERE name = $1 and price = $2"
-  let req = Sql.Stmt.(func sql @@ text @-> int @-> ret (Table.row S.product))
+  let req =
+    Sql.Stmt.(func sql @@ text @-> int @-> ret (Table.row S.product_table))
 
   let order2 = Q.get_order (Int.v 2)
   let order2_sales =
@@ -65,7 +66,7 @@ module Test_products = struct
   let schema = Sql.create_schema [Table.V Product.table; Table.V Order.table ]
   let insert_orders = Sql.insert_row_into Order.table
   let insert_product =
-    let ignore = [(* Col.V Product.C.pid *)] in
+    let ignore = [(* Col.V Product.pid' *)] in
     Sql.insert_row_into ~ignore Product.table
 
   (* TODO streamline *)
@@ -135,7 +136,7 @@ module Test_duos = struct
   let thirties' =
     let open Ask.Syntax in
     let in_thirties p =
-      let age = p #. Person.C.age in
+      let age = p #. Person.age' in
       Int.(v 30 <= age && age <= v 39)
     in
     Q.persons_sat ~sat:in_thirties
@@ -159,7 +160,7 @@ module Test_duos = struct
   let thirties_by_pred pred =
     let open Ask.Syntax in
     let in_thirties p =
-      let age = p #. Person.C.age in
+      let age = p #. Person.age' in
       Q.pred pred age
     in
     Q.persons_sat in_thirties

@@ -9,26 +9,25 @@ open Test_schema.Products_flat_with_objects
 
 let env =
   Ask_list.Table_env.empty
-  |> Ask_list.Table_env.add S.product Data.products
-  |> Ask_list.Table_env.add S.order Data.orders
+  |> Ask_list.Table_env.add S.product_table Data.products
+  |> Ask_list.Table_env.add S.order_table Data.orders
 
-
-let pp_orders = Row.list_pp ~header:true (Table.row S.order)
-let pp_sales = Row.list_pp ~header:true S.sales
+let pp_orders = Row.list_pp ~header:true (Table.row S.order_table)
+let pp_sales = Row.list_pp ~header:true S.sales_row
 
 let get_order oid =
-  let* o = Bag.table S.order in
+  let* o = Bag.table S.order_table in
   Bag.where Int.(S.oid o = oid) @@
   Bag.yield o
 
 let get_order_sales o =
-  let* p = Bag.table S.product in
+  let* p = Bag.table S.product_table in
   Bag.where Int.(S.(pid p = pid o)) @@
   Bag.yield @@ S.(Bag.row sales' $ pid p $ name p $ price p * qty o)
 
 let get_order_2 = get_order (Int.v 2)
 let get_order_2' =
-  let* o = Bag.table S.order in
+  let* o = Bag.table S.order_table in
   Bag.where Int.(S.oid o = v 2) @@
   Bag.yield o
 
@@ -37,13 +36,12 @@ let eq_order_2 o =
   Bag.yield o
 
 let get_order_2'' =
-  let* o = Bag.table S.order in
+  let* o = Bag.table S.order_table in
   eq_order_2 o
 
 let order_2_sales =
   let* o2 = get_order_2 in
   get_order_sales o2
-
 
 let tests () =
   let log fmt = Format.printf (fmt ^^ "@.") in
