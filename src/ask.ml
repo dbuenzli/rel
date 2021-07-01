@@ -182,7 +182,7 @@ module Row = struct
 
   (* Columns *)
 
-  let cols r = List.rev (fold (fun acc c -> c :: acc) [] r)
+  let cols r = fold (fun acc c -> c :: acc) [] r
   let col_count row =
     let rec loop : type r a. int -> (r, a) prod -> int =
     fun acc prod -> match prod with

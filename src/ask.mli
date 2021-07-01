@@ -281,7 +281,7 @@ module Row : sig
   (** {1:traversal Traversal} *)
 
   val fold : ('a -> 'r Col.v -> 'a) -> 'a -> ('r, 'b) prod -> 'a
-  (** [fold f acc r] folds over the columns of [f] from left-to-right. *)
+  (** [fold f acc r] folds over the columns of [f] from right-to-left. *)
 
   (** {1:cols Columns} *)
 
