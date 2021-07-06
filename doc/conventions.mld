@@ -97,11 +97,11 @@ module Person = struct
 
   open Ask
 
-  let id' = Col.v "id" ~params:[Sql.Col_primary_key] Type.Int id
+  let id' = Col.v "id" ~params:[Col.Primary_key] Type.Int id
   let first_name' = Col.v "first_name" Type.Text first_name
   let last_name' = Col.v "last_name" Type.Text last_name
 
  let table =
-   Table.v "person" Row.Cols.(unit row * id' * first_name' * last_name')
+   Table.v "person" Row.(unit row * id' * first_name' * last_name')
 end
 ]}
