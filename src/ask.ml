@@ -514,13 +514,14 @@ module Sql = struct
   let pp_col_ids ppf cs = Fmt.hbox Fmt.(list ~sep:comma pp_col_id) ppf cs
 
   let rec type_of_type : type a. a Type.t -> string * bool = function
-  | Type.Bool -> "BOOL", true
+  | Type.Bool -> "BOOL", true (* not null *)
   | Type.Int -> "INTEGER", true
   | Type.Int64 -> "BIGINT", true
   | Type.Float -> "DOUBLE", true
   | Type.Text -> "TEXT", true
   | Type.Blob -> "BLOB", true
   | Type.Option t -> fst (type_of_type t), false
+  | Type.Coded c -> type_of_type (Type.Coded.repr c)
   | _ -> Type.invalid_unknown ()
 
   type 'a src = string * 'a
