@@ -742,6 +742,9 @@ module Sql : sig
     type arg = Arg : 'a Type.t * 'a -> arg (** *)
     (** The type for SQL statement arguments (parameters). *)
 
+    val pp_arg : Format.formatter -> arg -> unit
+    (** [pp_arg] formats an argument with {!Type.value_pp}. *)
+
     (** {1:stmts Statements} *)
 
     type 'r t
@@ -756,6 +759,12 @@ module Sql : sig
 
     val rev_args : 'r t -> arg list
     (** [rev_args st] is the reversed list of arguments of the statement. *)
+
+    val pp_src : Format.formatter -> 'r t -> unit
+    (** [pp_src] formats the statement's source. *)
+
+    val pp : Format.formatter -> 'r t -> unit
+    (** [pp ppf st] formats the statement's source and its arguments. *)
 
     (** {1:bind Binding functions} *)
 

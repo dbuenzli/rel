@@ -348,6 +348,7 @@ module Askt = struct
 end
 
 type 'a value = 'a Askt.value'
+
 module Bag = struct
   open Askt
   type 'a order = 'a
@@ -439,10 +440,8 @@ module Syntax = struct
   let ( -. ) = Float. ( -. )
   let ( *. ) = Float. ( *. )
   let ( /. ) = Float. ( /. )
-
   let ( $ ) = Bag.tuple
   let ( #. ) = Bag.proj
-
   let ( ++ ) = Bag.union
   let ( let* ) = Bag.foreach
 end
@@ -475,10 +474,15 @@ module Sql = struct
 
   module Stmt = struct
     type arg = Arg : 'a Type.t * 'a -> arg
+    let pp_arg ppf (Arg (t, v)) = Type.value_pp t ppf v
     type 'r t = { src : string; rev_args : arg list; result : 'r Row.t; }
     let src st = st.src
     let result st = st.result
     let rev_args st = st.rev_args
+    let pp_src ppf st = Fmt.lines ppf st.src
+    let pp ppf st =
+      Fmt.pf ppf "@[<v>%a@,@[%a@]@]"
+        Fmt.lines st.src Fmt.(list ~sep:sp pp_arg) (List.rev st.rev_args)
 
     type 'a func = string -> arg list -> 'a
     let func src f = f src []
@@ -929,7 +933,6 @@ module Sql = struct
       Sql.to_string sql
   end
 
-
   let normalize = Bag_to_sql.normalize
   let of_bag = Bag_to_sql.of_bag
 
@@ -959,7 +962,6 @@ module Sql = struct
     let blob = Type.Blob
     let option v = (Type.Option v)
   end
-
 end
 
 (*---------------------------------------------------------------------------
