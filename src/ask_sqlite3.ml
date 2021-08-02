@@ -341,25 +341,31 @@ module Stmt' = struct
     let row = Askt.prod_of_prod (Sql.Stmt.result st) in
     cols s.stmt (s.col_count - 1) row
 
+  let stop s =
+    (* N.B. we need to reset otherwise things like VACUUM think things
+       are still going on. *)
+    ignore (Tsqlite3.clear_bindings s.stmt);
+    ignore (Tsqlite3.reset s.stmt)
+
   let step s st = match Tsqlite3.step s.stmt with
-  | 101 (* SQLITE_DONE *) -> ignore (Tsqlite3.clear_bindings s.stmt); None
+  | 101 (* SQLITE_DONE *) -> stop s; None
   | 100 (* SQLITE_ROW *) -> Some (unpack_row s st)
   | rc ->  error (stmt_error rc s.stmt)
 
   let fold s st f acc =
     let rec loop s st f acc = match Tsqlite3.step s.stmt with
     | 100 (* SQLITE_ROW *) -> loop s st f (f (unpack_row s st) acc)
-    | 101 (* SQLITE_DONE *) -> ignore (Tsqlite3.clear_bindings s.stmt); acc
+    | 101 (* SQLITE_DONE *) -> stop s; acc
     | rc -> error (stmt_error rc s.stmt)
     in
     loop s st f acc
 
   let first s st =
     let r = step s st in
-    ignore (Tsqlite3.clear_bindings s.stmt); r
+    stop s; r
 
   let exec s = match Tsqlite3.step s.stmt with
-  | 100 | 101 (* SQLITE_{ROW,DONE} *) -> ignore (Tsqlite3.clear_bindings s.stmt)
+  | 100 | 101 (* SQLITE_{ROW,DONE} *) -> stop s
   | rc -> error (stmt_error rc s.stmt)
 end
 
