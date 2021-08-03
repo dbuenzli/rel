@@ -630,6 +630,48 @@ module Sql = struct
     let sql = String.concat "\n" (drops @ creates) in
     Stmt.(func sql @@ unit)
 
+  (* indexes *)
+
+  type index =
+    { unique : bool;
+      name : string;
+      table : string;
+      cols : string list; }
+
+  let index ?(unique = false) ?name t cols =
+    let table = Table.name t in
+    let cols = List.map (fun (Col.V c) -> Col.name c) cols in
+    let name = match name with
+    | Some n -> n
+    | None -> String.concat "_" (table :: cols)
+    in
+    { unique; name; table; cols }
+
+  let create_index ?schema ?(if_not_exists = true) i =
+    let sql =
+      let unique = if i.unique then " UNIQUE" else "" in
+      let if_not_exists = if if_not_exists then " IF NOT EXISTS" else "" in
+      let name = match schema with
+      | None -> id i.name | Some s -> Fmt.str "%s.%s" (id s) (id i.name)
+      in
+      let cols = List.map id i.cols in
+      let pp_sep ppf () = Fmt.pf ppf ",@," in
+      Fmt.str "@[<v2>CREATE%s INDEX%s %s ON %s @[<1>(%a)@];@]"
+        unique if_not_exists name (id i.table)
+        Fmt.(list ~sep:pp_sep string) cols
+    in
+    Stmt.(func sql @@ unit)
+
+  let drop_index ?schema ?(if_exists = true) i =
+    let sql =
+      let if_exists = if if_exists then " IF EXISTS" else "" in
+      let name = match schema with
+      | None -> id i.name | Some s -> Fmt.str "%s.%s" (id s) (id i.name)
+      in
+      Fmt.str "DROP INDEX%s %s;" if_exists name
+    in
+    Stmt.(func sql @@ unit)
+
   let insert_row_into ?schema ?(ignore = []) t =
     (* TODO automatically ignore auto incremented (? maybe not) *)
     let ignore c = List.exists (fun (Col.V i) -> Col.equal_name i c) ignore in

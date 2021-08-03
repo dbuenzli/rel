@@ -694,7 +694,7 @@ module Askt : sig
   | Tuple : ('a -> 'b) value * 'a value -> 'b value
   | Exists : ('b, 'e) bag -> bool value (** *)
   (** The type for values of type ['a]. This represents an expression
-    computing a value of type ['a]. *)
+      computing a value of type ['a]. *)
 
   and ('a, 'e) bag =
   | Table : 'a Table.t -> ('a, 'e) bag
@@ -869,6 +869,36 @@ module Sql : sig
       Make sure to use {!Ask_sqlite3.exec} otherwise only the first
       statement gets executed, wrapping the whole thing in
       {!Ask_sqlite3.with_transaction} is a good idea as well. *)
+
+  (** {1:indexes Indexes}
+
+      {b FIXME} Unclear whether this should not be parameters of
+      {!Table.t} values. *)
+
+  type index
+  (** The type for indexes. *)
+
+  val index :
+    ?unique:bool -> ?name:string -> 'a Table.t -> 'a Col.v list -> index
+  (** [index ~name t cs] is an index named [name] (default derived
+      from [t] and [cs]). [unique] adds a UNIQUE constraint if [true]
+      (defaults to [false]) {b FIXME} This is not as expressive
+      as it {{:https://www.sqlite.org/lang_createindex.html}could be}. *)
+
+  val create_index :
+    ?schema:string -> ?if_not_exists:bool -> index -> unit Stmt.t
+  (** [create_index i] is an SQL CREATE INDEX statement for [i]. If
+      [if_not_exists] is [true] (default) the corresponing sentence
+      is added to the create statement. FIXME the default is the
+      converse of SQL maybe that's not a good idea. *)
+
+  val drop_index :
+    ?schema:string -> ?if_exists:bool -> index -> unit Stmt.t
+  (** [drop_index i]is an SQL DROP INDEX statement for [i]. If
+      [if_exist] is [true] (default) not error is reported if the
+      table does not exist. FIXME the default is the
+      converse of SQL maybe that's not a good idea. *)
+
 
   (** {1:insupd Inserting and updating} *)
 
