@@ -800,7 +800,7 @@ module Sql = struct
           String.concat "" ["("; e0; " "; op; " "; e1; ")" ]
       | Proj (t, l) -> String.concat "." [t; l]
       | Exists sql ->
-          let s = to_string sql in
+          let s = to_string ~ignore_result:true sql in
           String.concat "" ["EXISTS ("; s; ")"]
       | Case (c, e0, e1) ->
           let c = exp_to_string c
@@ -812,13 +812,41 @@ module Sql = struct
       and table_to_string (t, tas) =
         String.concat "" [Printf.sprintf "%S" t; " as "; tas]
 
-      and to_string = function
+      (* ~ignore_result is here to work around what looks like a bug in the
+         quel paper in fig 9. of the translation of exists. The problem
+         is that table variables from the outer SELECT can't be bound
+         in the SELECTs of EXISTS. They are also not useful so we replace
+         them with the constant 1. Here's a query that exibits the problem
+         let's say with want to enumerate distinctly the containers
+         used by a set of elements.
+
+         let cs =
+           let* c = Bag.table Container.table in
+           let used_c =
+             let* el = els in
+             Bag.where Int.(c #. Container.id' = el #. Element.container')
+            (Bag.yield c) (* A bit absurd but it typechecks… *)
+           in
+           Bag.where (Bag.exists used_cs) (Bag.yield c)
+
+         This without ignore_result this compiles to illegal SQL:
+
+         SELECT c.* FROM "container" as c WHERE
+         EXISTS (SELECT c.* FROM "element" as e WITH ...
+                        ^
+      *)
+
+      and to_string ~ignore_result = function
       | Empty -> "SELECT * FROM (VALUES ('empty')) WITH 1 = 0"
       | Union_all (s0, s1) ->
-          let s0 = to_string s0 and s1 = to_string s1 in
+          let s0 = to_string ~ignore_result s0 in
+          let s1 = to_string ~ignore_result s1 in
           String.concat "" [s0; "\nUNION ALL\n"; s1]
       | Select (sels, ts, where) ->
-          let ss = String.concat ", " (List.map sel_to_string sels) in
+          let ss = match ignore_result with
+          | false -> String.concat ", " (List.map sel_to_string sels)
+          | true -> "1"
+          in
           let ts = String.concat ", " (List.map table_to_string ts) in
           let w = match where with
           | None -> ""
@@ -1001,7 +1029,7 @@ module Sql = struct
     let of_bag : type r e. (r, e) Bag.t -> string = fun b ->
       let nb = normalize b in
       let sql = bag_to_sql (gen ()) nb in
-      Sql.to_string sql
+      Sql.to_string ~ignore_result:false sql
   end
 
   let normalize = Bag_to_sql.normalize
