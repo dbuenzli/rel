@@ -1032,8 +1032,6 @@ module Sql = struct
       Sql.to_string ~ignore_result:false sql
   end
 
-  let normalize = Bag_to_sql.normalize
-  let of_bag = Bag_to_sql.of_bag
 
   module Bag = struct
     type ('a, 'b, 'r) func = { argc : int; bag : 'a; func : 'b Stmt.func }
@@ -1060,7 +1058,12 @@ module Sql = struct
     let text = Type.Text
     let blob = Type.Blob
     let option v = (Type.Option v)
+
+    let normalize = Bag_to_sql.normalize
   end
+
+  let of_bag row b = Bag.(func @@ ret row b)
+  let of_bag' table b = Bag.(func @@ ret (Table.row table) b)
 end
 
 (*---------------------------------------------------------------------------

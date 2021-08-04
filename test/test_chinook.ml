@@ -26,12 +26,12 @@ let select_track_cols =
              t #. Track.composer' $
              t #. Track.unitPrice')
 
-let run_bag b =
-  let sql = Sql.of_bag b in
-  Printf.printf "%s\n" sql
+let run_bag b row =
+  let stmt = Sql.of_bag row b in
+  Format.printf "%a\n" Sql.Stmt.pp_src stmt
 
 let run_tests db =
-  run_bag select_track_all;
+  run_bag select_track_all (Table.row Track.table);
   ()
 
 let test db =

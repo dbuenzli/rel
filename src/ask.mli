@@ -945,10 +945,14 @@ module Sql : sig
 
   (** {1:bag Bags}
 
-      TODO remove these two fun. *)
+      {b FIXME.} Can't we get of the ['a Row.t] argument in [of_bag].
+      Related to the comment of specializing yield on [Row.t]. Maybe
+      the {!Bag.t} combinator should take a row rather than an arbitrary
+      function. *)
 
-  val normalize : ('a, 'e) Bag.t -> ('a, 'e) Bag.t
-  val of_bag : ('a, 'e) Bag.t -> string
+  val of_bag : 'a Row.t -> ('a, 'b) Bag.t -> 'a Stmt.t
+  val of_bag' : 'a Table.t -> ('a, 'b) Bag.t -> 'a Stmt.t
+
 
   module Bag : sig
 
@@ -969,7 +973,11 @@ module Sql : sig
     val text : string Type.t
     val blob : string Type.t
     val option : 'a Type.t -> 'a option Type.t
+
+
+    val normalize : ('a, 'e) Bag.t -> ('a, 'e) Bag.t
   end
+
 end
 
 (*---------------------------------------------------------------------------

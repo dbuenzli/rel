@@ -3,6 +3,9 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+
+(* FIXME rewrites w.r.t. to API evolution. *)
+
 open Ask
 open Ask.Syntax
 
@@ -29,8 +32,8 @@ let rec insert_rows db sql t = function
     match insert_row db sql r with
     | Error _ as e -> e | Ok () -> insert_rows db sql t rs
 
-let select_rows db sql row =
-  let st = Sql.Stmt.(func sql @@ ret row) in
+let select_rows db bag row =
+  let st = Sql.of_bag row bag in
   log_sql "select" (Sql.Stmt.src st);
   let* ops = Ask_sqlite3.fold db st List.cons [] in
   let ops = List.rev ops in
@@ -51,10 +54,12 @@ module Test_sql_src = struct
     Q.get_order_sales o2
 
   let run () =
-    Printf.printf "order2:\n%s\n\n" (Sql.of_bag order2);
+    Format.printf "order2:\n%a\n\n"
+      Sql.Stmt.pp_src (Sql.of_bag' S.order_table order2);
     Format.printf "@[<v>order2_sales:@,@[%a@]@,order2_sales_nf:@,@[%a@]@]@."
-      Bag.pp order2_sales Bag.pp (Sql.normalize order2_sales);
-    Printf.printf "order2_sales:\n%s\n\n" (Sql.of_bag order2_sales);
+      Bag.pp order2_sales Bag.pp (Sql.Bag.normalize order2_sales);
+    Format.printf "order2_sales:\n%a\n\n"
+      Sql.Stmt.pp_src (Sql.of_bag S.sales_row order2_sales);
     Ok ()
 end
 
@@ -77,21 +82,21 @@ module Test_products = struct
       let* p = Bag.table Product.table in
       Bag.yield p
     in
-    select_rows db (Sql.of_bag get_products) (Table.row Product.table)
+    select_rows db get_products (Table.row Product.table)
 
   let order2 = Q.get_order (Syntax.Int.v 2) (* FIXME bind *)
-  let order2_sql = Sql.of_bag order2
-  let get_order2 db = select_rows db order2_sql (Table.row Order.table)
+  let get_order2 db = select_rows db order2 (Table.row Order.table)
 
   let order2_sales =
     let open Ask.Syntax in
     let* o = order2 in
     Q.get_order_sales o
 
-  let order2_sales_sql = Sql.of_bag order2_sales
+  (*
   let get_order2_sales db =
     let row = Row.Quick.(t3 (int "pid") (text "name") (int "sales")) in
-    select_rows db order2_sales_sql row
+    select_rows db order2_sales row
+*)
 
   let run () =
     log "Testing Products schema";
@@ -106,7 +111,7 @@ module Test_products = struct
     let* () = insert_rows db insert_orders Order.table Data.orders in
     let* () = get_products db in
     let* () = get_order2 db in
-    let* () = get_order2_sales db in
+(*    let* () = get_order2_sales db in *)
     Ok ()
 end
 
@@ -118,20 +123,18 @@ module Test_duos = struct
   let insert_duo = Sql.insert_row_into Duo.table
 
   let diff = Q.diff
-  let diff_sql = Sql.of_bag diff
 
   let diff db =
     let row = Row.Quick.(t2 (text "name") (int "diff")) in
-    select_rows db diff_sql row
+    select_rows db diff row
 
   let thirties =
     let open Ask.Syntax in
     Q.persons_in_age_range ~first:(Int.v 30) ~last:(Int.v 39)
 
-  let thirties_sql = Sql.of_bag thirties
   let thirties db =
     let row = Row.Quick.(t1 (text "name")) in
-    select_rows db thirties_sql row
+    select_rows db thirties row
 
   let thirties' =
     let open Ask.Syntax in
@@ -141,10 +144,9 @@ module Test_duos = struct
     in
     Q.persons_sat ~sat:in_thirties
 
-  let thirties'_sql = Sql.of_bag thirties'
   let thirties' db =
     let row = Row.Quick.(t1 (text "name")) in
-    select_rows db thirties'_sql row
+    select_rows db thirties' row
 
   let between_edna_and_bert_excl =
     let open Ask.Syntax in
@@ -152,10 +154,9 @@ module Test_duos = struct
     let* bert = Q.person_age ~name:(String.v "Bert") in
     Q.persons_in_age_range ~first:edna ~last:(Int.(bert - v 1))
 
-  let between_edna_and_bert_sql = Sql.of_bag between_edna_and_bert_excl
   let between_edna_and_bert_excl db =
     let row = Row.Quick.(t1 (text "name")) in
-    select_rows db between_edna_and_bert_sql row
+    select_rows db between_edna_and_bert_excl row
 
   let thirties_by_pred pred =
     let open Ask.Syntax in
@@ -165,16 +166,13 @@ module Test_duos = struct
     in
     Q.persons_sat in_thirties
 
-  let thirties_by_pred_sql = Sql.of_bag (thirties_by_pred Q.thirties_pred)
-  let thirties_by_pred_sql' = Sql.of_bag (thirties_by_pred Q.thirties_pred')
+  let thirties_by_pred' db =
+    let row = Row.Quick.(t1 (text "name")) in
+    select_rows db (thirties_by_pred Q.thirties_pred') row
 
   let thirties_by_pred db =
     let row = Row.Quick.(t1 (text "name")) in
-    select_rows db thirties_by_pred_sql row
-
-  let thirties_by_pred' db =
-    let row = Row.Quick.(t1 (text "name")) in
-    select_rows db thirties_by_pred_sql' row
+    select_rows db (thirties_by_pred Q.thirties_pred) row
 
   let run () =
     log "Testing Duos schema";
@@ -209,10 +207,9 @@ module Test_org = struct
     let open Ask.Syntax in
     Q.department_expertise ~task:(String.v "abstract")
 
-  let abstract_expertise_sql = Sql.of_bag abstract_expertise
   let abstract_expertise db =
     let row = Row.Quick.(t1 (text "name")) in
-    select_rows db abstract_expertise_sql row
+    select_rows db abstract_expertise row
 
   let run () =
     log "Testing Org schema";
