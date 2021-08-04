@@ -53,7 +53,7 @@ module Test_sql_src = struct
   let run () =
     Printf.printf "order2:\n%s\n\n" (Sql.of_bag order2);
     Format.printf "@[<v>order2_sales:@,@[%a@]@,order2_sales_nf:@,@[%a@]@]@."
-      Bag.pp order2_sales Askt.pp_bag (Sql.normalize order2_sales);
+      Bag.pp order2_sales Bag.pp (Sql.normalize order2_sales);
     Printf.printf "order2_sales:\n%s\n\n" (Sql.of_bag order2_sales);
     Ok ()
 end

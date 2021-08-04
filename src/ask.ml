@@ -300,6 +300,8 @@ module Askt = struct
   let binop_to_string : type a b. (a,b) binop -> string = function
   | Arith (op, _) -> arith_to_string op
   | Cmp (op, _) -> cmp_to_string op
+  | And -> "&&"
+  | Or -> "||"
   | _ -> "<unknown>"
 
   let rec pp_value : type a. int -> Format.formatter -> a value -> unit =
@@ -919,12 +921,12 @@ module Sql = struct
         Sql.Select (cols, ts, where)
 
     (* This follows Cooper et al. and quel, would be nice
-       to see what seql brings. *)
+       to see what sqr brings. *)
 
     let rec stage1 : type a e. (a, e) Askt.bag -> (a, e) Askt.bag = function
-    | Askt.Table _ as b -> b
+    | Table _ as b -> b
     | Empty as b -> b
-    | Yield _ as b -> b
+    | Yield e -> Yield (value_stage1 e)
     | Union (m, n) -> Union (stage1 m, stage1 n)
     | Foreach (Empty, n) -> Empty (* ForEmpty1 *)
     | Foreach (Yield m, y) -> stage1 (y m) (* ForYield *)
@@ -936,16 +938,26 @@ module Sql = struct
       stage1 (Foreach (l', fun y -> Foreach (stage1 (m y), n')))
     | Foreach (Where (l, m), n) -> (* ForWhere1 *)
         let m' = stage1 m and n' = fun y -> stage1 (n y) in
-        stage1 (Where (l, (Foreach (m', n'))))
-    | Foreach (m, n) -> Foreach (stage1 m, fun y -> stage1 (n y))
+        stage1 (Where (value_stage1 l, (Foreach (m', n'))))
+    | Foreach (Table _ as t, n) -> Foreach (t, fun y -> stage1 (n y))
     | Where (Const (Type.Bool, true), m) -> stage1 m (* WhereTrue *)
     | Where (Const (Type.Bool, false), m) -> Empty (* WhereFalse *)
-    | Where (l, m) -> Where (l, stage1 m)
+    | Where (l, m) -> Where (value_stage1 l, stage1 m)
+
+    and value_stage1 : type a. a value -> a value = function
+    | Var _ as v -> v
+    | Const _ as v -> v
+    | Unop (op, e) -> Unop (op, value_stage1 e)
+    | Binop (op, e0, e1) -> Binop (op, value_stage1 e0, value_stage1 e1)
+    | Proj (e, c) -> Proj (value_stage1 e, c)
+    | Row _ as v -> v
+    | Tuple (e0, e1) -> Tuple (value_stage1 e0, value_stage1 e1)
+    | Exists b -> Exists (stage1 b)
 
     let rec stage2 : type a e. (a, e) Askt.bag -> (a, e) Askt.bag = function
     | Table _ as b -> b
     | Empty as b -> b
-    | Yield _ as b -> b
+    | Yield e -> Yield (value_stage2 e)
     | Union (m, n) -> Union (stage2 m, stage2 n)
     | Foreach (l, o) ->
         let l' = stage2 l in
@@ -963,15 +975,26 @@ module Sql = struct
         end
     | Where (l, Union (m, n)) -> (* WhereUnion *)
         let m' = stage2 m and n' = stage2 n in
-        stage2 (Union (Where (l, m'), Where (l, n')))
+        let l' = value_stage2 l in
+        stage2 (Union (Where (l', m'), Where (l', n')))
     | Where (c, Empty) -> Empty (* WhereEmpty *)
     | Where (l, Where (m, n)) -> (* WhereWhere *)
         let n' = stage2 n in
-        stage2 (Where (Binop (Askt.And, l, m), n'))
-    | Where (l, (Foreach (m, n))) -> (* WhereFor *)
+        stage2 (Where (Binop (Askt.And, value_stage2 l, m), n'))
+    | Where (l, Foreach (m, n)) -> (* WhereFor *)
         let m' = stage2 m and n' = fun y -> stage2 (n y) in
-        stage2 (Foreach (m', (fun y -> Where (l, n' y))))
-    | Where (l, m) -> Where (l, stage2 m)
+        stage2 (Foreach (m', (fun y -> Where (value_stage2 l, n' y))))
+    | Where (l, m) -> Where (value_stage2 l, stage2 m)
+
+    and value_stage2 : type a. a value -> a value = function
+    | Var _ as v -> v
+    | Const _ as v -> v
+    | Unop (op, e) -> Unop (op, value_stage2 e)
+    | Binop (op, e0, e1) -> Binop (op, value_stage2 e0, value_stage2 e1)
+    | Proj (e, c) -> Proj (value_stage2 e, c)
+    | Row _ as v -> v
+    | Tuple (e0, e1) -> Tuple (value_stage2 e0, value_stage2 e1)
+    | Exists b -> Exists (stage2 b)
 
     let normalize b = stage2 (stage1 (Askt.bag_to_bag b))
 

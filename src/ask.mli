@@ -907,7 +907,6 @@ module Sql : sig
       table does not exist. FIXME the default is the
       converse of SQL maybe that's not a good idea. *)
 
-
   (** {1:insupd Inserting and updating} *)
 
   val insert_row_into :
@@ -948,7 +947,7 @@ module Sql : sig
 
       TODO remove these two fun. *)
 
-  val normalize : ('a, 'e) Bag.t -> ('a, 'e) Askt.bag
+  val normalize : ('a, 'e) Bag.t -> ('a, 'e) Bag.t
   val of_bag : ('a, 'e) Bag.t -> string
 
   module Bag : sig
