@@ -425,6 +425,12 @@ module Syntax = struct
     let is_none v = Unop (Is_null, v)
     let is_some v = Unop (Is_not_null, v)
     let get v = Unop (Get_some, v)
+    let has_value ~eq value o = Bool.(is_some o && eq value (get o))
+    let equal ~eq o o' =
+      (* N.B. in sql NULL = NULL is [false]. *)
+      let none_eq = Bool.(is_none o && is_none o') in
+      let some_eq = Bool.(eq (get o) (get o')) in
+      Bool.(none_eq && some_eq)
   end
 
   let ( && ) = Bool.( && )

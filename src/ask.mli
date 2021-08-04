@@ -565,6 +565,14 @@ module Syntax : sig
     val is_none : 'a option value -> bool value
     val is_some : 'a option value -> bool value
     val get : 'a option value -> 'a value
+
+    val has_value :
+      eq:('a value -> 'a value -> bool value) ->
+      'a value -> 'a option value -> bool value
+
+    val equal :
+      eq:('a value -> 'a value -> bool value) ->
+      'a option value -> 'a option value -> bool value
   end
 
   (** {1:boolops Boolean operators} *)
