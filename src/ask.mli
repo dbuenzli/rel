@@ -440,6 +440,12 @@ module Syntax : sig
     val v : bool -> bool value
     (** [v b] is the literal boolean [b]. *)
 
+    val true' : bool value
+    (** [true'] is [v true]. *)
+
+    val false' : bool value
+    (** [false'] is [v false]. *)
+
     val ( = ) : bool value -> bool value -> bool value
     (** [x = y] is boolean equality. *)
 
@@ -455,8 +461,15 @@ module Syntax : sig
 
   (** Integers. *)
   module Int : sig
+
     val v : int -> int value
     (** [v i] is the literal integer [i]. *)
+
+    val zero : int value
+    (** [zero] is [v 0]. *)
+
+    val one : int value
+    (** [one] is [v 1]. *)
 
     (** {1:cmp Predicates and comparisons} *)
 
@@ -497,7 +510,15 @@ module Syntax : sig
   end
 
   module Int64 : sig
+
     val v : int64 -> int64 value
+    (** [v i] is the literal integer [i]. *)
+
+    val zero : int64 value
+    (** [zero] is [v 0L]. *)
+
+    val one : int64 value
+    (** [one] is [v 1L]. *)
 
     (** {1:cmp Predicates and comparisons} *)
 
@@ -523,8 +544,17 @@ module Syntax : sig
   end
 
   module Float : sig
+
     val v : float -> float value
     (** [v x] is the literal float [x]. *)
+
+    val zero : float value
+    (** [zero] is [v 0.0]. *)
+
+    val one : float value
+    (** [one] is [v 1.0]. *)
+
+    (** {1:cmp Predicates and comparisons} *)
 
     val ( = ) : float value -> float value -> bool value
     (** [x = y] is floating point equality. *)
@@ -549,8 +579,12 @@ module Syntax : sig
 
   (** Strings. *)
   module String : sig
+
     val v : string -> string value
     (** [v s] is the literal string [s]. *)
+
+    val empty : string value
+    (** [empty] is [v ""]. *)
 
     val ( = ) : string value -> string value -> bool value
     (** [x = y] is binary string equality. *)
@@ -561,6 +595,12 @@ module Syntax : sig
 
     val v : 'a Type.t -> 'a option -> 'a option value
     (** [v t o] is an option of type [t]. *)
+
+    val none : 'a Type.t -> 'a option value
+    (** [none t] is [v t None]. *)
+
+    val some : 'a Type.t -> 'a -> 'a option value
+    (** [some t v] is [v t (Some v)]. *)
 
     val is_none : 'a option value -> bool value
     val is_some : 'a option value -> bool value

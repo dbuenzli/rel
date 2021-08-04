@@ -376,6 +376,8 @@ module Syntax = struct
 
   module Bool = struct
     let v b = Const (Type.Bool, b)
+    let true' = Const (Type.Bool, true)
+    let false' = Const (Type.Bool, false)
     let ( = ) x y = Binop (Cmp (Eq, Type.Bool), x, y)
     let ( && ) x y = Binop (And, x, y)
     let ( || ) x y = Binop (Or, x, y)
@@ -384,6 +386,8 @@ module Syntax = struct
 
   module Int = struct
     let v x = Const (Type.Int, x)
+    let zero = Const (Type.Int, 0)
+    let one = Const (Type.Int, 1)
     let ( = ) x y = Binop (Cmp (Eq, Type.Int), x, y)
     let ( <> ) x y = Binop (Cmp (Neq, Type.Int), x, y)
     let ( < ) x y = Binop (Cmp (Lt, Type.Int), x, y)
@@ -399,6 +403,8 @@ module Syntax = struct
 
   module Int64 = struct
     let v x = Const (Type.Int64, x)
+    let zero = Const (Type.Int64, 0L)
+    let one = Const (Type.Int64, 1L)
     let ( = ) x y = Binop (Cmp (Eq, Type.Int64), x, y)
     let ( ~- ) x = Unop ((Neg Type.Int64), x)
     let ( + ) x y = Binop (Arith (Add, Type.Int64), x, y)
@@ -409,6 +415,8 @@ module Syntax = struct
 
   module Float = struct
     let v x = Const (Type.Float, x)
+    let zero = Const (Type.Float, 0.0)
+    let one = Const (Type.Float, 1.0)
     let ( = ) x y = Binop (Cmp (Eq, Type.Float), x, y)
     let ( ~-. ) x = Unop ((Neg Type.Float), x)
     let ( +. ) x y = Binop (Arith (Add, Type.Float), x, y)
@@ -419,11 +427,14 @@ module Syntax = struct
 
   module String = struct
     let v s = Const (Type.Text, s)
+    let empty = Const (Type.Text, "")
     let ( = ) x y = Binop (Cmp (Eq, Type.Text), x, y)
   end
 
   module Option = struct
     let v t o = Const (Type.Option t, o)
+    let none t = Const (Type.Option t, None)
+    let some t v = Const (Type.Option t, Some v)
     let is_none v = Unop (Is_null, v)
     let is_some v = Unop (Is_not_null, v)
     let get v = Unop (Get_some, v)
