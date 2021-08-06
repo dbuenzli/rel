@@ -446,6 +446,10 @@ val with_transaction :
     {{:https://www.sqlite.org/lang_savepoint.html}savepoints} if you
     need nested transactions). *)
 
+val explain : ?query_plan:bool -> t -> 'a Sql.Stmt.t -> (string, error) result
+(** [explain ~query_plan db st] explains statement [st] or its query plan
+    if [query_plan] is [true] (defaults to [false]. *)
+
 (** {1:stmt Low-level interface} *)
 
 (** Low-level prepared statement interface. *)

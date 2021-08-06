@@ -497,6 +497,22 @@ let with_transaction kind db f =
           | rc when rc <> 0 -> abort_noerr (); Error (db_error rc db.db)
           | _0 -> Ok v
 
+let explain ?(query_plan = false) db st =
+  validate db;
+  try
+    let explain = if query_plan then "EXPLAIN QUERY PLAN " else "EXPLAIN " in
+    (* Maybe we should skip the cache. *)
+    let src = explain ^ Sql.Stmt.src st in
+    let rev_args = Sql.Stmt.rev_args st in
+    let result = Row.Quick.(t1 (text "explanation")) in
+    let st = Sql.Stmt.v src ~rev_args ~result in
+    let s = Cache.stmt db src in (* XXX skip the cache ? *)
+    Stmt'.bind s st;
+    let lines = List.rev (Stmt'.fold s st List.cons []) in
+    Ok (String.concat "\n" lines)
+  with
+  | Stmt'.Error e -> Error e
+
 (* Statements *)
 
 module Stmt = struct

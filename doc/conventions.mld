@@ -45,16 +45,19 @@ represents such a table according to the convention.
 (** Persons. *)
 module Person : sig
 
+  type id = int
+  (** The type for person identifiers. *)
+
   type t
   (** The type for persons. *)
 
-  val v : id:int -> first_name:string -> last_name:string -> t
+  val v : id:id -> first_name:string -> last_name:string -> t
   (** [v ~id ~first_name ~last_name] is a person with given attributes. *)
 
   val row : int -> string -> string -> t
-  (** [row id first_name last_name] is a person with given attributes. *)
+  (** [row] is unlabelled {!v}. *)
 
-  val id : t -> int
+  val id : t -> id
   (** [id p] is the unique identifier of [p]. *)
 
   val first_name : t -> string
@@ -67,7 +70,7 @@ module Person : sig
 
   open Ask
 
-  val id' : (t, int) Col.t
+  val id' : (t, id) Col.t
   (** [id'] is the {!id} column. *)
 
   val first_name' : (t, string) Col.t
@@ -86,7 +89,8 @@ For example:
 
 {[
 module Person = struct
-  type t = { id : int; first_name : string; last_name : string }
+  type id = int
+  type t = { id : id; first_name : string; last_name : string }
 
   let v ~id ~first_name ~last_name = { id; first_name; last_name }
   let row id first_name last_name = { id; first_name; last_name }

@@ -83,13 +83,13 @@ end
 
 module Col = struct
   type param = ..
-
+  type param += Primary_key | Unique
   type ('r, 'a) t =
-    { name : string; params : param list; type' : 'a Type.t;
-      proj : ('r -> 'a) }
+    { name : string; params : param list; type' : 'a Type.t; proj : ('r -> 'a) }
 
   type 'r v = V : ('r, 'a) t -> 'r v
   type 'r value = Value : ('r, 'a) t * 'a -> 'r value
+
   let v ?(params = []) name type' proj = { name; params; type'; proj }
   let name c = c.name
   let params c = c.params
@@ -98,10 +98,6 @@ module Col = struct
   let with_proj proj c = { c with proj }
   let no_proj _ = invalid_arg "No projection defined"
   let equal_name c0 c1 = String.equal (name c0) (name c1)
-
-  type param +=
-  | Primary_key
-  | Unique
 
   let pp ppf c = Fmt.pf ppf "@[%a : %a@]" Fmt.string c.name Type.pp c.type'
   let pp_name ppf c = Fmt.string ppf c.name
@@ -120,6 +116,7 @@ module Row = struct
   | Cat : ('r, 'a -> 'b) prod * ('r -> 'a) * ('a, 'a) prod -> ('r, 'b) prod
 
   type 'r t = ('r, 'r) prod
+
   let unit f = Unit f
   let prod r c = Prod (r, c)
   let ( * ) = prod
@@ -215,6 +212,12 @@ module Table = struct
   type param = ..
   type 'a t = { name : string; params : param list; row : 'a Row.t Lazy.t }
   type v = V : 'a t -> v
+  type param +=
+  | Primary_key : 'r Col.v list -> param
+  | Foreign_key : 'r Col.v list * ('a t * 'a Col.v list) -> param
+  | Sql of string
+  | Sql_constraint of string
+
   let v ?(params = []) name row = { name; params; row = Lazy.from_val row }
   let v_rec ?(params = []) name row = { name; params; row }
   let name t = t.name
@@ -227,12 +230,6 @@ module Table = struct
         not (List.exists (fun (Col.V i) -> Col.equal_name i c) icols)
       in
       List.filter keep (Row.cols (Lazy.force t.row))
-
-  type param +=
-  | Primary_key : 'r Col.v list -> param
-  | Foreign_key : 'r Col.v list * ('a t * 'a Col.v list) -> param
-  | Sql of string
-  | Sql_constraint of string
 end
 
 module Askt = struct
@@ -446,6 +443,8 @@ module Syntax = struct
       Bool.(none_eq && some_eq)
   end
 
+  module Bag = Bag
+
   let ( && ) = Bool.( && )
   let ( || ) = Bool.( || )
   let not = Bool.not
@@ -494,7 +493,9 @@ module Sql = struct
   module Stmt = struct
     type arg = Arg : 'a Type.t * 'a -> arg
     let pp_arg ppf (Arg (t, v)) = Type.value_pp t ppf v
+
     type 'r t = { src : string; rev_args : arg list; result : 'r Row.t; }
+    let v src ~rev_args ~result = { src; rev_args; result }
     let src st = st.src
     let result st = st.result
     let rev_args st = st.rev_args

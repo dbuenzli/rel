@@ -434,6 +434,8 @@ end
     Open this module to streamline query definition. *)
 module Syntax : sig
 
+  module Bag = Bag
+
   (** Booleans. *)
   module Bool : sig
 
@@ -799,6 +801,11 @@ module Sql : sig
     (** The type for a closed (all arguments are bound) SQL statements
         returning rows of type ['r]. *)
 
+    val v : string -> rev_args:arg list -> result:'r Row.t -> 'r t
+    (** [v sql rev_args result] is a closed statement with srouce
+        [sql], revered list of arguments (parameters) [rev_args] and
+        yielding rows of type [result]. *)
+
     val src : 'r t -> string
     (** [src st] is the source SQL statement of [st]. *)
 
@@ -993,7 +1000,6 @@ module Sql : sig
   val of_bag : 'a Row.t -> ('a, 'b) Bag.t -> 'a Stmt.t
   val of_bag' : 'a Table.t -> ('a, 'b) Bag.t -> 'a Stmt.t
 
-
   module Bag : sig
 
     type ('a, 'f, 'r) func
@@ -1013,7 +1019,6 @@ module Sql : sig
     val text : string Type.t
     val blob : string Type.t
     val option : 'a Type.t -> 'a option Type.t
-
 
     val normalize : ('a, 'e) Bag.t -> ('a, 'e) Bag.t
   end
