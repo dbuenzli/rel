@@ -378,14 +378,16 @@ type t =
     mutable closed : bool; }
 
 module Cache = struct
+  (* FIXME implement a proper lru cache. *)
+
   let drop db ~count =
     if count <= 0 then () else
     let count = ref count in
-    let drop _ st = match !count > 0 with
-    | false -> raise Exit
+    let drop s st = match !count > 0 with
+    | false -> Some st
     | true -> decr count; Stmt'.finalize_noerr st; None
     in
-    try Hashtbl.filter_map_inplace drop db.stmt_cache with Exit -> ()
+    Hashtbl.filter_map_inplace drop db.stmt_cache
 
   let size db = db.stmt_cache_size
   let set_size db size =
