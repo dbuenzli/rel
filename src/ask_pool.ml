@@ -48,17 +48,17 @@ let release p r =
   p.free <- p.free + 1;
   Condition.signal p.free_non_zero
 
-let exec_with p r f =
+let exec_and_release p r f =
   let finally () = release p r in
   Fun.protect ~finally (fun () -> Ok (f r))
 
 let with' p f = match acquire p with
 | Error _ as e -> e
-| Ok r -> exec_with p r f
+| Ok r -> exec_and_release p r f
 
 let try_with p f = match try_acquire p with
 | None | Some (Error _) as v -> v
-| Some (Ok r) -> Some (exec_with p r f)
+| Some (Ok r) -> Some (exec_and_release p r f)
 
 let dispose p =
   let dispose acc r = match p.dispose r with

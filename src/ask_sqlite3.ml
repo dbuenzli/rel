@@ -256,7 +256,7 @@ module Stmt' = struct
 
   type 'r step = t * 'r Sql.Stmt.t
 
-  let validate s = if s.finalized then failwith "finalized statement" else ()
+  let validate s = if s.finalized then invalid_arg "finalized statement" else ()
   let finalize s = match Tsqlite3.finalize s.stmt with
   | 0 -> s.finalized <- true | rc -> error (stmt_error rc s.stmt)
 
