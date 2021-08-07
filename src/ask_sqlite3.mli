@@ -397,7 +397,7 @@ val stmt_cache_size : t -> int
 
 val set_stmt_cache_size : t -> int -> unit
 (** [set_stmt_cache_size d max] sets the maximal number of cached prepared
-    statements to [max] in [d]. *)
+    statements to [max] in [d]. Note that this clears the cache. *)
 
 val clear_stmt_cache : t -> unit
 (** [clear_stmt_cache d] clears the cache of prepared statements. *)

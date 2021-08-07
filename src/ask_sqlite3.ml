@@ -3,6 +3,56 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+(* Circular doubly linked list *)
+
+module Clist = struct
+  type 'a t =
+    { mutable v : 'a option; (* None is for the root. *)
+      mutable prev : 'a t; (* on root this points to last element. *)
+      mutable next : 'a t; (* on root this points to the first element. *) }
+
+  let root () = let rec root = { v = None; next = root; prev = root } in root
+  let make_first root n =
+    n.next.prev <- n.prev; n.prev.next <- n.next;
+    n.next <- root.next; n.prev <- root;
+    root.next.prev <- n; root.next <- n
+
+  let add_first root d =
+    let n = { v = Some d; prev = root; next = root.next } in
+    root.next.prev <- n; root.next <- n; n
+
+  let drop_last root =
+    let last = root.prev in
+    root.prev <- last.prev; last.prev.next <- root; last.v
+end
+
+(* Key-value map with access to lru binding. *)
+
+module Lru_map = struct
+  type ('a, 'b) t =
+    { map : ('a, ('a * 'b) Clist.t) Hashtbl.t;
+      recent : ('a * 'b) Clist.t; (* root, last is lru, next is mru. *) }
+
+  let create ?random size =
+    { map = Hashtbl.create ?random size; recent = Clist.root () }
+
+  let[@inline] get_value n = snd (Option.get n.Clist.v)
+  let length c = Hashtbl.length c.map
+  let find k c = match Hashtbl.find_opt c.map k with
+  | None -> None
+  | Some n -> Clist.make_first c.recent n; Some (get_value n)
+
+  let add k v c = match Hashtbl.find_opt c.map k with
+  | Some n -> n.v <- Some (k, v); Clist.make_first c.recent n
+  | None -> let n = Clist.add_first c.recent (k, v) in Hashtbl.replace c.map k n
+
+  let lru c = c.recent.prev.Clist.v
+  let drop_lru c = match Clist.drop_last c.recent with
+  | None -> None | Some (k, _) as v -> Hashtbl.remove c.map k; v
+
+  let iter f c = Hashtbl.iter (fun k n -> f k (get_value n)) c.map
+end
+
 (* Thin bindings to SQLite3 *)
 
 module Tsqlite3 = struct
@@ -374,37 +424,33 @@ end
 type t =
   { db : Tsqlite3.t;
     mutable stmt_cache_size : int;
-    stmt_cache : (string, Stmt'.t) Hashtbl.t;
+    mutable stmt_cache : (string, Stmt'.t) Lru_map.t;
     mutable closed : bool; }
 
 module Cache = struct
-  (* FIXME implement a proper lru cache. *)
-
-  let drop db ~count =
-    if count <= 0 then () else
-    let count = ref count in
-    let drop s st = match !count > 0 with
-    | false -> Some st
-    | true -> decr count; Stmt'.finalize_noerr st; None
-    in
-    Hashtbl.filter_map_inplace drop db.stmt_cache
-
-  let size db = db.stmt_cache_size
-  let set_size db size =
-    let drop_count = db.stmt_cache_size - size in
-    db.stmt_cache_size <- size;
-    drop db ~count:drop_count
-
+  let create size = Lru_map.create ~random:true size
   let clear db =
     let drop _ st = Stmt'.finalize_noerr st in
-    Hashtbl.iter drop db.stmt_cache;
-    Hashtbl.reset db.stmt_cache
+    Lru_map.iter drop db.stmt_cache;
+    db.stmt_cache <- create db.stmt_cache_size
 
-  let find db sql = Hashtbl.find_opt db.stmt_cache sql
+  let drop db ~count =
+    let rec loop db count =
+      if count <= 0 then () else
+      match Lru_map.drop_lru db.stmt_cache with
+      | None -> ()
+      | Some (_, st) -> Stmt'.finalize_noerr st; loop db (count - 1)
+    in
+    loop db count
+
+  let size db = db.stmt_cache_size
+  let set_size db size = db.stmt_cache_size <- size; clear db
+
+  let find db sql = Lru_map.find sql db.stmt_cache
   let add db sql s =
-    let count = Hashtbl.length db.stmt_cache - db.stmt_cache_size + 1 in
+    let count = Lru_map.length db.stmt_cache - db.stmt_cache_size + 1 in
     drop db ~count;
-    Hashtbl.add db.stmt_cache sql s
+    Lru_map.add sql s db.stmt_cache
 
   let stmt db sql = match find db sql with
   | Some s -> s
@@ -421,7 +467,7 @@ let open' ?(stmt_cache_size = 10) ?vfs ?uri ?mutex ?mode f =
   match Tsqlite3.open' ?vfs ?uri ?mode ?mutex f with
   | Error rc -> Error (Error.v rc (Error.code_to_string rc))
   | Ok db ->
-      let stmt_cache = Hashtbl.create ~random:true stmt_cache_size in
+      let stmt_cache = Cache.create stmt_cache_size in
       Ok { db; stmt_cache_size; stmt_cache; closed = false }
 
 let close db =
