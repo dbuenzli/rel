@@ -108,10 +108,14 @@ module Col : sig
   (** {1:cols Columns} *)
 
   type param = ..
-  (** The type for extensible column parameters. See {!section-params}. *)
+  (** The type for extensible column parameters. See {!section-params}.
+
+      {b FIXME.} Add columns parameters like we did for {!Table.param}.
+      For now it oddly breaks compilation. *)
 
   type ('r, 'a) t =
-    { name : string; params : param list; type' : 'a Type.t; proj : ('r -> 'a) }
+    { name : string; params : param list;
+      type' : 'a Type.t; proj : ('r -> 'a) }
   (** The type for a column of type ['a] which is part of a row stored
       in an OCaml value of type ['r]. Unless you get into recursive
       trouble use constructor {!val-v}. *)
@@ -122,7 +126,9 @@ module Col : sig
   type 'r value = Value : ('r, 'a) t * 'a -> 'r value (** *)
   (** The type for a column value for a row of type ['r]. *)
 
-  val v : ?params:param list -> string -> 'a Type.t -> ('r -> 'a) -> ('r, 'a) t
+  val v :
+    ?params:param list -> string -> 'a Type.t -> ('r -> 'a) ->
+    ('r, 'a) t
   (** [v name t proj ~params] is a column named [name] with type [t], row
       projection function [proj] and parameters [params] (defaults to [[]]). *)
 
@@ -311,23 +317,23 @@ module Table : sig
 
   (** {1:tables Tables} *)
 
-  type param = ..
+  type 'r param = ..
   (** The type for exensible table parameters. See {!section-params}. *)
 
-  type 'r t = { name : string; params : param list; row : 'r Row.t Lazy.t}
-  (** The type for a table represented by an OCaml of type ['a]. Unless you
-      get into recursive trouble, use the constructor {!val-v}. *)
+  type 'r t = { name : string; params : 'r param list; row : 'r Row.t Lazy.t}
+  (** The type for tables with rows represented by type ['r]. Unless
+      you get into recursive trouble, use the constructor {!val-v}. *)
 
   type v = V : 'r t -> v
   (** The type for existential tables. *)
 
-  val v : ?params:param list -> string -> 'r Row.t -> 'r t
+  val v : ?params:'r param list -> string -> 'r Row.t -> 'r t
   (** [v name ~params r] is a table with corresponding attributes. *)
 
   val name : 'r t -> string
   (** [name t] is the name of [t]. *)
 
-  val params : 'r t -> param list
+  val params : 'r t -> 'r param list
   (** [name t] are the parameters of [t]. *)
 
   val row : 'r t -> 'r Row.t
@@ -337,11 +343,47 @@ module Table : sig
   (** [cols t] is {!Row.val-cols}[ (row t)] with columns in [ignore] ommited
       from the result. *)
 
+  (** {1:indexes Indexes} *)
+
+  (** Table index specifications.
+
+      {b FIXME} This is not as expressive
+      as it {{:https://www.sqlite.org/syntax/indexed-column.html}could be}. *)
+  module Index : sig
+
+    (** {1:indexes Indexes} *)
+
+    type 'r t
+    (** The type for table indexes on a tables with rows represented
+        by ['r]. *)
+
+    val v : ?unique:bool -> ?name:string -> 'r Col.v list -> 'r t
+    (** [index cols ~name ~unique] is an index named [name] on columns
+        [col].  If [name] is [None] a name is derived at index
+        creation time from the table and column names. If [unique] is
+        [true] (defaults to [false]) a [UNIQUE] constraint is
+        added. *)
+
+    val unique : 'r t -> bool
+    (** [unique i] is [true] if the values in index [i] must be unique. *)
+
+    val name : 'r t -> string option
+    (** [name i] is the name of [i]. *)
+
+    val cols : 'r t -> 'r Col.v list
+    (** [cols i] are indexed columns of [i]. *)
+  end
+
+  val indexes : 'r t -> 'r Index.t list
+  (** [indexes t] are the indexes of table [t] found in the table's
+      {{!val-params}parameters}. *)
+
   (** {1:params Parameters} *)
 
-  type param +=
-  | Primary_key : 'r Col.v list -> param
-  | Foreign_key : 'r Col.v list * ('s t * 's Col.v list) -> param
+  type 'r param +=
+  | Primary_key : 'r Col.v list -> 'r param
+  | Foreign_key : 'r Col.v list * ('s t * 's Col.v list) -> 'r param
+  | Index : 'r Index.t -> 'r param
   | Sql of string
   | Sql_constraint of string (** *)
   (** Common table parameters.
@@ -349,6 +391,7 @@ module Table : sig
       {- [Primary_key cols], declares a table primary key on columns [cols]}
       {- [Foreign_key (cols, (t, cols'))] declares a foreign key
          between [cols] and the columns cols' of [t]. Can be repeated.}
+      {- [Index] is an index specification for the table.}
       {- [Sql sql] is the complete {{:https://sqlite.org/lang_createtable.html}
          CREATE TABLE} statement. All other
          parameters are ignored, you are in control.}
@@ -914,45 +957,33 @@ module Sql : sig
       is added to the create statement. FIXME the default is the
       converse of SQL maybe that's not a good idea. *)
 
+  val create_index :
+    ?schema:string -> ?if_not_exists:bool -> 'a Table.t -> 'a Table.Index.t ->
+    unit Stmt.t
+  (** [create_index t i] is an SQL CREATE INDEX statement for index [i]
+      on table [t]. If [if_not_exists] is [true] (default) the corresponing
+      sentence is added to the create statement. FIXME the default is the
+      converse of SQL maybe that's not a good idea. *)
+
+  val drop_index :
+    ?schema:string -> ?if_exists:bool -> 'a Table.t -> 'a Table.Index.t ->
+    unit Stmt.t
+  (** [drop_index t i] is an SQL DROP INDEX statement for index [i] on
+      table [t]. If [if_exist] is [true] (default) not error is
+      reported if the table does not exist. FIXME the default is the
+      converse of SQL maybe that's not a good idea. *)
+
   val create_schema :
     ?schema:string -> ?drop_tables:bool -> Table.v list -> unit Stmt.t
   (** [create_schema ~drop_tables ts] are {e multiple} SQL statements to
-      create the tables [ts] if they don't exist. If [drop] is true
+      create the tables [ts] and their indices if they don't exist. If
+      [drop_tables] is true
       (defaults to [false]) the table [ts] are dropped before if they
       exist.
 
       Make sure to use {!Ask_sqlite3.exec} otherwise only the first
       statement gets executed, wrapping the whole thing in
       {!Ask_sqlite3.with_transaction} is a good idea as well. *)
-
-  (** {1:indexes Indexes}
-
-      {b FIXME} Unclear whether this should not be parameters of
-      {!Table.t} values. *)
-
-  type index
-  (** The type for indexes. *)
-
-  val index :
-    ?unique:bool -> ?name:string -> 'a Table.t -> 'a Col.v list -> index
-  (** [index ~name t cs] is an index named [name] (default derived
-      from [t] and [cs]). [unique] adds a UNIQUE constraint if [true]
-      (defaults to [false]) {b FIXME} This is not as expressive
-      as it {{:https://www.sqlite.org/lang_createindex.html}could be}. *)
-
-  val create_index :
-    ?schema:string -> ?if_not_exists:bool -> index -> unit Stmt.t
-  (** [create_index i] is an SQL CREATE INDEX statement for [i]. If
-      [if_not_exists] is [true] (default) the corresponing sentence
-      is added to the create statement. FIXME the default is the
-      converse of SQL maybe that's not a good idea. *)
-
-  val drop_index :
-    ?schema:string -> ?if_exists:bool -> index -> unit Stmt.t
-  (** [drop_index i]is an SQL DROP INDEX statement for [i]. If
-      [if_exist] is [true] (default) not error is reported if the
-      table does not exist. FIXME the default is the
-      converse of SQL maybe that's not a good idea. *)
 
   (** {1:insupd Inserting and updating} *)
 

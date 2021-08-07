@@ -23,6 +23,7 @@
        errorlog}, the backup API (really ? look into VACUUM) and the blob API.}
     {- Have a look again at {{:https://sqlite.org/tclsqlite.html}tcl's binding}
        feature set.}
+    {- [ask-sqlite3] tool, support for indexes}
     {- Low-level statement interface provide support for the sql remainder.}} *)
 
 open Ask

@@ -85,7 +85,8 @@ module Col = struct
   type param = ..
   type param += Primary_key | Unique
   type ('r, 'a) t =
-    { name : string; params : param list; type' : 'a Type.t; proj : ('r -> 'a) }
+    { name : string; params : param list; type' : 'a Type.t;
+      proj : ('r -> 'a) }
 
   type 'r v = V : ('r, 'a) t -> 'r v
   type 'r value = Value : ('r, 'a) t * 'a -> 'r value
@@ -209,12 +210,22 @@ module Row = struct
 end
 
 module Table = struct
-  type param = ..
-  type 'a t = { name : string; params : param list; row : 'a Row.t Lazy.t }
-  type v = V : 'a t -> v
-  type param +=
-  | Primary_key : 'r Col.v list -> param
-  | Foreign_key : 'r Col.v list * ('a t * 'a Col.v list) -> param
+  type 'r param = ..
+  type 'r t = { name : string; params : 'r param list; row : 'r Row.t Lazy.t }
+  type v = V : 'r t -> v
+
+  module Index = struct
+    type 'r t = { unique : bool; name : string option; cols : 'r Col.v list }
+    let v ?(unique = false) ?name cols = { unique; name; cols }
+    let unique i = i.unique
+    let name i = i.name
+    let cols i = i.cols
+  end
+
+  type 'r param +=
+  | Primary_key : 'r Col.v list -> 'r param
+  | Foreign_key : 'r Col.v list * ('a t * 'a Col.v list) -> 'r param
+  | Index : 'r Index.t -> 'r param
   | Sql of string
   | Sql_constraint of string
 
@@ -230,6 +241,10 @@ module Table = struct
         not (List.exists (fun (Col.V i) -> Col.equal_name i c) icols)
       in
       List.filter keep (Row.cols (Lazy.force t.row))
+
+  let indexes t =
+    let find_index = function Index i -> Some i | _ -> None in
+    List.filter_map find_index t.params
 end
 
 module Askt = struct
@@ -642,54 +657,51 @@ module Sql = struct
     in
     Stmt.(func sql @@ unit)
 
-  let create_schema ?schema ?(drop_tables = false) ts =
-    let gen_drop (Table.V t) = Stmt.src (drop_table ?schema t) in
-    let gen_table (Table.V t) = Stmt.src (create_table ?schema t) in
-    let drops = if drop_tables then List.map gen_drop ts else [] in
-    let creates = List.map gen_table ts in
-    let sql = String.concat "\n" (drops @ creates) in
-    Stmt.(func sql @@ unit)
-
-  (* indexes *)
-
-  type index =
-    { unique : bool;
-      name : string;
-      table : string;
-      cols : string list; }
-
-  let index ?(unique = false) ?name t cols =
-    let table = Table.name t in
-    let cols = List.map (fun (Col.V c) -> Col.name c) cols in
-    let name = match name with
-    | Some n -> n
-    | None -> String.concat "_" (table :: cols)
+  let index_name ?schema t i =
+    let name = match Table.Index.name i with
+    | Some name -> name
+    | None ->
+        let cn (Col.V c) = Col.name c in
+        String.concat "_" (Table.name t :: List.map cn (Table.Index.cols i))
     in
-    { unique; name; table; cols }
+    match schema with
+    | None -> id name | Some s -> Fmt.str "%s.%s" (id s) (id name)
 
-  let create_index ?schema ?(if_not_exists = true) i =
+  let create_index ?schema ?(if_not_exists = true) t i =
     let sql =
-      let unique = if i.unique then " UNIQUE" else "" in
+      let unique = if Table.Index.unique i then " UNIQUE" else "" in
       let if_not_exists = if if_not_exists then " IF NOT EXISTS" else "" in
-      let name = match schema with
-      | None -> id i.name | Some s -> Fmt.str "%s.%s" (id s) (id i.name)
-      in
-      let cols = List.map id i.cols in
+      let name = index_name ?schema t i in
+      let cols = List.map (fun (Col.V c) -> id (Col.name c)) i.cols in
       let pp_sep ppf () = Fmt.pf ppf ",@," in
       Fmt.str "@[<v2>CREATE%s INDEX%s %s ON %s @[<1>(%a)@];@]"
-        unique if_not_exists name (id i.table)
+        unique if_not_exists name (in_schema ?schema t)
         Fmt.(list ~sep:pp_sep string) cols
     in
     Stmt.(func sql @@ unit)
 
-  let drop_index ?schema ?(if_exists = true) i =
+  let drop_index ?schema ?(if_exists = true) t i =
     let sql =
       let if_exists = if if_exists then " IF EXISTS" else "" in
-      let name = match schema with
-      | None -> id i.name | Some s -> Fmt.str "%s.%s" (id s) (id i.name)
-      in
+      let name = index_name ?schema t i in
       Fmt.str "DROP INDEX%s %s;" if_exists name
     in
+    Stmt.(func sql @@ unit)
+
+  let create_schema ?schema ?(drop_tables = false) ts =
+    let gen_drop (Table.V t) =
+      let drop_index t i = Stmt.src (drop_index ?schema t i) in
+      let indexes = List.map (drop_index t) (Table.indexes t) in
+      indexes @ [Stmt.src (drop_table ?schema t)]
+    in
+    let gen_table (Table.V t) =
+      let gen_index t i = Stmt.src (create_index ?schema t i) in
+      let indexes = List.map (gen_index t) (Table.indexes t) in
+      Stmt.src (create_table ?schema t) :: indexes
+    in
+    let drops = if drop_tables then List.concat_map gen_drop ts else [] in
+    let creates = List.concat_map gen_table ts in
+    let sql = String.concat "\n" (drops @ creates) in
     Stmt.(func sql @@ unit)
 
   let insert_row_into ?schema ?(ignore = []) t =
