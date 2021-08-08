@@ -65,9 +65,11 @@ let rec eval_div : type t. t Type.t -> t -> t -> t = function
 | Type.Int -> Int.div | Type.Int64 -> Int64.div | Type.Float -> Float.div
 | _ -> unknown_extension "division"
 
-let eval_unop : type a r. (a, r) Askt.unop -> a -> r =
+open Ask_private
+
+let eval_unop : type a r. (a, r) unop -> a -> r =
 fun op x -> match op with
-| Askt.Neg t ->
+| Neg t ->
     begin match t with
     | Type.Bool -> Bool.not x
     | Type.Int -> Int.neg x
@@ -77,31 +79,31 @@ fun op x -> match op with
     end
 | _ -> unknown_extension "unary operation"
 
-let eval_binop : type a r. (a, r) Askt.binop -> a -> a -> r =
+let eval_binop : type a r. (a, r) binop -> a -> a -> r =
 fun op x y -> match op with
-| Askt.Arith (op, t) ->
+| Arith (op, t) ->
     begin match op with
-    | Askt.Add -> eval_add t x y
-    | Askt.Sub -> eval_sub t x y
-    | Askt.Mul -> eval_mul t x y
-    | Askt.Div -> eval_div t x y
+    | Add -> eval_add t x y
+    | Sub -> eval_sub t x y
+    | Mul -> eval_mul t x y
+    | Div -> eval_div t x y
     end
-| Askt.Cmp (op, t) ->
+| Cmp (op, t) ->
     begin match op with
-    | Askt.Eq -> x = y
-    | Askt.Neq -> x <> y
-    | Askt.Lt -> x < y
-    | Askt.Leq -> x <= y
-    | Askt.Gt -> x > y
-    | Askt.Geq -> x >= y
+    | Eq -> x = y
+    | Neq -> x <> y
+    | Lt -> x < y
+    | Leq -> x <= y
+    | Gt -> x > y
+    | Geq -> x >= y
     end
-| Askt.And -> Bool.( && ) x y
-| Askt.Or -> Bool.( || ) x y
+| And -> Bool.( && ) x y
+| Or -> Bool.( || ) x y
 | _ -> unknown_extension "binary operation"
 
-let rec eval_value : type r. Table_env.t -> r Askt.value -> r =
+let rec eval_value : type r. Table_env.t -> r value -> r =
 fun e v -> match v with
-| Askt.Const (_, v) -> v
+| Const (_, v) -> v
 | Unop (op, v) -> eval_unop op (eval_value e v)
 | Binop (op, x, y) -> eval_binop op (eval_value e x) (eval_value e y)
 | Proj (r, c) -> (Ask.Col.proj c) (eval_value e r)
@@ -110,9 +112,9 @@ fun e v -> match v with
 | Exists b -> eval_bag e b <> []
 | Var n -> unexpected_variable n
 
-and eval_bag : type r e. Table_env.t -> (r, e) Askt.bag -> r list =
+and eval_bag : type r e. Table_env.t -> (r, e) bag -> r list =
 fun e b -> match b with
-| Askt.Table t ->
+| Table t ->
     begin match Table_env.find t e with
     | None -> undefined (Table.V t)
     | Some l -> l
@@ -126,7 +128,7 @@ fun e b -> match b with
     list_concat_map yield l
 | Where (c, b) -> if eval_value e c then eval_bag e b else []
 
-let of_bag e b = try Ok (eval_bag e (Askt.bag_to_bag b)) with
+let of_bag e b = try Ok (eval_bag e (bag_to_bag b)) with
 | Error k -> Error k
 
 (*---------------------------------------------------------------------------

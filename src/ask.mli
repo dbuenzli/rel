@@ -3,7 +3,15 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-(** Relational databases. *)
+(** Relational databases.
+
+    Open one of these modules (FIXME not yet sure):
+    {ul
+    {- Open {!Ask.Std}, to describe your database and its SQL
+       interaction.}
+    {- Open {!Ask.Syntax}, to define bags using the embedded query language.
+       Note that this redefines some standard library modules like [Bool]
+       in your scope.}} *)
 
 (** {1:schema Schema description} *)
 
@@ -310,6 +318,34 @@ module Row : sig
       If [header] is [true], starts by formatting the headers of [r]. *)
 end
 
+(** Table index descriptions.
+
+    {b FIXME} This is not as expressive
+    as it {{:https://www.sqlite.org/syntax/indexed-column.html}could be}. *)
+module Index : sig
+
+  (** {1:indexes Indexes} *)
+
+  type 'r t
+  (** The type for indexes on a table with rows represented by ['r]. *)
+
+  val v : ?unique:bool -> ?name:string -> 'r Col.v list -> 'r t
+  (** [index cols ~name ~unique] is an index named [name] on columns
+      [col].  If [name] is [None] a name is derived at index
+      creation time from the table and column names. If [unique] is
+      [true] (defaults to [false]) a [UNIQUE] constraint is
+      added. *)
+
+  val unique : 'r t -> bool
+  (** [unique i] is [true] if the values in index [i] must be unique. *)
+
+  val name : 'r t -> string option
+  (** [name i] is the name of [i]. *)
+
+  val cols : 'r t -> 'r Col.v list
+  (** [cols i] are the columns indexed by [i]. *)
+end
+
 (** Table descriptions.
 
     Tables simply give a name to {{!Row}rows}. *)
@@ -343,70 +379,44 @@ module Table : sig
   (** [cols t] is {!Row.val-cols}[ (row t)] with columns in [ignore] ommited
       from the result. *)
 
-  (** {1:indexes Indexes} *)
-
-  (** Table index specifications.
-
-      {b FIXME} This is not as expressive
-      as it {{:https://www.sqlite.org/syntax/indexed-column.html}could be}. *)
-  module Index : sig
-
-    (** {1:indexes Indexes} *)
-
-    type 'r t
-    (** The type for table indexes on a tables with rows represented
-        by ['r]. *)
-
-    val v : ?unique:bool -> ?name:string -> 'r Col.v list -> 'r t
-    (** [index cols ~name ~unique] is an index named [name] on columns
-        [col].  If [name] is [None] a name is derived at index
-        creation time from the table and column names. If [unique] is
-        [true] (defaults to [false]) a [UNIQUE] constraint is
-        added. *)
-
-    val unique : 'r t -> bool
-    (** [unique i] is [true] if the values in index [i] must be unique. *)
-
-    val name : 'r t -> string option
-    (** [name i] is the name of [i]. *)
-
-    val cols : 'r t -> 'r Col.v list
-    (** [cols i] are indexed columns of [i]. *)
-  end
-
-  val indexes : 'r t -> 'r Index.t list
-  (** [indexes t] are the indexes of table [t] found in the table's
-      {{!val-params}parameters}. *)
-
   (** {1:params Parameters} *)
 
   type 'r param +=
   | Primary_key : 'r Col.v list -> 'r param
   | Foreign_key : 'r Col.v list * ('s t * 's Col.v list) -> 'r param
-  | Index : 'r Index.t -> 'r param
-  | Sql of string
-  | Sql_constraint of string (** *)
+  | Index : 'r Index.t -> 'r param (** *)
   (** Common table parameters.
       {ul
       {- [Primary_key cols], declares a table primary key on columns [cols]}
       {- [Foreign_key (cols, (t, cols'))] declares a foreign key
          between [cols] and the columns cols' of [t]. Can be repeated.}
-      {- [Index] is an index specification for the table.}
-      {- [Sql sql] is the complete {{:https://sqlite.org/lang_createtable.html}
-         CREATE TABLE} statement. All other
-         parameters are ignored, you are in control.}
-      {- [Sql_constraint sql] is an {{:https://sqlite.org/syntax/table-constraint.html}SQL table constraint} added at the end of the table definition.
-         Can be repeated.}} *)
+      {- [Index] is an index specification for the table.}} *)
+
+  val indexes : 'r t -> 'r Index.t list
+  (** [indexes t] are the indexes of table [t] found in the table's
+      {{!val-params}parameters}. *)
+
+  (** {1:col_params Column parameters} *)
+
+  type Col.param +=
+  | Col_reference : 'r t * ('r, 'a) Col.t -> Col.param (** *)
+  (** Additional column parameteres.
+      {ul
+      {- [Col_reference (t, c)] declares that a column references
+         column [c] in [t].}} *)
 end
 
 (** {1:query_lang Query language}
 
     The expressiveness of the query language is currently limited.
     Note that you can always switch to raw SQL statements and
-    {{!Sql.Stmt}type} them for execution. *)
+    {{!Sql.Stmt}type} them for execution. To define queries
+    you should open {!Ask.Syntax} which has more definitions and
+    operator overloading. *)
 
 type 'a value
-(** The type for representing values of type ['a]. *)
+(** The type for representing values of type ['a]. FIXME
+    depending on the final open strategy put that in its own module. *)
 
   (** Bags specification language.
 
@@ -470,347 +480,6 @@ module Bag : sig
   val row : ('a -> 'r) -> ('a -> 'r) value
   val inj : 'a -> 'a value
   val tuple : ('a -> 'b) value -> 'a value -> 'b value
-end
-
-(** Query syntax support.
-
-    Open this module to streamline query definition. *)
-module Syntax : sig
-
-  module Bag = Bag
-
-  (** Booleans. *)
-  module Bool : sig
-
-    val v : bool -> bool value
-    (** [v b] is the literal boolean [b]. *)
-
-    val true' : bool value
-    (** [true'] is [v true]. *)
-
-    val false' : bool value
-    (** [false'] is [v false]. *)
-
-    val ( = ) : bool value -> bool value -> bool value
-    (** [x = y] is boolean equality. *)
-
-    val ( && ) : bool value -> bool value -> bool value
-    (** [x && y] is logical conjunction. *)
-
-    val ( || ) : bool value -> bool value -> bool value
-    (** [x || y] is logical disjunction. *)
-
-    val not : bool value -> bool value
-    (** [not x] is the logical negation of [x]. *)
-  end
-
-  (** Integers. *)
-  module Int : sig
-
-    val v : int -> int value
-    (** [v i] is the literal integer [i]. *)
-
-    val zero : int value
-    (** [zero] is [v 0]. *)
-
-    val one : int value
-    (** [one] is [v 1]. *)
-
-    (** {1:cmp Predicates and comparisons} *)
-
-    val ( = ) : int value -> int value -> bool value
-    (** [x = y] is integer equality. *)
-
-    val ( <> ) : int value -> int value -> bool value
-    (** [x <> y] is integer inequality. *)
-
-    val ( < ) : int value -> int value -> bool value
-    (** [x < y] is true iff [x] is stricly lower than [y]. *)
-
-    val ( <= ) : int value -> int value -> bool value
-    (** [x <= y] is true iff [x] is lower or equal than [y]. *)
-
-    val ( > ) : int value -> int value -> bool value
-    (** [x < y] is true iff [x] is stricly lower than [y]. *)
-
-    val ( >= ) : int value -> int value -> bool value
-    (** [x >= y] is true iff [x] is greater or equal than [y]. *)
-
-    (** {1:arith Arithmetic operators} *)
-
-    val ( ~- ) : int value -> int value
-    (** [~-x] is the negation of [x]. *)
-
-    val ( + ) : int value -> int value -> int value
-    (** [x + y] is integer addition. *)
-
-    val ( - ) : int value -> int value -> int value
-    (** [x + y] is integer subtraction. *)
-
-    val ( * ) : int value -> int value -> int value
-    (** [x * y] is integer addition. *)
-
-    val ( / ) : int value -> int value -> int value
-    (** [x / y] is integer division. *)
-  end
-
-  module Int64 : sig
-
-    val v : int64 -> int64 value
-    (** [v i] is the literal integer [i]. *)
-
-    val zero : int64 value
-    (** [zero] is [v 0L]. *)
-
-    val one : int64 value
-    (** [one] is [v 1L]. *)
-
-    (** {1:cmp Predicates and comparisons} *)
-
-    val ( = ) : int64 value -> int64 value -> bool value
-    (** [x = y] is integer equality. *)
-
-    (** {1:arith Arithmetic operators} *)
-
-    val ( ~- ) : int64 value -> int64 value
-    (** [~-x] is the negation of [x]. *)
-
-    val ( + ) : int64 value -> int64 value -> int64 value
-    (** [x + y] is int64eger addition. *)
-
-    val ( - ) : int64 value -> int64 value -> int64 value
-    (** [x + y] is int64eger subtraction. *)
-
-    val ( * ) : int64 value -> int64 value -> int64 value
-    (** [x * y] is int64eger addition. *)
-
-    val ( / ) : int64 value -> int64 value -> int64 value
-    (** [x / y] is integer division. *)
-  end
-
-  module Float : sig
-
-    val v : float -> float value
-    (** [v x] is the literal float [x]. *)
-
-    val zero : float value
-    (** [zero] is [v 0.0]. *)
-
-    val one : float value
-    (** [one] is [v 1.0]. *)
-
-    (** {1:cmp Predicates and comparisons} *)
-
-    val ( = ) : float value -> float value -> bool value
-    (** [x = y] is floating point equality. *)
-
-    (** {1:arith Arithmetic operators} *)
-
-    val ( ~-. ) : float value -> float value
-    (** [~-.x] is the floating point negation of [x]. *)
-
-    val ( +. ) : float value -> float value -> float value
-    (** [x +. y] is floating point addition. *)
-
-    val ( -. ) : float value -> float value -> float value
-    (** [x +. y] is floating point subtraction. *)
-
-    val ( *. ) : float value -> float value -> float value
-    (** [x *. y] is floating point addition. *)
-
-    val ( /. ) : float value -> float value -> float value
-    (** [x /. y] is floating point division. *)
-  end
-
-  (** Strings. *)
-  module String : sig
-
-    val v : string -> string value
-    (** [v s] is the literal string [s]. *)
-
-    val empty : string value
-    (** [empty] is [v ""]. *)
-
-    val ( = ) : string value -> string value -> bool value
-    (** [x = y] is binary string equality. *)
-  end
-
-  (** Option. *)
-  module Option : sig
-
-    val v : 'a Type.t -> 'a option -> 'a option value
-    (** [v t o] is an option of type [t]. *)
-
-    val none : 'a Type.t -> 'a option value
-    (** [none t] is [v t None]. *)
-
-    val some : 'a Type.t -> 'a -> 'a option value
-    (** [some t v] is [v t (Some v)]. *)
-
-    val is_none : 'a option value -> bool value
-    val is_some : 'a option value -> bool value
-    val get : 'a option value -> 'a value
-
-    val has_value :
-      eq:('a value -> 'a value -> bool value) ->
-      'a value -> 'a option value -> bool value
-
-    val equal :
-      eq:('a value -> 'a value -> bool value) ->
-      'a option value -> 'a option value -> bool value
-  end
-
-  (** {1:boolops Boolean operators} *)
-
-  val ( && ) : bool value -> bool value -> bool value
-  (** [( && )] is {!Bool.( && )}. *)
-
-  val ( || ) : bool value -> bool value -> bool value
-  (** [( || )] is {!Bool.( || )}. *)
-
-  val not : bool value -> bool value
-  (** [not] is {!Bool.not}. *)
-
-  (** {1:intops Integer operators} *)
-
-  val ( ~- ) : int value -> int value
-    (** [~-x] is the negation of [x]. *)
-
-  val ( + ) : int value -> int value -> int value
-  (** [x + y] is integer addition. *)
-
-  val ( - ) : int value -> int value -> int value
-  (** [x + y] is integer subtraction. *)
-
-  val ( * ) : int value -> int value -> int value
-  (** [x * y] is integer addition. *)
-
-  val ( / ) : int value -> int value -> int value
-  (** [x / y] is integer division. *)
-
-  (** {1:floatops Integer operators} *)
-
-  val ( ~-. ) : float value -> float value
-  (** [~-.x] is the floating point negation of [x]. *)
-
-  val ( +. ) : float value -> float value -> float value
-  (** [x +. y] is floating point addition. *)
-
-  val ( -. ) : float value -> float value -> float value
-  (** [x +. y] is floating point subtraction. *)
-
-  val ( *. ) : float value -> float value -> float value
-  (** [x *. y] is floating point addition. *)
-
-  val ( /. ) : float value -> float value -> float value
-  (** [x *. y] is floating point division. *)
-
-  (** {1:row Row operators} *)
-
-  val ( $ ) : ('a -> 'b) value -> 'a value -> 'b value
-  (** [f $ v] applies [v] to row constructor [f]. *)
-
-  val ( #. ) : 'r value -> ('r, 'a) Col.t -> 'a value
-  (** [r #. c] projects [r] on column [c]. *)
-
-  (** {1:bag Bag operators} *)
-
-  val ( ++ ) : ('a, 'e) Bag.t -> ('a, 'e) Bag.t -> ('a, 'e) Bag.t
-  (** [b0 ++ b1] is the union of bag [b0] and bag [b1]. *)
-
-  (** {1:enum Enumeration} *)
-
-  val ( let* ) :
-    ('a , _) Bag.t -> ('a value -> ('b, 'e) Bag.t) -> ('b, 'e) Bag.t
-  (** [let*] binds bag values for {!foreach}. *)
-end
-
-(** Low level representations.
-
-    For the language extender and backend writer. *)
-module Askt : sig
-
-  (** {1:rows Rows} *)
-
-  type ('r, 'a) prod =
-  | Unit : 'a -> ('r, 'a) prod
-  | Prod : ('r, 'a -> 'b) prod * ('r, 'a) Col.t -> ('r, 'b) prod (** *)
-  | Cat : ('r, 'a -> 'b) prod * ('r -> 'a) * ('a, 'a) prod -> ('r, 'b) prod
-  (** *)
-  (** The type for products. See {!type:Row.prod}. *)
-
-  val prod_of_prod : ('r, 'a) Row.prod -> ('r, 'a) prod
-  (** [prod_of_prod p] is the representation  of [p]. *)
-
-  val prod_to_prod : ('r, 'a) prod -> ('r, 'a) Row.prod
-  (** [prod_to_prod p] is the representee  of [p]. *)
-
-  (** {1:ops Operators} *)
-
-  type ('a, 'b) unop = ..
-  (** The type for unary operations on base values of type ['a] returning
-      values of type ['b]. *)
-
-  type ('a, 'b) unop +=
-  | Neg : 'a Type.t -> ('a, 'a) unop (** Negation. *)
-  (** Predefined unary operations. *)
-
-  type ('a, 'b) binop = ..
-  (** The type for binary operations on base values of type ['a] returning
-      values of type ['b]. *)
-
-  type arith = Add | Sub | Div | Mul
-  (** The type for arithmetic operators. *)
-
-  type cmp = Eq | Neq | Lt | Leq | Gt | Geq
-  (** The type for comparison operators. *)
-
-  type ('a, 'b) binop +=
-  | Arith : arith * 'a Type.t -> ('a, 'a) binop
-  | Cmp : cmp * 'a Type.t -> ('a, bool) binop
-  | And : (bool, bool) binop
-  | Or : (bool, bool) binop (** *)
-  (** Predefined binary operations. *)
-
-  (** {1:vals_and_bags Values and bags} *)
-
-  type 'a value' = 'a value
-  (** See {!Askt.value}. *)
-
-  type 'a value =
-  | Var : string -> 'a value (* only for compiling *)
-  | Const : 'a Type.t * 'a -> 'a value
-  | Unop : ('a, 'b) unop * 'a value -> 'b value
-  | Binop : ('a, 'b) binop * 'a value * 'a value -> 'b value
-  | Proj : 'b value * ('b, 'a) Col.t -> 'a value
-  | Row : 'a -> 'a value
-  | Tuple : ('a -> 'b) value * 'a value -> 'b value
-  | Exists : ('b, 'e) bag -> bool value (** *)
-  (** The type for values of type ['a]. This represents an expression
-      computing a value of type ['a]. *)
-
-  and ('a, 'e) bag =
-  | Table : 'a Table.t -> ('a, 'e) bag
-  | Empty : ('a, 'e) bag
-  | Yield : 'a value -> ('a, 'e) bag
-  | Union : ('a, 'e) bag * ('a, 'e) bag -> ('a, 'e) bag
-  | Foreach : ('a, _) bag * ('a value -> ('b, 'e) bag) -> ('b, 'e) bag
-  | Where : bool value * ('a, 'e) bag -> ('a, 'e) bag (** *)
-  (** The type for bags. See {!Bag.t}. *)
-
-  val value_to_value : 'a value' -> 'a value
-  (** [value_to_value v] is the repressentation of [v]. *)
-
-  val bag_to_bag : ('a, 'e) Bag.t -> ('a, 'e) bag
-  (** [bag_to_bag b] is the representation of [b]. *)
-
-  (** {1:fmt Formatters} *)
-
-  val pp_value : Format.formatter -> 'a value -> unit
-  (** [pp_value] formats values. *)
-
-  val pp_bag : Format.formatter -> ('a, 'e) bag -> unit
-  (** [pp_bag] formats bags. *)
 end
 
 (** {1:sql SQL} *)
@@ -928,20 +597,29 @@ module Sql : sig
 
   (** {1:schema Schema definition} *)
 
+  type 'a Table.param +=
+  | Table of string
+  | Table_constraint of string
+  (** Additional table parameters. See also {!Table.param}.
+      {ul
+      {- [Sql sql] is the complete {{:https://sqlite.org/lang_createtable.html}
+         CREATE TABLE} statement. All other
+         parameters are ignored, you are in control.}
+      {- [Sql_constraint sql] is an
+         {{:https://sqlite.org/syntax/table-constraint.html}
+         SQL table constraint} added at the end of the table definition.
+         Can be repeated.}} *)
+
   type Col.param +=
   | Col of string
   | Col_constraint of string
-  | Col_references : 'r Table.t * ('r, 'a) Col.t -> Col.param (** *)
   (** The type for column parameters. See also {!Col.param}.
       {ul
       {- [Col sql] is the full SQL column definition between the name
          and the comma (includes the type). All other parameters
          are ignored, you are in control.}
       {- [Col_constraint sql] appends [sql]
-         at the end of the column definition. Can be repeated.}
-      {- [Col_references (t, c)] declares that the column references
-         column [c] in [t].}} *)
-
+         at the end of the column definition. Can be repeated.}} *)
   val drop_table :
     ?schema:string -> ?if_exists:bool -> 'a Table.t -> unit Stmt.t
   (** [drop_table ~if_exist ~schema t] is an SQL DROP TABLE statement to
@@ -958,7 +636,7 @@ module Sql : sig
       converse of SQL maybe that's not a good idea. *)
 
   val create_index :
-    ?schema:string -> ?if_not_exists:bool -> 'a Table.t -> 'a Table.Index.t ->
+    ?schema:string -> ?if_not_exists:bool -> 'a Table.t -> 'a Index.t ->
     unit Stmt.t
   (** [create_index t i] is an SQL CREATE INDEX statement for index [i]
       on table [t]. If [if_not_exists] is [true] (default) the corresponing
@@ -966,7 +644,7 @@ module Sql : sig
       converse of SQL maybe that's not a good idea. *)
 
   val drop_index :
-    ?schema:string -> ?if_exists:bool -> 'a Table.t -> 'a Table.Index.t ->
+    ?schema:string -> ?if_exists:bool -> 'a Table.t -> 'a Index.t ->
     unit Stmt.t
   (** [drop_index t i] is an SQL DROP INDEX statement for index [i] on
       table [t]. If [if_exist] is [true] (default) not error is
@@ -985,45 +663,32 @@ module Sql : sig
       statement gets executed, wrapping the whole thing in
       {!Ask_sqlite3.with_transaction} is a good idea as well. *)
 
-  (** {1:insupd Inserting and updating} *)
+  (** {1:insupd Inserting, updating and deleting} *)
 
-  val insert_row_into :
+  val insert_into :
     ?schema:string -> ?ignore:'r Col.v list -> 'r Table.t -> ('r -> unit Stmt.t)
-  (** [insert_row_into ~ignore t] is an SQL INSERT INTO statement
+  (** [insert_into ~ignore t] is an SQL INSERT INTO statement
       which inserts i [t] values draw from an value values drawn from
       a provided OCaml table row. Columns mentioned in [col] of the
       row are ignored for the insertion. *)
 
-  (** {1:bandaid Band aid}
-
-      Remove these things. The [where] part should be fully integrated
-      with the query language. *)
-
-  val update_rows :
-    ?schema:string -> 'r Table.t -> 'r Col.value list ->
+  val update :
+    ?schema:string -> 'r Table.t -> set:'r Col.value list ->
     where:'r Col.value list -> unit Stmt.t
-  (** [update_cols t cols ~where] updates columns values [col]
-      of the rows of [t] where columns have all the values in [where] (AND). *)
+  (** [update_cols t ~set:cols ~where] is an SQL UPDATE statement
+      which updates columns values [cols] of the rows of [t] where
+      columns have all the values in [where] (AND).  {b FIXME.} The
+      [where] should become (['r Bag.t -> bool value]). *)
 
-  val delete_rows :
+  val delete_from :
     ?schema:string -> 'r Table.t -> where:'r Col.value list -> unit Stmt.t
-  (** [delete_rows t ~where] deletes rows where columns have all the
-      values in [where] (AND). *)
-
-  val table_rows :
-    ?schema:string -> ?where:string -> 'r Table.t ->
-    ('r Stmt.t Stmt.func -> 'ret Stmt.func) ->
-    'ret
-  (** [select_rows t func ~where] are the rows of table [t]. [func row]
-      can be used to bind parameters of [where] (defaults to ["TRUE"]).
-      For example:
-      {[
-      select_rows t Stmt.(func row -> int @-> row) ~where:"id = ?1"
-      ]} *)
+  (** [delete_from t ~where] is an SQL DELETE FROM statement which deletes
+      rows where columns have all the values in [where] (AND).
+      {b FIXME.} The [where] should become (['r Bag.t -> bool value]). *)
 
   (** {1:bag Bags}
 
-      {b FIXME.} Can't we get of the ['a Row.t] argument in [of_bag].
+      {b FIXME.} Can't we get rid of the ['a Row.t] argument in [of_bag].
       Related to the comment of specializing yield on [Row.t]. Maybe
       the {!Bag.t} combinator should take a row rather than an arbitrary
       function. *)
@@ -1031,6 +696,7 @@ module Sql : sig
   val of_bag : 'a Row.t -> ('a, 'b) Bag.t -> 'a Stmt.t
   val of_bag' : 'a Table.t -> ('a, 'b) Bag.t -> 'a Stmt.t
 
+  (** FIXME can't we merge that into {!Stmt} ? *)
   module Bag : sig
 
     type ('a, 'f, 'r) func
@@ -1054,7 +720,399 @@ module Sql : sig
     val normalize : ('a, 'e) Bag.t -> ('a, 'e) Bag.t
   end
 
+(** {1:todo TODO multibackend SQL support}
+
+      The current interface won't do it for multiple backends. We need
+      to be able to specify the SQL dialect at some point. The
+      questions is where to do it so that it remains efficient for
+      backend prepared statement caches but convenient for
+      clients.
+
+      One idea is to back {!Sql.Stmt.t} by an SQL AST rather
+      than by an constant (sqlite3) SQL string as we have now (!Sql.Stmt.src).
+      Backends would then generate the SQL from the AST, the nice
+      thing is that except for actual execution there would be no need
+      for backend abstraction for statement definition (no additional
+      parameter or functorization).
+
+      Points to consider.
+
+      {ul
+      {- Cost of translating the AST to SQL}
+      {- Cost for statement cache (AST comparison vs string comparison).
+         We can still try to work the generated SQL string at that level but
+         ideally we'd like to eschew generation.}
+      {- Can we maybe cache the translation in a side field in the AST ?
+         Concurrency issues; but it's only write and read, not updated,
+         maybe not that important, we may simply do more work.}
+      {- Internally we already have an SQL SELECT ast for bag compilation.
+         That's likely a starting point.}} *)
 end
+
+(** {1:opens Modules to open} *)
+
+(** Standard modules to describe your database and SQL requests.  *)
+module Std : sig
+  module Type = Type
+  module Col = Col
+  module Row = Row
+  module Index = Index
+  module Table = Table
+  module Bag = Bag
+  module Sql = Sql
+end
+
+(** Query syntax support.
+
+    Open this module to streamline query definition. *)
+module Syntax : sig
+  module Type = Type
+  module Col = Col
+  module Row = Row
+  module Index = Index
+  module Table = Table
+  module Bag = Bag
+  module Sql = Sql
+
+  (** Booleans. *)
+  module Bool : sig
+
+    val v : bool -> bool value
+    (** [v b] is the literal boolean [b]. *)
+
+    val true' : bool value
+    (** [true'] is [v true]. *)
+
+    val false' : bool value
+    (** [false'] is [v false]. *)
+
+    val ( = ) : bool value -> bool value -> bool value
+    (** [x = y] is boolean equality. *)
+
+    val ( && ) : bool value -> bool value -> bool value
+    (** [x && y] is logical conjunction. *)
+
+    val ( || ) : bool value -> bool value -> bool value
+    (** [x || y] is logical disjunction. *)
+
+    val not : bool value -> bool value
+    (** [not x] is the logical negation of [x]. *)
+  end
+
+  (** Integers. *)
+  module Int : sig
+
+    val v : int -> int value
+    (** [v i] is the literal integer [i]. *)
+
+    val zero : int value
+    (** [zero] is [v 0]. *)
+
+    val one : int value
+    (** [one] is [v 1]. *)
+
+    (** {1:cmp Predicates and comparisons} *)
+
+    val ( = ) : int value -> int value -> bool value
+    (** [x = y] is integer equality. *)
+
+    val ( <> ) : int value -> int value -> bool value
+    (** [x <> y] is integer inequality. *)
+
+    val ( < ) : int value -> int value -> bool value
+    (** [x < y] is true iff [x] is stricly lower than [y]. *)
+
+    val ( <= ) : int value -> int value -> bool value
+    (** [x <= y] is true iff [x] is lower or equal than [y]. *)
+
+    val ( > ) : int value -> int value -> bool value
+    (** [x < y] is true iff [x] is stricly lower than [y]. *)
+
+    val ( >= ) : int value -> int value -> bool value
+    (** [x >= y] is true iff [x] is greater or equal than [y]. *)
+
+    (** {1:arith Arithmetic operators} *)
+
+    val ( ~- ) : int value -> int value
+    (** [~-x] is the negation of [x]. *)
+
+    val ( + ) : int value -> int value -> int value
+    (** [x + y] is integer addition. *)
+
+    val ( - ) : int value -> int value -> int value
+    (** [x + y] is integer subtraction. *)
+
+    val ( * ) : int value -> int value -> int value
+    (** [x * y] is integer addition. *)
+
+    val ( / ) : int value -> int value -> int value
+    (** [x / y] is integer division. *)
+  end
+
+  (** 64-bit integers. *)
+  module Int64 : sig
+
+    val v : int64 -> int64 value
+    (** [v i] is the literal integer [i]. *)
+
+    val zero : int64 value
+    (** [zero] is [v 0L]. *)
+
+    val one : int64 value
+    (** [one] is [v 1L]. *)
+
+    (** {1:cmp Predicates and comparisons} *)
+
+    val ( = ) : int64 value -> int64 value -> bool value
+    (** [x = y] is integer equality. *)
+
+    (** {1:arith Arithmetic operators} *)
+
+    val ( ~- ) : int64 value -> int64 value
+    (** [~-x] is the negation of [x]. *)
+
+    val ( + ) : int64 value -> int64 value -> int64 value
+    (** [x + y] is int64eger addition. *)
+
+    val ( - ) : int64 value -> int64 value -> int64 value
+    (** [x + y] is int64eger subtraction. *)
+
+    val ( * ) : int64 value -> int64 value -> int64 value
+    (** [x * y] is int64eger addition. *)
+
+    val ( / ) : int64 value -> int64 value -> int64 value
+    (** [x / y] is integer division. *)
+  end
+
+  (** Floating point numbers. *)
+  module Float : sig
+
+    val v : float -> float value
+    (** [v x] is the literal float [x]. *)
+
+    val zero : float value
+    (** [zero] is [v 0.0]. *)
+
+    val one : float value
+    (** [one] is [v 1.0]. *)
+
+    (** {1:cmp Predicates and comparisons} *)
+
+    val ( = ) : float value -> float value -> bool value
+    (** [x = y] is floating point equality. *)
+
+    (** {1:arith Arithmetic operators} *)
+
+    val ( ~-. ) : float value -> float value
+    (** [~-.x] is the floating point negation of [x]. *)
+
+    val ( +. ) : float value -> float value -> float value
+    (** [x +. y] is floating point addition. *)
+
+    val ( -. ) : float value -> float value -> float value
+    (** [x +. y] is floating point subtraction. *)
+
+    val ( *. ) : float value -> float value -> float value
+    (** [x *. y] is floating point addition. *)
+
+    val ( /. ) : float value -> float value -> float value
+    (** [x /. y] is floating point division. *)
+  end
+
+  (** Strings. *)
+  module String : sig
+
+    val v : string -> string value
+    (** [v s] is the literal string [s]. *)
+
+    val empty : string value
+    (** [empty] is [v ""]. *)
+
+    val ( = ) : string value -> string value -> bool value
+    (** [x = y] is binary string equality. *)
+  end
+
+  (** Option. *)
+  module Option : sig
+
+    val v : 'a Type.t -> 'a option -> 'a option value
+    (** [v t o] is an option of type [t]. *)
+
+    val none : 'a Type.t -> 'a option value
+    (** [none t] is [v t None]. *)
+
+    val some : 'a Type.t -> 'a -> 'a option value
+    (** [some t v] is [v t (Some v)]. *)
+
+    val is_none : 'a option value -> bool value
+    val is_some : 'a option value -> bool value
+    val get : 'a option value -> 'a value
+
+    val has_value :
+      eq:('a value -> 'a value -> bool value) ->
+      'a value -> 'a option value -> bool value
+
+    val equal :
+      eq:('a value -> 'a value -> bool value) ->
+      'a option value -> 'a option value -> bool value
+  end
+
+  (** {1:boolops Boolean operators} *)
+
+  val ( && ) : bool value -> bool value -> bool value
+  (** [( && )] is {!Bool.( && )}. *)
+
+  val ( || ) : bool value -> bool value -> bool value
+  (** [( || )] is {!Bool.( || )}. *)
+
+  val not : bool value -> bool value
+  (** [not] is {!Bool.not}. *)
+
+  (** {1:intops Integer operators} *)
+
+  val ( ~- ) : int value -> int value
+    (** [~-x] is the negation of [x]. *)
+
+  val ( + ) : int value -> int value -> int value
+  (** [x + y] is integer addition. *)
+
+  val ( - ) : int value -> int value -> int value
+  (** [x + y] is integer subtraction. *)
+
+  val ( * ) : int value -> int value -> int value
+  (** [x * y] is integer addition. *)
+
+  val ( / ) : int value -> int value -> int value
+  (** [x / y] is integer division. *)
+
+  (** {1:floatops Float operators} *)
+
+  val ( ~-. ) : float value -> float value
+  (** [~-.x] is the floating point negation of [x]. *)
+
+  val ( +. ) : float value -> float value -> float value
+  (** [x +. y] is floating point addition. *)
+
+  val ( -. ) : float value -> float value -> float value
+  (** [x +. y] is floating point subtraction. *)
+
+  val ( *. ) : float value -> float value -> float value
+  (** [x *. y] is floating point addition. *)
+
+  val ( /. ) : float value -> float value -> float value
+  (** [x *. y] is floating point division. *)
+
+  (** {1:row Row operators} *)
+
+  val ( $ ) : ('a -> 'b) value -> 'a value -> 'b value
+  (** [f $ v] applies [v] to row constructor [f]. *)
+
+  val ( #. ) : 'r value -> ('r, 'a) Col.t -> 'a value
+  (** [r #. c] projects [r] on column [c]. *)
+
+  (** {1:bag Bag operators} *)
+
+  val ( ++ ) : ('a, 'e) Bag.t -> ('a, 'e) Bag.t -> ('a, 'e) Bag.t
+  (** [b0 ++ b1] is the union of bag [b0] and bag [b1]. *)
+
+  (** {1:enum Enumeration} *)
+
+  val ( let* ) :
+    ('a , _) Bag.t -> ('a value -> ('b, 'e) Bag.t) -> ('b, 'e) Bag.t
+  (** [let*] binds bag values for {!foreach}. *)
+end
+
+(** {1:private Private} *)
+
+(** Low-level private representations.
+
+    For the language extender and backend writer. Subject to change
+    even between minor versions of the library. *)
+module Ask_private : sig
+
+  (** {1:rows Rows} *)
+
+  type ('r, 'a) prod =
+  | Unit : 'a -> ('r, 'a) prod
+  | Prod : ('r, 'a -> 'b) prod * ('r, 'a) Col.t -> ('r, 'b) prod (** *)
+  | Cat : ('r, 'a -> 'b) prod * ('r -> 'a) * ('a, 'a) prod -> ('r, 'b) prod
+  (** *)
+  (** The type for products. See {!type:Row.prod}. *)
+
+  val prod_of_prod : ('r, 'a) Row.prod -> ('r, 'a) prod
+  (** [prod_of_prod p] is the representation  of [p]. *)
+
+  val prod_to_prod : ('r, 'a) prod -> ('r, 'a) Row.prod
+  (** [prod_to_prod p] is the representee  of [p]. *)
+
+  (** {1:ops Operators} *)
+
+  type ('a, 'b) unop = ..
+  (** The type for unary operations on base values of type ['a] returning
+      values of type ['b]. *)
+
+  type ('a, 'b) unop +=
+  | Neg : 'a Type.t -> ('a, 'a) unop (** Negation. *)
+  (** Predefined unary operations. *)
+
+  type ('a, 'b) binop = ..
+  (** The type for binary operations on base values of type ['a] returning
+      values of type ['b]. *)
+
+  type arith = Add | Sub | Div | Mul
+  (** The type for arithmetic operators. *)
+
+  type cmp = Eq | Neq | Lt | Leq | Gt | Geq
+  (** The type for comparison operators. *)
+
+  type ('a, 'b) binop +=
+  | Arith : arith * 'a Type.t -> ('a, 'a) binop
+  | Cmp : cmp * 'a Type.t -> ('a, bool) binop
+  | And : (bool, bool) binop
+  | Or : (bool, bool) binop (** *)
+  (** Predefined binary operations. *)
+
+  (** {1:vals_and_bags Values and bags} *)
+
+  type 'a value' = 'a value
+  (** See {!Askt.value}. *)
+
+  type 'a value =
+  | Var : string -> 'a value (* only for compiling *)
+  | Const : 'a Type.t * 'a -> 'a value
+  | Unop : ('a, 'b) unop * 'a value -> 'b value
+  | Binop : ('a, 'b) binop * 'a value * 'a value -> 'b value
+  | Proj : 'b value * ('b, 'a) Col.t -> 'a value
+  | Row : 'a -> 'a value
+  | Tuple : ('a -> 'b) value * 'a value -> 'b value
+  | Exists : ('b, 'e) bag -> bool value (** *)
+  (** The type for values of type ['a]. This represents an expression
+      computing a value of type ['a]. *)
+
+  and ('a, 'e) bag =
+  | Table : 'a Table.t -> ('a, 'e) bag
+  | Empty : ('a, 'e) bag
+  | Yield : 'a value -> ('a, 'e) bag
+  | Union : ('a, 'e) bag * ('a, 'e) bag -> ('a, 'e) bag
+  | Foreach : ('a, _) bag * ('a value -> ('b, 'e) bag) -> ('b, 'e) bag
+  | Where : bool value * ('a, 'e) bag -> ('a, 'e) bag (** *)
+  (** The type for bags. See {!Bag.t}. *)
+
+  val value_to_value : 'a value' -> 'a value
+  (** [value_to_value v] is the repressentation of [v]. *)
+
+  val bag_to_bag : ('a, 'e) Bag.t -> ('a, 'e) bag
+  (** [bag_to_bag b] is the representation of [b]. *)
+
+  (** {1:fmt Formatters} *)
+
+  val pp_value : Format.formatter -> 'a value -> unit
+  (** [pp_value] formats values. *)
+
+  val pp_bag : Format.formatter -> ('a, 'e) bag -> unit
+  (** [pp_bag] formats bags. *)
+end
+
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The ask programmers

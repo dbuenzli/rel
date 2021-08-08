@@ -69,10 +69,10 @@ module Test_products = struct
   (* SQL *)
 
   let schema = Sql.create_schema [Table.V Product.table; Table.V Order.table ]
-  let insert_orders = Sql.insert_row_into Order.table
+  let insert_orders = Sql.insert_into Order.table
   let insert_product =
     let ignore = [(* Col.V Product.pid' *)] in
-    Sql.insert_row_into ~ignore Product.table
+    Sql.insert_into ~ignore Product.table
 
   (* TODO streamline *)
 
@@ -119,8 +119,8 @@ module Test_duos = struct
   open Test_schema.Duos
 
   let schema = Sql.create_schema [Table.V Person.table; Table.V Duo.table]
-  let insert_person = Sql.insert_row_into Person.table
-  let insert_duo = Sql.insert_row_into Duo.table
+  let insert_person = Sql.insert_into Person.table
+  let insert_duo = Sql.insert_into Duo.table
 
   let diff = Q.diff
 
@@ -199,9 +199,9 @@ module Test_org = struct
 
   let tables = Table.[V Department.table; V Person.table; V Task.table]
   let schema = Sql.create_schema tables
-  let insert_department = Sql.insert_row_into Department.table
-  let insert_person = Sql.insert_row_into Person.table
-  let insert_task = Sql.insert_row_into Task.table
+  let insert_department = Sql.insert_into Department.table
+  let insert_person = Sql.insert_into Person.table
+  let insert_task = Sql.insert_into Task.table
 
   let abstract_expertise =
     let open Ask.Syntax in

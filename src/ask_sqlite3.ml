@@ -377,22 +377,26 @@ module Stmt' = struct
   fun s i c -> unpack_col_type s i (Col.type' c)
 
   let unpack_row : type r. t -> r Sql.Stmt.t -> r = fun s st ->
-    let rec cols : type r a. Tsqlite3.stmt -> int -> (r, a) Askt.prod -> a =
+    let rec cols :
+      type r a. Tsqlite3.stmt -> int -> (r, a) Ask_private.prod -> a
+    =
     fun s idx r -> match r with
-    | Askt.Unit f -> f
-    | Askt.Prod (cs, c) ->
+    | Unit f -> f
+    | Prod (cs, c) ->
         let f = cols s (idx - 1) cs in
         f (unpack_col s idx c)
-    | Askt.Cat (cs, _, row) ->
-        let f = cols s (idx - Row.col_count (Askt.prod_to_prod row)) cs in
+    | Cat (cs, _, row) ->
+        let f = cols s
+            (idx - Row.col_count (Ask_private.prod_to_prod row)) cs
+        in
         let v = cols s idx row in
         f v
     in
-    let row = Askt.prod_of_prod (Sql.Stmt.result st) in
+    let row = Ask_private.prod_of_prod (Sql.Stmt.result st) in
     cols s.stmt (s.col_count - 1) row
 
   let stop s =
-    (* N.B. we need to reset otherwise things like VACUUM think things
+    (* N.B. we need to reset otherwise things like VACUUM think queries
        are still going on. *)
     ignore (Tsqlite3.clear_bindings s.stmt);
     ignore (Tsqlite3.reset s.stmt)

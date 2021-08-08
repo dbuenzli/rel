@@ -187,7 +187,7 @@ module Products_with_adts = struct
 
     let oid' = Col.v "oid" Type.Int oid
     let pid' =
-      let params = [Sql.Col_references (Product.table, Product.pid')] in
+      let params = [Table.Col_reference (Product.table, Product.pid')] in
       Col.v "pid" Type.Int pid ~params
 
     let qty' = Col.v "qty" Type.Int qty
