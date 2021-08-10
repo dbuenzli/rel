@@ -7,6 +7,7 @@ let threads = B0_ocaml.libname "threads.posix"
 let cmdliner = B0_ocaml.libname "cmdliner"
 
 let ask = B0_ocaml.libname "ask"
+let ask_kit = B0_ocaml.libname "ask.kit"
 let ask_sqlite3 = B0_ocaml.libname "ask.sqlite3"
 let ask_pool = B0_ocaml.libname "ask.pool"
 
@@ -19,6 +20,11 @@ let mod_srcs m =
 let ask_lib =
   let srcs = mod_srcs "ask" @ mod_srcs "ask_list" in
   B0_ocaml.lib ask ~doc:"Ask library" ~srcs ~requires:[]
+
+let ask_kit_lib =
+  let srcs = mod_srcs "ask_kit" in
+  let requires = [ask] in
+  B0_ocaml.lib ask_kit ~doc:"Ask toolkit library" ~srcs ~requires
 
 let ask_sqlite3_lib =
   let srcs = mod_srcs "ask_sqlite3" in

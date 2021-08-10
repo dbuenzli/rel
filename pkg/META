@@ -31,3 +31,14 @@ package "pool" (
   plugin(native) = "ask_pool.cmxs"
   exists_if = "ask_pool.cma"
 )
+
+package "kit" (
+  description = "Ask library tooklit"
+  version = "%%VERSION_NUM%%"
+  directory = "kit"
+  archive(byte) = "ask_kit.cma"
+  archive(native) = "ask_kit.cmxa"
+  plugin(byte) = "ask_kit.cma"
+  plugin(native) = "ask_kit.cmxs"
+  exists_if = "ask_kit.cma"
+)

@@ -34,11 +34,18 @@ Ask
 Ask_list
 }
 
+{1:ask_kit The [ask.kit] library}
+
+{!modules:
+Ask_kit
+}
+
 {1:ask_sqlite3 The [ask.sqlite3] library}
 
 {!modules:
 Ask_sqlite3
 }
+
 
 {1:ask_pool The [ask.pool] library}
 

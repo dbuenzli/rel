@@ -167,7 +167,9 @@ module Col : sig
   type param +=
   | Primary_key
   | Unique (** *)
-  (** Common column parameters.
+  (** Common column parameters. {b FIXME} This mirror SQL but it seems
+      a bit of a mess, maybe we should only
+      deal with these two parameters at the table level.
       {ul
       {- [Primary_key] is a primary key constraint (PRIMARY KEY NOT NULL).}
       {- [Unique] is a uniqueness constraint (UNIQUE).}} *)
@@ -385,9 +387,10 @@ module Table : sig
   | Primary_key : 'r Col.v list -> 'r param
   | Foreign_key : 'r Col.v list * ('s t * 's Col.v list) -> 'r param
   | Index : 'r Index.t -> 'r param (** *)
-  (** Common table parameters.
+  (** Common table parameters. {b FIXME.} Add multi column [Unique].
       {ul
-      {- [Primary_key cols], declares a table primary key on columns [cols]}
+      {- [Primary_key cols], declares a table primary key on columns [cols].
+         FIXME why isn't Col.Primary_key sufficient ?}
       {- [Foreign_key (cols, (t, cols'))] declares a foreign key
          between [cols] and the columns cols' of [t]. Can be repeated.}
       {- [Index] is an index specification for the table.}} *)

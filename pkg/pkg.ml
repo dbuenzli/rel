@@ -9,6 +9,7 @@ let () =
   let sqlite3 = Conf.value c sqlite3 in
   Ok [
     Pkg.mllib "src/ask.mllib";
+    Pkg.mllib "src/ask_kit.mllib" ~dst_dir:"kit";
     Pkg.mllib "src/ask_pool.mllib" ~dst_dir:"pool";
     Pkg.mllib ~cond:sqlite3 "src/ask_sqlite3.mllib" ~dst_dir:"sqlite3";
     Pkg.clib
