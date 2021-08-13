@@ -825,12 +825,12 @@ module Sql = struct
   let in_schema ?schema t = match schema with
   | None -> table_id t | Some s -> Fmt.str "%s.%s" (sql_id s) (table_id t)
 
-  let drop_table ?schema ?(if_exists = true) t =
+  let drop_table ?schema ?(if_exists = false) t =
     let if_exists = if if_exists then " IF EXISTS" else "" in
     let sql = Fmt.str "DROP TABLE%s %s;" if_exists (in_schema ?schema t) in
     Stmt.(func sql @@ unit)
 
-  let create_table ?schema ?(if_not_exists = true) t =
+  let create_table ?schema ?(if_not_exists = false) t =
     let if_not_exists = if if_not_exists then " IF NOT EXISTS" else "" in
     let pp_sep ppf () = Fmt.pf ppf ",@," in
     let sql, cs, fks, pk = table_params t in
@@ -857,7 +857,7 @@ module Sql = struct
     match schema with
     | None -> sql_id name | Some s -> Fmt.str "%s.%s" (sql_id s) (sql_id name)
 
-  let create_index ?schema ?(if_not_exists = true) t i =
+  let create_index ?schema ?(if_not_exists = false) t i =
     let sql =
       let unique = if Index.unique i then " UNIQUE" else "" in
       let if_not_exists = if if_not_exists then " IF NOT EXISTS" else "" in
@@ -870,7 +870,7 @@ module Sql = struct
     in
     Stmt.(func sql @@ unit)
 
-  let drop_index ?schema ?(if_exists = true) t i =
+  let drop_index ?schema ?(if_exists = false) t i =
     let sql =
       let if_exists = if if_exists then " IF EXISTS" else "" in
       let name = index_name ?schema t i in
@@ -878,18 +878,20 @@ module Sql = struct
     in
     Stmt.(func sql @@ unit)
 
-  let create_schema ?schema ?(drop_tables = false) ts =
+  let create_schema ?schema ?(drop_if_exists = false) ts =
     let gen_drop (Table.V t) =
-      let drop_index t i = Stmt.src (drop_index ?schema t i) in
+      let if_exists = true in
+      let drop_index t i = Stmt.src (drop_index ?schema ~if_exists t i) in
       let indexes = List.map (drop_index t) (Table.indexes t) in
-      indexes @ [Stmt.src (drop_table ?schema t)]
+      indexes @ [Stmt.src (drop_table ?schema ~if_exists t)]
     in
     let gen_table (Table.V t) =
-      let gen_index t i = Stmt.src (create_index ?schema t i) in
+      let if_not_exists = true in
+      let gen_index t i = Stmt.src (create_index ?schema ~if_not_exists t i) in
       let indexes = List.map (gen_index t) (Table.indexes t) in
-      Stmt.src (create_table ?schema t) :: indexes
+      Stmt.src (create_table ?schema ~if_not_exists t) :: indexes
     in
-    let drops = if drop_tables then List.concat_map gen_drop ts else [] in
+    let drops = if drop_if_exists then List.concat_map gen_drop ts else [] in
     let creates = List.concat_map gen_table ts in
     let sql = String.concat "\n" (drops @ creates) in
     Stmt.(func sql @@ unit)

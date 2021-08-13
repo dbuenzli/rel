@@ -627,40 +627,35 @@ module Sql : sig
     ?schema:string -> ?if_exists:bool -> 'a Table.t -> unit Stmt.t
   (** [drop_table ~if_exist ~schema t] is an SQL DROP TABLE statement to
       drops table [t] of schema [schema].  If [if_exists] is [true]
-      (default) no error is reported if the table does not exist.
-      FIXME the default is the converse of SQL maybe that's not a
-      a good idea. *)
+      no error is reported if the table does not exist (default to [false]).  *)
 
   val create_table :
     ?schema:string -> ?if_not_exists:bool -> 'a Table.t -> unit Stmt.t
   (** [create_table t] is an SQL CREATE TABLE statement for [t].  If
-      [if_not_exists] is [true] (default) the corresponding sentence
-      is added to the create statement. FIXME the default is the
-      converse of SQL maybe that's not a good idea. *)
+      [if_not_exists] is [true] no error is reported if the table
+      does not exist (defaults to [false]). *)
 
   val create_index :
     ?schema:string -> ?if_not_exists:bool -> 'a Table.t -> 'a Index.t ->
     unit Stmt.t
   (** [create_index t i] is an SQL CREATE INDEX statement for index [i]
-      on table [t]. If [if_not_exists] is [true] (default) the corresponing
-      sentence is added to the create statement. FIXME the default is the
-      converse of SQL maybe that's not a good idea. *)
+      on table [t]. If [if_not_exists] is [true] no error is reported
+      if the index does not exist (defaults to [false]). *)
 
   val drop_index :
     ?schema:string -> ?if_exists:bool -> 'a Table.t -> 'a Index.t ->
     unit Stmt.t
   (** [drop_index t i] is an SQL DROP INDEX statement for index [i] on
-      table [t]. If [if_exist] is [true] (default) not error is
-      reported if the table does not exist. FIXME the default is the
-      converse of SQL maybe that's not a good idea. *)
+      table [t]. If [if_exist] is [true] not error is
+      reported if the index does not exist (defaults to [false]). *)
 
   val create_schema :
-    ?schema:string -> ?drop_tables:bool -> Table.v list -> unit Stmt.t
-  (** [create_schema ~drop_tables ts] are {e multiple} SQL statements to
-      create the tables [ts] and their indices if they don't exist. If
-      [drop_tables] is true
-      (defaults to [false]) the table [ts] are dropped before if they
-      exist.
+    ?schema:string -> ?drop_if_exists:bool -> Table.v list -> unit Stmt.t
+  (** [create_schema ~drop_if_exists ts] are {e multiple} SQL
+      statements to create the tables [ts] and their indices if they
+      don't exist unless [drop_if_exists] is [true] in which case
+      {!drop_table} and {!drop_index} statements are issued to clear
+      the way (defaults to [false]).
 
       Make sure to use {!Ask_sqlite3.exec} otherwise only the first
       statement gets executed, wrapping the whole thing in
