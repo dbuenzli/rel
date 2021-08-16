@@ -250,6 +250,7 @@ module Ask_private = struct
   | Get_some : ('a option, 'a) unop
   | Is_null : ('a option, bool) unop
   | Is_not_null : ('a option, bool) unop
+  | Cast : { src : 'a Type.t; dst : 'b Type.t } -> ('a, 'b) unop
 
   type arith = Add | Sub | Div | Mul
   type cmp = Eq | Neq | Lt | Leq | Gt | Geq
@@ -294,6 +295,7 @@ module Ask_private = struct
   | Get_some -> "get-some"
   | Is_not_null -> "IS NOT NULL"
   | Is_null -> "IS NULL"
+  | Cast { src; dst } -> Fmt.str "%a-of-%a" Type.pp dst Type.pp src
   | _ -> "<unknown>"
 
   let cmp_to_string = function
@@ -407,6 +409,7 @@ module Bag_sql = struct   (* Target SQL fragment to compile bags *)
   | Proj of var * string
   | Exists of t
   | Case of exp * exp * exp
+  | Cast : 'dst Type.t * exp -> exp
   | Row of sel list
 
   and sel = Col of exp * var (* e AS l *) | All of table (* t.* *)
@@ -418,6 +421,17 @@ module Bag_sql = struct   (* Target SQL fragment to compile bags *)
   | Select of sel list * from * where option
 
   let empty_table : table * var = "(VALUES ('empty'))", "empty"
+
+  let rec type_of_type : type a. a Type.t -> string * bool = function
+  | Type.Bool -> "BOOL", true (* not null *)
+  | Type.Int -> "INTEGER", true
+  | Type.Int64 -> "BIGINT", true
+  | Type.Float -> "DOUBLE", true
+  | Type.Text -> "TEXT", true
+  | Type.Blob -> "BLOB", true
+  | Type.Option t -> fst (type_of_type t), false
+  | Type.Coded c -> type_of_type (Type.Coded.repr c)
+  | _ -> Type.invalid_unknown ()
 
   let rec const_to_string : type a. a Type.t -> a -> string =
   fun t v -> match t with
@@ -461,6 +475,10 @@ module Bag_sql = struct   (* Target SQL fragment to compile bags *)
       and e0 = exp_to_string e0 and e1 = exp_to_string e1 in
       String.concat ""
         ["( CASE WHEN "; c; " THEN "; e0; " ELSE "; e1; " END)"]
+  | Cast (t, e) ->
+      let e = exp_to_string e in
+      let t, _ = type_of_type t in
+      String.concat "" ["CAST ("; e; " AS "; t; ")" ]
   | Row sl -> String.concat ", " (List.map sel_to_string sl)
 
   and table_to_string (t, tas) =
@@ -552,6 +570,7 @@ module Bag_to_sql = struct
   fun g v -> match v with
   | Var v -> Bag_sql.Var v
   | Const (t, v) -> Bag_sql.Const (t, v)
+  | Unop (Cast { src; dst }, v) -> Bag_sql.Cast (dst, value_to_sql g v)
   | Unop (op, v) -> Bag_sql.Unop (unop_to_sql op, value_to_sql g v)
   | Binop (op, x, y) ->
       let op = binop_to_sql op in
@@ -748,17 +767,6 @@ module Sql = struct
   let pp_col_id ppf (Col.V c) = Fmt.string ppf (col_id c)
   let pp_col_ids ppf cs = Fmt.hbox Fmt.(list ~sep:comma pp_col_id) ppf cs
 
-  let rec type_of_type : type a. a Type.t -> string * bool = function
-  | Type.Bool -> "BOOL", true (* not null *)
-  | Type.Int -> "INTEGER", true
-  | Type.Int64 -> "BIGINT", true
-  | Type.Float -> "DOUBLE", true
-  | Type.Text -> "TEXT", true
-  | Type.Blob -> "BLOB", true
-  | Type.Option t -> fst (type_of_type t), false
-  | Type.Coded c -> type_of_type (Type.Coded.repr c)
-  | _ -> Type.invalid_unknown ()
-
   type 'a src = string * 'a
 
   type 'r Table.param +=
@@ -791,7 +799,7 @@ module Sql = struct
     match sql with
     | Some sql -> Fmt.str "%s %s" (col_id col) sql
     | None ->
-        let type', not_null = type_of_type (Col.type' col) in
+        let type', not_null = Bag_sql.type_of_type (Col.type' col) in
         let not_null = if not_null && not pkey then " NOT NULL" else "" in
         (* Note the NOT NULL here is because of sqlite which does
            not imply it on primary keys. *)
@@ -989,6 +997,11 @@ module Bool = struct
   let ( && ) x y = Binop (And, x, y)
   let ( || ) x y = Binop (Or, x, y)
   let not x = Unop (Neg Type.Bool, x)
+  let dst = Type.Bool
+  let of_int x = Unop (Cast {src = Type.Int; dst}, x)
+  let of_int64 x = Unop (Cast {src = Type.Int64; dst}, x)
+  let of_float x = Unop (Cast {src = Type.Float; dst}, x)
+  let of_string x = Unop (Cast {src = Type.Text; dst}, x)
 end
 
 module Int = struct
@@ -1007,6 +1020,11 @@ module Int = struct
   let ( - ) x y = Binop (Arith (Sub, Type.Int), x, y)
   let ( * ) x y = Binop (Arith (Mul, Type.Int), x, y)
   let ( / ) x y = Binop (Arith (Div, Type.Int), x, y)
+  let dst = Type.Int
+  let of_bool x = Unop (Cast {src = Type.Bool; dst}, x)
+  let of_int64 x = Unop (Cast {src = Type.Int64; dst}, x)
+  let of_float x = Unop (Cast {src = Type.Float; dst}, x)
+  let of_string x = Unop (Cast {src = Type.Text; dst}, x)
 end
 
 module Int64 = struct
@@ -1020,6 +1038,11 @@ module Int64 = struct
   let ( - ) x y = Binop (Arith (Sub, Type.Int64), x, y)
   let ( * ) x y = Binop (Arith (Mul, Type.Int64), x, y)
   let ( / ) x y = Binop (Arith (Div, Type.Int64), x, y)
+  let dst = Type.Int64
+  let of_bool x = Unop (Cast {src = Type.Bool; dst}, x)
+  let of_int x = Unop (Cast {src = Type.Int; dst}, x)
+  let of_float x = Unop (Cast {src = Type.Float; dst}, x)
+  let of_string x = Unop (Cast {src = Type.Text; dst}, x)
 end
 
 module Float = struct
@@ -1033,6 +1056,11 @@ module Float = struct
   let ( -. ) x y = Binop (Arith (Sub, Type.Float), x, y)
   let ( *. ) x y = Binop (Arith (Mul, Type.Float), x, y)
   let ( /. ) x y = Binop (Arith (Div, Type.Float), x, y)
+  let dst = Type.Float
+  let of_bool x = Unop (Cast {src = Type.Bool; dst}, x)
+  let of_int x = Unop (Cast {src = Type.Int; dst}, x)
+  let of_int64 x = Unop (Cast {src = Type.Int64; dst}, x)
+  let of_string x = Unop (Cast {src = Type.Text; dst}, x)
 end
 
 module Text = struct
@@ -1042,6 +1070,11 @@ module Text = struct
   let ( = ) x y = Binop (Cmp (Eq, Type.Text), x, y)
   let ( ^ ) x y = Binop (Cat, x, y)
   let like x y = Binop (Like, x, y)
+  let dst = Type.Text
+  let of_bool x = Unop (Cast {src = Type.Bool; dst}, x)
+  let of_int x = Unop (Cast {src = Type.Int; dst}, x)
+  let of_int64 x = Unop (Cast {src = Type.Int64; dst}, x)
+  let of_float x = Unop (Cast {src = Type.Float; dst}, x)
 end
 
 module Option = struct

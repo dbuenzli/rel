@@ -429,6 +429,7 @@ type 'a value
       {ul
       {- GROUP BY support (in QUEL that's another monad).}
       {- LIMIT and ORDER BY support, the effects.}
+      {- More data type functions}
       {- Can we specialize `yield` on `Row.t` with appropriate
          {!row} we could likely get to a scheme where we work directly
          with {!Row} in the language (for now we only work with {!Col})
@@ -845,6 +846,23 @@ module Syntax : sig
 
     val ( / ) : int value -> int value -> int value
     (** [x / y] is integer division. *)
+
+    (** {1:conv Conversions} *)
+
+    val of_bool : bool value -> int value
+    (** [of_bool b] is [b] as an integer value. *)
+
+    val of_int64 : int64 value -> int value
+    (** [of_int64 i] is [i] as an integer value. {b FIXME.} Clarify
+        conversion. *)
+
+    val of_float : float value -> int value
+    (** [of_float f] is [f] as an integer value. {b FIXME.} Clarify
+        conversion. *)
+
+    val of_string : string value -> int value
+    (** [of_string s] converts [s] to string if [s] can't be parsed
+        this results in [0]. *)
   end
 
   (** 64-bit integers. *)
@@ -880,6 +898,23 @@ module Syntax : sig
 
     val ( / ) : int64 value -> int64 value -> int64 value
     (** [x / y] is integer division. *)
+
+    (** {1:conv Conversions} *)
+
+    val of_bool : bool value -> int64 value
+    (** [of_bool b] is [b] as an int64 value. *)
+
+    val of_int : int value -> int64 value
+    (** [of_int i] is [i] as an int64 value. {b FIXME.} Clarify
+        conversion. *)
+
+    val of_float : float value -> int64 value
+    (** [of_float f] is [f] as an int64 value. {b FIXME.} Clarify
+        conversion. *)
+
+    val of_string : string value -> int64 value
+    (** [of_string s] converts [s] to string if [s] can't be parsed
+        this results in [0]. *)
   end
 
   (** Floating point numbers. *)
@@ -915,6 +950,21 @@ module Syntax : sig
 
     val ( /. ) : float value -> float value -> float value
     (** [x /. y] is floating point division. *)
+
+    (** {1:conv Conversions} *)
+
+    val of_bool : bool value -> float value
+    (** [of_bool b] is [b] as a float value. *)
+
+    val of_int : int value -> float value
+    (** [of_int i] is [i] as a float value. *)
+
+    val of_int64 : int64 value -> float value
+    (** [of_int i] is [i] as a float value. *)
+
+    val of_string : string value -> float value
+    (** [of_string s] converts [s] to string if [s] can't be parsed
+        this results in [0]. *)
   end
 
   (** Strings. *)
@@ -934,6 +984,21 @@ module Syntax : sig
 
     val like : string value -> string value -> bool value
     (** [like s pat] is [true] if pattern [pat] matches [s]. *)
+
+    (** {1:conv Conversions} *)
+
+    val of_bool : bool value -> string value
+    (** [of_bool b] is [b] as text. *)
+
+    val of_int : int value -> string value
+    (** [of_int i] is [i] as text. *)
+
+    val of_int64 : int64 value -> string value
+    (** [of_int i] is [i] as text. *)
+
+    val of_float : float value -> string value
+    (** [of_float f] is [f] as text. {b FIXME.} Clarify
+        conversion. *)
   end
 
   (** Option. *)
