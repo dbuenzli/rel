@@ -150,8 +150,8 @@ module Test_duos = struct
 
   let between_edna_and_bert_excl =
     let open Ask.Syntax in
-    let* edna = Q.person_age ~name:(String.v "Edna") in
-    let* bert = Q.person_age ~name:(String.v "Bert") in
+    let* edna = Q.person_age ~name:(Text.v "Edna") in
+    let* bert = Q.person_age ~name:(Text.v "Bert") in
     Q.persons_in_age_range ~first:edna ~last:(Int.(bert - v 1))
 
   let between_edna_and_bert_excl db =
@@ -205,7 +205,7 @@ module Test_org = struct
 
   let abstract_expertise =
     let open Ask.Syntax in
-    Q.department_expertise ~task:(String.v "abstract")
+    Q.department_expertise ~task:(Text.v "abstract")
 
   let abstract_expertise db =
     let row = Row.Quick.(t1 (text "name")) in

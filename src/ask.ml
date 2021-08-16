@@ -1027,7 +1027,7 @@ module Float = struct
   let ( /. ) x y = Binop (Arith (Div, Type.Float), x, y)
 end
 
-module String = struct
+module Text = struct
   open Ask_private
   let v s = Const (Type.Text, s)
   let empty = Const (Type.Text, "")
@@ -1073,7 +1073,7 @@ module Syntax = struct
   module Int = Int
   module Int64 = Int64
   module Float = Float
-  module String = String
+  module Text = Text
   module Option = Option
 
   module Type = Type

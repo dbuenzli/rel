@@ -918,7 +918,7 @@ module Syntax : sig
   end
 
   (** Strings. *)
-  module String : sig
+  module Text : sig
 
     val v : string -> string value
     (** [v s] is the literal string [s]. *)

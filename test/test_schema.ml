@@ -285,8 +285,8 @@ module Duos = struct
       let* snd = Bag.table Person.table in
       let fst_name = fst #. Person.name' and fst_age = fst #. Person.age' in
       let snd_name = snd #. Person.name' and snd_age = snd #. Person.age' in
-      Bag.where (String.(d #. Duo.fst' = fst_name) &&
-                 String.(d #. Duo.snd' = snd_name) &&
+      Bag.where (Text.(d #. Duo.fst' = fst_name) &&
+                 Text.(d #. Duo.snd' = snd_name) &&
                  Int.(fst_age > snd_age)) @@
       Bag.yield (Bag.row (fun n d -> n, d) $ fst_name $ fst_age - snd_age)
 
@@ -303,7 +303,7 @@ module Duos = struct
 
     let person_age ~name =
       let* p = Bag.table Person.table in
-      Bag.where String.(p #. Person.name' = name) @@
+      Bag.where Text.(p #. Person.name' = name) @@
       Bag.yield (p #. Person.age')
 
     type int_predicate =
@@ -400,14 +400,14 @@ module Org = struct
       let person_can't ~task p =
         not @@ Bag.exists @@
         let* t = Bag.table Task.table in
-        let is_p = String.(t #. Task.person' = p #. Person.name') in
-        let is_task = String.(t #. Task.task' = task) in
+        let is_p = Text.(t #. Task.person' = p #. Person.name') in
+        let is_task = Text.(t #. Task.task' = task) in
         Bag.where (is_p && is_task) @@
         Bag.yield (Bool.v true)
       in
       let some_can't ~task =
         let* p = Bag.table Person.table in
-        let is_dep = String.(p #. Person.department' = d #. Department.name')
+        let is_dep = Text.(p #. Person.department' = d #. Department.name')
         in
         Bag.where (is_dep && person_can't ~task p) @@
         Bag.yield (Bool.v true)
@@ -432,7 +432,7 @@ module Org = struct
     let nested_org =
       let person_tasks p =
         let* task = Bag.table Task.table in
-        Bag.where String.(task #. Task.person' = p #. Person.name') @@
+        Bag.where Text.(task #. Task.person' = p #. Person.name') @@
         Bag.yield (task #. Task.task')
       in
       let member p =
@@ -444,7 +444,7 @@ module Org = struct
       let dept = d #. Department.name' in
       let members =
         let* p = Bag.table Person.table in
-        Bag.where String.(p #. Person.department' = dept) @@
+        Bag.where Text.(p #. Person.department' = dept) @@
         Bag.yield (member p)
       in
       Bag.yield (Bag.row N.dept $ dept $ Bag.inj members)
