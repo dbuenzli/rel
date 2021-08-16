@@ -260,6 +260,8 @@ module Ask_private = struct
   | Cmp : cmp * 'a Type.t -> ('a, bool) binop
   | And : (bool, bool) binop
   | Or : (bool, bool) binop
+  | Like : (string, bool) binop
+  | Cat : (string, string) binop
 
   type 'a value =
   | Var : string -> 'a value (* only for compiling *)
@@ -278,6 +280,9 @@ module Ask_private = struct
   | Union : ('a, 'e) bag * ('a, 'e) bag -> ('a, 'e) bag
   | Foreach : ('a, _) bag * ('a value -> ('b, 'e) bag) -> ('b, 'e) bag
   | Where : bool value * ('a, 'e) bag -> ('a, 'e) bag
+
+  (* FIXME redo the string convertion use a simple sexp repr it's easier
+     to comprehend. *)
 
   let unop_to_string : type a b. (a, b) unop -> string = function
   | Neg t ->
@@ -302,6 +307,8 @@ module Ask_private = struct
   | Cmp (op, _) -> cmp_to_string op
   | And -> "&&"
   | Or -> "||"
+  | Cat -> "+"
+  | Like -> "LIKE"
   | _ -> "<unknown>"
 
   let rec pp_value : type a. int -> Format.formatter -> a value -> unit =
@@ -538,6 +545,7 @@ module Bag_to_sql = struct
   | Arith (op, _) -> arith_to_sql op
   | Cmp (cmp, _) -> cmp_to_sql cmp
   | And -> "AND" | Or -> "OR"
+  | Cat -> "||" | Like -> "LIKE"
   | _ -> failwith "Ask_sql: unimplemented binary operation"
 
   let rec value_to_sql : type r. gen -> r value -> Bag_sql.exp =
@@ -1032,6 +1040,8 @@ module Text = struct
   let v s = Const (Type.Text, s)
   let empty = Const (Type.Text, "")
   let ( = ) x y = Binop (Cmp (Eq, Type.Text), x, y)
+  let ( ^ ) x y = Binop (Cat, x, y)
+  let like x y = Binop (Like, x, y)
 end
 
 module Option = struct

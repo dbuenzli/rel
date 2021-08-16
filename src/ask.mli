@@ -928,6 +928,12 @@ module Syntax : sig
 
     val ( = ) : string value -> string value -> bool value
     (** [x = y] is binary string equality. *)
+
+    val ( ^ ) : string value -> string value -> string value
+    (** [x ^ y] appends [y] to [x]. *)
+
+    val like : string value -> string value -> bool value
+    (** [like s pat] is [true] if pattern [pat] matches [s]. *)
   end
 
   (** Option. *)
