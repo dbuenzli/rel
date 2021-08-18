@@ -519,12 +519,15 @@ module Bag_sql = struct   (* Target SQL fragment to compile bags *)
       | false -> String.concat ", " (List.map sel_to_string sels)
       | true -> "1"
       in
-      let ts = String.concat ", " (List.map table_to_string ts) in
+      let ts = match ts with
+      | [] -> ""
+      | ts -> "\nFROM " ^ (String.concat ", " (List.map table_to_string ts))
+      in
       let w = match where with
       | None -> ""
       | Some w -> String.concat "" ["\nWHERE "; exp_to_string w;]
       in
-      String.concat "" ["SELECT "; ss; "\nFROM "; ts; w]
+      String.concat "" ["SELECT "; ss; ts; w]
 end
 
 module Bag_to_sql = struct
