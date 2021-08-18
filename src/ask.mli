@@ -37,7 +37,10 @@ module Type : sig
 
       Types coded by other types. Provides arbitrary OCaml column
       types.  Don't be too fancy if you expect other, non OCaml-based,
-      systems to access the database. *)
+      systems to access the database.
+
+      {b FIXME.} Without a good way to handle values and inject constants in
+      the DSL this is useless. *)
 
   (** Coded types. *)
   module Coded : sig
@@ -421,6 +424,275 @@ type 'a value
 (** The type for representing values of type ['a]. FIXME
     depending on the final open strategy put that in its own module. *)
 
+
+(** Booleans. *)
+module Bool : sig
+
+  val v : bool -> bool value
+  (** [v b] is the literal boolean [b]. *)
+
+  val true' : bool value
+  (** [true'] is [v true]. *)
+
+  val false' : bool value
+  (** [false'] is [v false]. *)
+
+  val equal : bool value -> bool value -> bool value
+  (** [equal x y] is boolean equality. *)
+
+  val ( = ) : bool value -> bool value -> bool value
+  (** [x = y] is boolean equality. *)
+
+  val ( && ) : bool value -> bool value -> bool value
+  (** [x && y] is logical conjunction. *)
+
+  val ( || ) : bool value -> bool value -> bool value
+  (** [x || y] is logical disjunction. *)
+
+  val not : bool value -> bool value
+  (** [not x] is the logical negation of [x]. *)
+end
+
+(** Integers. *)
+module Int : sig
+
+  val v : int -> int value
+  (** [v i] is the literal integer [i]. *)
+
+  val zero : int value
+  (** [zero] is [v 0]. *)
+
+  val one : int value
+  (** [one] is [v 1]. *)
+
+  (** {1:cmp Predicates and comparisons} *)
+
+  val equal : int value -> int value -> bool value
+  (** [equal x y] is integer equality. *)
+
+  val ( = ) : int value -> int value -> bool value
+  (** [x = y] is integer equality. *)
+
+  val ( <> ) : int value -> int value -> bool value
+  (** [x <> y] is integer inequality. *)
+
+  val ( < ) : int value -> int value -> bool value
+  (** [x < y] is true iff [x] is stricly lower than [y]. *)
+
+  val ( <= ) : int value -> int value -> bool value
+  (** [x <= y] is true iff [x] is lower or equal than [y]. *)
+
+  val ( > ) : int value -> int value -> bool value
+  (** [x < y] is true iff [x] is stricly lower than [y]. *)
+
+  val ( >= ) : int value -> int value -> bool value
+  (** [x >= y] is true iff [x] is greater or equal than [y]. *)
+
+  (** {1:arith Arithmetic operators} *)
+
+  val ( ~- ) : int value -> int value
+  (** [~-x] is the negation of [x]. *)
+
+  val ( + ) : int value -> int value -> int value
+  (** [x + y] is integer addition. *)
+
+  val ( - ) : int value -> int value -> int value
+  (** [x + y] is integer subtraction. *)
+
+  val ( * ) : int value -> int value -> int value
+  (** [x * y] is integer addition. *)
+
+  val ( / ) : int value -> int value -> int value
+  (** [x / y] is integer division. *)
+
+  (** {1:conv Conversions} *)
+
+  val of_bool : bool value -> int value
+  (** [of_bool b] is [b] as an integer value. *)
+
+  val of_int64 : int64 value -> int value
+  (** [of_int64 i] is [i] as an integer value. {b FIXME.} Clarify
+        conversion. *)
+
+  val of_float : float value -> int value
+  (** [of_float f] is [f] as an integer value. {b FIXME.} Clarify
+        conversion. *)
+
+  val of_string : string value -> int value
+  (** [of_string s] converts [s] to string if [s] can't be parsed
+        this results in [0]. *)
+end
+
+(** 64-bit integers. *)
+module Int64 : sig
+
+  val v : int64 -> int64 value
+  (** [v i] is the literal integer [i]. *)
+
+  val zero : int64 value
+  (** [zero] is [v 0L]. *)
+
+  val one : int64 value
+  (** [one] is [v 1L]. *)
+
+  (** {1:cmp Predicates and comparisons} *)
+
+  val equal : int64 value -> int64 value -> bool value
+  (** [equal x y] is integer equality. *)
+
+  val ( = ) : int64 value -> int64 value -> bool value
+  (** [x = y] is integer equality. *)
+
+  (** {1:arith Arithmetic operators} *)
+
+  val ( ~- ) : int64 value -> int64 value
+  (** [~-x] is the negation of [x]. *)
+
+  val ( + ) : int64 value -> int64 value -> int64 value
+  (** [x + y] is int64eger addition. *)
+
+  val ( - ) : int64 value -> int64 value -> int64 value
+  (** [x + y] is int64eger subtraction. *)
+
+  val ( * ) : int64 value -> int64 value -> int64 value
+  (** [x * y] is int64eger addition. *)
+
+  val ( / ) : int64 value -> int64 value -> int64 value
+  (** [x / y] is integer division. *)
+
+  (** {1:conv Conversions} *)
+
+  val of_bool : bool value -> int64 value
+  (** [of_bool b] is [b] as an int64 value. *)
+
+  val of_int : int value -> int64 value
+  (** [of_int i] is [i] as an int64 value. {b FIXME.} Clarify
+        conversion. *)
+
+  val of_float : float value -> int64 value
+  (** [of_float f] is [f] as an int64 value. {b FIXME.} Clarify
+        conversion. *)
+
+  val of_string : string value -> int64 value
+  (** [of_string s] converts [s] to string if [s] can't be parsed
+        this results in [0]. *)
+end
+
+(** Floating point numbers. *)
+module Float : sig
+
+  val v : float -> float value
+  (** [v x] is the literal float [x]. *)
+
+  val zero : float value
+  (** [zero] is [v 0.0]. *)
+
+  val one : float value
+  (** [one] is [v 1.0]. *)
+
+  (** {1:cmp Predicates and comparisons} *)
+
+  val equal : float value -> float value -> bool value
+  (** [equal x y] is floating point equality. *)
+
+  val ( = ) : float value -> float value -> bool value
+  (** [x = y] is floating point equality. *)
+
+  (** {1:arith Arithmetic operators} *)
+
+  val ( ~-. ) : float value -> float value
+  (** [~-.x] is the floating point negation of [x]. *)
+
+  val ( +. ) : float value -> float value -> float value
+  (** [x +. y] is floating point addition. *)
+
+  val ( -. ) : float value -> float value -> float value
+  (** [x +. y] is floating point subtraction. *)
+
+  val ( *. ) : float value -> float value -> float value
+  (** [x *. y] is floating point addition. *)
+
+  val ( /. ) : float value -> float value -> float value
+  (** [x /. y] is floating point division. *)
+
+  (** {1:conv Conversions} *)
+
+  val of_bool : bool value -> float value
+  (** [of_bool b] is [b] as a float value. *)
+
+  val of_int : int value -> float value
+  (** [of_int i] is [i] as a float value. *)
+
+  val of_int64 : int64 value -> float value
+  (** [of_int i] is [i] as a float value. *)
+
+  val of_string : string value -> float value
+  (** [of_string s] converts [s] to string if [s] can't be parsed
+        this results in [0]. *)
+end
+
+(** Text. *)
+module Text : sig
+
+  val v : string -> string value
+  (** [v s] is the literal string [s]. *)
+
+  val empty : string value
+  (** [empty] is [v ""]. *)
+
+  val equal : string value -> string value -> bool value
+  (** [equal x y] is binary string equality. *)
+
+  val ( = ) : string value -> string value -> bool value
+  (** [x = y] is binary string equality. *)
+
+  val ( ^ ) : string value -> string value -> string value
+  (** [x ^ y] appends [y] to [x]. *)
+
+  val like : string value -> string value -> bool value
+  (** [like s pat] is [true] if pattern [pat] matches [s]. *)
+
+  (** {1:conv Conversions} *)
+
+  val of_bool : bool value -> string value
+  (** [of_bool b] is [b] as text. *)
+
+  val of_int : int value -> string value
+  (** [of_int i] is [i] as text. *)
+
+  val of_int64 : int64 value -> string value
+  (** [of_int i] is [i] as text. *)
+
+  val of_float : float value -> string value
+  (** [of_float f] is [f] as text. {b FIXME.} Clarify
+      conversion. *)
+end
+
+(** Option. *)
+module Option : sig
+
+  val v : 'a Type.t -> 'a option -> 'a option value
+  (** [v t o] is an option of type [t]. *)
+
+  val none : 'a Type.t -> 'a option value
+  (** [none t] is [v t None]. *)
+
+  val some : 'a Type.t -> 'a -> 'a option value
+  (** [some t v] is [v t (Some v)]. *)
+
+  val is_none : 'a option value -> bool value
+  val is_some : 'a option value -> bool value
+  val get : 'a option value -> 'a value
+
+  val has_value :
+    eq:('a value -> 'a value -> bool value) ->
+    'a value -> 'a option value -> bool value
+
+  val equal :
+    eq:('a value -> 'a value -> bool value) ->
+    'a option value -> 'a option value -> bool value
+end
+
   (** Bags specification language.
 
       Bags are multisets of values (rows).
@@ -770,261 +1042,16 @@ module Syntax : sig
   module Row = Row
   module Index = Index
   module Table = Table
+
+  module Bool = Bool
+  module Int = Int
+  module Int64 = Int64
+  module Float = Float
+  module Text = Text
+  module Option = Option
+
   module Bag = Bag
   module Sql = Sql
-
-  (** Booleans. *)
-  module Bool : sig
-
-    val v : bool -> bool value
-    (** [v b] is the literal boolean [b]. *)
-
-    val true' : bool value
-    (** [true'] is [v true]. *)
-
-    val false' : bool value
-    (** [false'] is [v false]. *)
-
-    val ( = ) : bool value -> bool value -> bool value
-    (** [x = y] is boolean equality. *)
-
-    val ( && ) : bool value -> bool value -> bool value
-    (** [x && y] is logical conjunction. *)
-
-    val ( || ) : bool value -> bool value -> bool value
-    (** [x || y] is logical disjunction. *)
-
-    val not : bool value -> bool value
-    (** [not x] is the logical negation of [x]. *)
-  end
-
-  (** Integers. *)
-  module Int : sig
-
-    val v : int -> int value
-    (** [v i] is the literal integer [i]. *)
-
-    val zero : int value
-    (** [zero] is [v 0]. *)
-
-    val one : int value
-    (** [one] is [v 1]. *)
-
-    (** {1:cmp Predicates and comparisons} *)
-
-    val ( = ) : int value -> int value -> bool value
-    (** [x = y] is integer equality. *)
-
-    val ( <> ) : int value -> int value -> bool value
-    (** [x <> y] is integer inequality. *)
-
-    val ( < ) : int value -> int value -> bool value
-    (** [x < y] is true iff [x] is stricly lower than [y]. *)
-
-    val ( <= ) : int value -> int value -> bool value
-    (** [x <= y] is true iff [x] is lower or equal than [y]. *)
-
-    val ( > ) : int value -> int value -> bool value
-    (** [x < y] is true iff [x] is stricly lower than [y]. *)
-
-    val ( >= ) : int value -> int value -> bool value
-    (** [x >= y] is true iff [x] is greater or equal than [y]. *)
-
-    (** {1:arith Arithmetic operators} *)
-
-    val ( ~- ) : int value -> int value
-    (** [~-x] is the negation of [x]. *)
-
-    val ( + ) : int value -> int value -> int value
-    (** [x + y] is integer addition. *)
-
-    val ( - ) : int value -> int value -> int value
-    (** [x + y] is integer subtraction. *)
-
-    val ( * ) : int value -> int value -> int value
-    (** [x * y] is integer addition. *)
-
-    val ( / ) : int value -> int value -> int value
-    (** [x / y] is integer division. *)
-
-    (** {1:conv Conversions} *)
-
-    val of_bool : bool value -> int value
-    (** [of_bool b] is [b] as an integer value. *)
-
-    val of_int64 : int64 value -> int value
-    (** [of_int64 i] is [i] as an integer value. {b FIXME.} Clarify
-        conversion. *)
-
-    val of_float : float value -> int value
-    (** [of_float f] is [f] as an integer value. {b FIXME.} Clarify
-        conversion. *)
-
-    val of_string : string value -> int value
-    (** [of_string s] converts [s] to string if [s] can't be parsed
-        this results in [0]. *)
-  end
-
-  (** 64-bit integers. *)
-  module Int64 : sig
-
-    val v : int64 -> int64 value
-    (** [v i] is the literal integer [i]. *)
-
-    val zero : int64 value
-    (** [zero] is [v 0L]. *)
-
-    val one : int64 value
-    (** [one] is [v 1L]. *)
-
-    (** {1:cmp Predicates and comparisons} *)
-
-    val ( = ) : int64 value -> int64 value -> bool value
-    (** [x = y] is integer equality. *)
-
-    (** {1:arith Arithmetic operators} *)
-
-    val ( ~- ) : int64 value -> int64 value
-    (** [~-x] is the negation of [x]. *)
-
-    val ( + ) : int64 value -> int64 value -> int64 value
-    (** [x + y] is int64eger addition. *)
-
-    val ( - ) : int64 value -> int64 value -> int64 value
-    (** [x + y] is int64eger subtraction. *)
-
-    val ( * ) : int64 value -> int64 value -> int64 value
-    (** [x * y] is int64eger addition. *)
-
-    val ( / ) : int64 value -> int64 value -> int64 value
-    (** [x / y] is integer division. *)
-
-    (** {1:conv Conversions} *)
-
-    val of_bool : bool value -> int64 value
-    (** [of_bool b] is [b] as an int64 value. *)
-
-    val of_int : int value -> int64 value
-    (** [of_int i] is [i] as an int64 value. {b FIXME.} Clarify
-        conversion. *)
-
-    val of_float : float value -> int64 value
-    (** [of_float f] is [f] as an int64 value. {b FIXME.} Clarify
-        conversion. *)
-
-    val of_string : string value -> int64 value
-    (** [of_string s] converts [s] to string if [s] can't be parsed
-        this results in [0]. *)
-  end
-
-  (** Floating point numbers. *)
-  module Float : sig
-
-    val v : float -> float value
-    (** [v x] is the literal float [x]. *)
-
-    val zero : float value
-    (** [zero] is [v 0.0]. *)
-
-    val one : float value
-    (** [one] is [v 1.0]. *)
-
-    (** {1:cmp Predicates and comparisons} *)
-
-    val ( = ) : float value -> float value -> bool value
-    (** [x = y] is floating point equality. *)
-
-    (** {1:arith Arithmetic operators} *)
-
-    val ( ~-. ) : float value -> float value
-    (** [~-.x] is the floating point negation of [x]. *)
-
-    val ( +. ) : float value -> float value -> float value
-    (** [x +. y] is floating point addition. *)
-
-    val ( -. ) : float value -> float value -> float value
-    (** [x +. y] is floating point subtraction. *)
-
-    val ( *. ) : float value -> float value -> float value
-    (** [x *. y] is floating point addition. *)
-
-    val ( /. ) : float value -> float value -> float value
-    (** [x /. y] is floating point division. *)
-
-    (** {1:conv Conversions} *)
-
-    val of_bool : bool value -> float value
-    (** [of_bool b] is [b] as a float value. *)
-
-    val of_int : int value -> float value
-    (** [of_int i] is [i] as a float value. *)
-
-    val of_int64 : int64 value -> float value
-    (** [of_int i] is [i] as a float value. *)
-
-    val of_string : string value -> float value
-    (** [of_string s] converts [s] to string if [s] can't be parsed
-        this results in [0]. *)
-  end
-
-  (** Strings. *)
-  module Text : sig
-
-    val v : string -> string value
-    (** [v s] is the literal string [s]. *)
-
-    val empty : string value
-    (** [empty] is [v ""]. *)
-
-    val ( = ) : string value -> string value -> bool value
-    (** [x = y] is binary string equality. *)
-
-    val ( ^ ) : string value -> string value -> string value
-    (** [x ^ y] appends [y] to [x]. *)
-
-    val like : string value -> string value -> bool value
-    (** [like s pat] is [true] if pattern [pat] matches [s]. *)
-
-    (** {1:conv Conversions} *)
-
-    val of_bool : bool value -> string value
-    (** [of_bool b] is [b] as text. *)
-
-    val of_int : int value -> string value
-    (** [of_int i] is [i] as text. *)
-
-    val of_int64 : int64 value -> string value
-    (** [of_int i] is [i] as text. *)
-
-    val of_float : float value -> string value
-    (** [of_float f] is [f] as text. {b FIXME.} Clarify
-        conversion. *)
-  end
-
-  (** Option. *)
-  module Option : sig
-
-    val v : 'a Type.t -> 'a option -> 'a option value
-    (** [v t o] is an option of type [t]. *)
-
-    val none : 'a Type.t -> 'a option value
-    (** [none t] is [v t None]. *)
-
-    val some : 'a Type.t -> 'a -> 'a option value
-    (** [some t v] is [v t (Some v)]. *)
-
-    val is_none : 'a option value -> bool value
-    val is_some : 'a option value -> bool value
-    val get : 'a option value -> 'a value
-
-    val has_value :
-      eq:('a value -> 'a value -> bool value) ->
-      'a value -> 'a option value -> bool value
-
-    val equal :
-      eq:('a value -> 'a value -> bool value) ->
-      'a option value -> 'a option value -> bool value
-  end
 
   (** {1:boolops Boolean operators} *)
 
