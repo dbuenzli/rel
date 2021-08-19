@@ -128,7 +128,7 @@ module Row = struct
     let float ?(proj = Col.no_proj) n = Col.v n Type.Float proj
     let text ?(proj = Col.no_proj) n = Col.v n Type.Text proj
     let blob ?(proj = Col.no_proj) n = Col.v n Type.Blob proj
-    let option ?(proj = Col.no_proj) n t = Col.v n (Type.Option t) proj
+    let option ?(proj = Col.no_proj) t n = Col.v n (Type.Option t) proj
 
     let t1 a = unit Fun.id * Col.with_proj Fun.id a
     let t2 a b =

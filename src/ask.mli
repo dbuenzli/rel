@@ -266,8 +266,8 @@ module Row : sig
     (** [blob] is a blob column named [n]. *)
 
     val option :
-      ?proj:('r -> 'a option) -> string -> 'a Type.t -> ('r, 'a option) Col.t
-    (** [option n t] is a nullable [t] column named [n]. *)
+      ?proj:('r -> 'a option) -> 'a Type.t -> string -> ('r, 'a option) Col.t
+    (** [option t n] is a nullable [t] column named [n]. *)
 
     (** {1:tuple Tuple constructors} *)
 

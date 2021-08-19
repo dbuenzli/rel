@@ -77,7 +77,7 @@ module Sql_meta = struct
   let cols =
     Ask.Row.Quick.(unit col * text "table_name" * int "idx" * text "name" *
                    text "type" * bool "not_null" *
-                   option "default" Ask.Type.Text * int "primary_key_idx")
+                   option Ask.Type.Text "default" * int "primary_key_idx")
 
   let cols_sql =
     "SELECT t.name as table_name, i.* \
