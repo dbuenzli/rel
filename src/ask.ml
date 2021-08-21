@@ -375,6 +375,7 @@ module Bag = struct
   let row f = Row f
   let inj f = Row f
   let tuple f v = Tuple (f, v)
+  let const t v = Const (t, v)
   let pp = pp_bag
   let to_bag = Fun.id
 end

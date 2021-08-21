@@ -756,6 +756,7 @@ module Bag : sig
   val row : ('a -> 'r) -> ('a -> 'r) value
   val inj : 'a -> 'a value
   val tuple : ('a -> 'b) value -> 'a value -> 'b value
+  val const : 'a Type.t -> 'a -> 'a value
 end
 
 (** {1:sql SQL} *)
