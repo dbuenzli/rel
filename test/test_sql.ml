@@ -100,10 +100,10 @@ module Test_products = struct
 
   let run () =
     log "Testing Products schema";
-    Ask_sqlite3.error_message @@
+    Ask_sqlite3.error_string @@
     let* db = Ask_sqlite3.(open' ~mode:Ask_sqlite3.Memory "") in
     let finally () =
-      log_if_error ~use:() Ask_sqlite3.(error_message @@ close db)
+      log_if_error ~use:() Ask_sqlite3.(error_string @@ close db)
     in
     Fun.protect ~finally @@ fun () ->
     let* () = create_schema db schema in
@@ -176,10 +176,10 @@ module Test_duos = struct
 
   let run () =
     log "Testing Duos schema";
-    Ask_sqlite3.error_message @@
+    Ask_sqlite3.error_string @@
     let* db = Ask_sqlite3.open' ~mode:Ask_sqlite3.Memory "" in
     let finally () =
-      log_if_error ~use:() Ask_sqlite3.(error_message @@ close db)
+      log_if_error ~use:() Ask_sqlite3.(error_string @@ close db)
     in
     Fun.protect ~finally @@ fun () ->
     let* () = create_schema db schema in
@@ -213,10 +213,10 @@ module Test_org = struct
 
   let run () =
     log "Testing Org schema";
-    Ask_sqlite3.error_message @@
+    Ask_sqlite3.error_string @@
     let* db = Ask_sqlite3.open' ~mode:Ask_sqlite3.Memory "" in
     let finally () =
-      log_if_error ~use:() Ask_sqlite3.(error_message @@ close db)
+      log_if_error ~use:() Ask_sqlite3.(error_string @@ close db)
     in
     Fun.protect ~finally @@ fun () ->
     let* () = create_schema db schema in

@@ -262,7 +262,7 @@ module Error = struct
 end
 
 type error = Error.t
-let error_message r = Result.map_error Error.message r
+let error_string r = Result.map_error Error.message r
 let db_error rc db = Error.v rc (Tsqlite3.errmsg db)
 
 open Ask

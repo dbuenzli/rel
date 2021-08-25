@@ -678,7 +678,12 @@ module Option : sig
   (** [none t] is [v t None]. *)
 
   val some : 'a Type.t -> 'a -> 'a option value
-  (** [some t v] is [v t (Some v)]. *)
+  (** [some t v] is [v t (Some v)].
+
+      {b FIXME.} This looks wrong shouldn't that have
+      sig ['a value -> 'a option value] ?
+
+ *)
 
   val is_none : 'a option value -> bool value
   val is_some : 'a option value -> bool value

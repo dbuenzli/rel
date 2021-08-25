@@ -42,9 +42,9 @@ let playlist_id db id =
 let test_db () =
   log_error ~use:1 @@
   let mode = Ask_sqlite3.Read_write in
-  Ask_sqlite3.error_message @@
+  Ask_sqlite3.error_string @@
   let* db = Ask_sqlite3.open' ~mode "tmp/chinook.db" in
-  let finally () = log_error ~use:() Ask_sqlite3.(error_message @@ close db) in
+  let finally () = log_error ~use:() Ask_sqlite3.(error_string @@ close db) in
   Fun.protect ~finally @@ fun () ->
   let* () = playlists db in
   let* ()=  playlist_id db 3 in

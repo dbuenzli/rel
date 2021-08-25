@@ -319,8 +319,8 @@ module Error : sig
       SQLITE_WARNING_AUTOINDEX} *)
 end
 
-val error_message : ('a, error) result -> ('a, string) result
-(** [error_message] is [Result.map_error Error.message]. *)
+val error_string : ('a, error) result -> ('a, string) result
+(** [error_string r] is [Result.map_error Error.message r]. *)
 
 (** {1:library Library configuration and information} *)
 

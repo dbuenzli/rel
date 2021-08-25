@@ -285,21 +285,21 @@ end
 
 let mem_db sql_file = (* Create an in-memory db for the sql file. *)
   let* sql = string_of_file sql_file in
-  Ask_sqlite3.error_message @@ Result.join @@
+  Ask_sqlite3.error_string @@ Result.join @@
   let* db = Ask_sqlite3.(open' ~mode:Memory "") in
   Ask_sqlite3.with_transaction `Immediate db @@ fun db ->
   let* () = Ask_sqlite3.exec_sql db sql in
   Ok db
 
 let sqlite3 file is_sql =
-  let open' file = Ask_sqlite3.(error_message @@ open' file) in
-  let close db = Ask_sqlite3.(error_message @@ close db) in
+  let open' file = Ask_sqlite3.(error_string @@ open' file) in
+  let close db = Ask_sqlite3.(error_string @@ close db) in
   log_if_error ~use:2 @@
   Result.map_error (strf "%s: %s" file) @@
   let is_sql = is_sql || Filename.check_suffix file ".sql" in
   let* db = if is_sql then mem_db file else open' file in
   let finally () = log_if_error ~use:() (close db) in
-  Ask_sqlite3.error_message @@
+  Ask_sqlite3.error_string @@
   Fun.protect ~finally @@ fun () ->
   let* tables = Sql_meta.get_tables db in
   let add_table n cols acc = ocaml_table_of_sql_meta n cols :: acc in

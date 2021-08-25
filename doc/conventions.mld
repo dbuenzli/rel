@@ -52,7 +52,8 @@ module Person : sig
   (** The type for persons. *)
 
   val v : id:id -> first_name:string -> last_name:string -> t
-  (** [v ~id ~first_name ~last_name] is a person with given attributes. *)
+  (** [v ~id ~first_name ~last_name] is a person with given attributes.
+      See accessors for semantics. *)
 
   val row : int -> string -> string -> t
   (** [row] is unlabelled {!v}. *)
