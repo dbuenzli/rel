@@ -937,6 +937,27 @@ module Sql = struct
     in
     Stmt.func sql f
 
+  let rec insert_columns ~ignore:ign i rev_cols rev_vars rev_args cols =
+    let ignore c = List.exists (fun (Col.V i) -> Col.equal_name i c) ign in
+    match cols with
+    | [] ->
+        let cols = List.rev rev_cols and vars = List.rev rev_vars in
+        i, String.concat ", " cols, String.concat ", " vars, rev_args
+    | Col.Value (col, _) :: cols when ignore col ->
+        insert_columns ~ignore:ign i rev_cols rev_vars rev_args cols
+    | Col.Value (col, v) :: cols ->
+        let c = col_id col in
+        let var = "?" ^ string_of_int i in
+        let arg = Stmt.Arg (col.type', v) in
+        insert_columns ~ignore:ign (i + 1)
+          (c :: rev_cols) (var :: rev_vars)  (arg :: rev_args) cols
+
+  let insert_into_cols ?schema ?(ignore = []) t cols =
+    let table = in_schema ?schema t in
+    let i, cols, vars, rev_args = insert_columns ~ignore 1 [] [] [] cols in
+    let sql = ["INSERT INTO "; table; " ("; cols; ")\nVALUES ("; vars; ")"] in
+    { Stmt.src = String.concat "" sql; rev_args; result = Row.empty }
+
   let rec bind_columns ~sep i rev_cols rev_args = function
   | [] -> i, String.concat sep (List.rev rev_cols), rev_args
   | Col.Value (col, v) :: cols ->

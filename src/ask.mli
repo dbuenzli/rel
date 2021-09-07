@@ -949,6 +949,12 @@ module Sql : sig
       a provided OCaml table row. Columns mentioned in [col] of the
       row are ignored for the insertion. *)
 
+  val insert_into_cols :
+    ?schema:string -> ?ignore:'r Col.v list -> 'r Table.t ->
+    ('r Col.value list -> unit Stmt.t)
+  (** [insert_into_cols] is like {!insert_into} but uses the
+      given column values for the insertion. *)
+
   val update :
     ?schema:string -> 'r Table.t -> set:'r Col.value list ->
     where:'r Col.value list -> unit Stmt.t
