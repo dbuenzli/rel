@@ -209,10 +209,24 @@ module Table = struct
   type 'r param = ..
   type 'r t = { name : string; params : 'r param list; row : 'r Row.t Lazy.t }
   type v = V : 'r t -> v
+
+  type foreign_key_action = [ `Set_null | `Set_default | `Cascade | `Restrict ]
+  type ('r, 's) foreign_key =
+    { cols : 'r Col.v list;
+      reference : 's t * 's Col.v list;
+      on_delete : foreign_key_action option;
+      on_update : foreign_key_action option; }
+
+  let foreign_key ?on_delete ?on_update ~cols ~reference  () =
+    { cols; reference; on_delete; on_update }
+
+  let foreign_key_cols k = k.cols
+  let foreign_key_reference k = k.reference
+
   type 'r param +=
   | Primary_key : 'r Col.v list -> 'r param
   | Unique : 'r Col.v list -> 'r param
-  | Foreign_key : 'r Col.v list * ('a t * 'a Col.v list) -> 'r param
+  | Foreign_key : ('r, 's) foreign_key -> 'r param
   | Index : 'r Index.t -> 'r param
 
   let v ?(params = []) name row = { name; params; row = Lazy.from_val row }
@@ -830,14 +844,32 @@ module Sql = struct
   | _ -> assert false
 
   let foreign_references = function
-  | Table.Foreign_key (_, (t, cs)) ->
+  | Table.Foreign_key { reference = t, cs; _ } ->
     if cs = [] then "" else
     Fmt.str " REFERENCES %s (%a)" (table_id t) pp_col_ids cs
   | _ -> assert false
 
+  let foreign_actions = function
+  | Table.Foreign_key { on_update; on_delete; _ } ->
+      let action act a = match a with
+      | None -> ""
+      | Some a ->
+          Fmt.str " %s %s" act
+          begin match a with
+          | `Set_null -> "SET NULL"
+          | `Set_default -> "SET DEFAULT"
+          | `Cascade -> "CASCADE"
+          | `Restrict -> "RESTRICT"
+          end
+      in
+      Fmt.str "%s%s"
+        (action "ON DELETE" on_delete) (action "ON UPDATE" on_update)
+  | _ -> assert false
+
   let foreign_key = function
-  | Table.Foreign_key (cs, ref) as fk ->
-      Fmt.str "FOREIGN KEY (%a)%s" pp_col_ids cs (foreign_references fk)
+  | Table.Foreign_key { cols = cs; _ }  as fk ->
+      Fmt.str "FOREIGN KEY (%a)%s%s" pp_col_ids cs
+        (foreign_references fk) (foreign_actions fk)
   | _ -> assert false
 
   let in_schema ?schema t = match schema with

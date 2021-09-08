@@ -381,10 +381,26 @@ module Table : sig
 
   (** {1:params Parameters} *)
 
+  type ('r, 's) foreign_key
+  (** The type for representing foreign keys from table ['r] to ['s]. *)
+
+  type foreign_key_action = [ `Set_null | `Set_default | `Cascade | `Restrict ]
+  (** The type for foreign key actions. *)
+
+  val foreign_key :
+    ?on_delete:foreign_key_action ->
+    ?on_update:foreign_key_action ->
+    cols:'r Col.v list -> reference:('s t * 's Col.v list) -> unit ->
+    ('r, 's) foreign_key
+  (** [foreign_key] is a foreign key with given paramers *)
+
+  val foreign_key_cols : ('r, 's) foreign_key -> 'r Col.v list
+  val foreign_key_reference : ('r, 's) foreign_key -> 's t * 's Col.v list
+
   type 'r param +=
   | Primary_key : 'r Col.v list -> 'r param
   | Unique : 'r Col.v list -> 'r param
-  | Foreign_key : 'r Col.v list * ('s t * 's Col.v list) -> 'r param
+  | Foreign_key : ('r, 's) foreign_key -> 'r param
   | Index : 'r Index.t -> 'r param (** *)
   (** Common table parameters.
       {ul
@@ -403,7 +419,8 @@ module Table : sig
 
   type Col.param +=
   | Col_reference : 'r t * ('r, 'a) Col.t -> Col.param (** *)
-  (** Additional column parameteres.
+  (** Additional column parameters. {b FIXME} Drop in favour
+      of foreign key ?
       {ul
       {- [Col_reference (t, c)] declares that a column references
          column [c] in [t].}} *)

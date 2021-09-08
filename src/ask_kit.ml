@@ -23,7 +23,9 @@ module Schema_diagram = struct
       loop (Col.params c)
     in
     let rec add_foreign_keys acc = function
-    | Table.Foreign_key (cs, (t', cs')) :: ps ->
+    | Table.Foreign_key fk :: ps ->
+        let cs = Table.foreign_key_cols fk in
+        let t', cs' = Table.foreign_key_reference fk in
         let add acc (Col.V c) (Col.V c') = R (t, c, t', c') :: acc in
         add_foreign_keys (List.fold_left2 add acc cs cs') ps
     | p :: ps -> add_foreign_keys acc ps
