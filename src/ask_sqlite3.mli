@@ -348,8 +348,8 @@ type t
     abstraction of connections is not thread-safe.  *)
 
 val open' :
-  ?stmt_cache_size:int -> ?vfs:string -> ?uri:bool -> ?mutex:mutex ->
-  ?mode:mode -> string -> (t, error) result
+  ?foreign_keys:bool -> ?stmt_cache_size:int -> ?vfs:string -> ?uri:bool ->
+  ?mutex:mutex -> ?mode:mode -> string -> (t, error) result
 (** [open' file] opens a connection on file [file]:
     {ul
     {- [mode] defines the connection mode. Defaults to [Read_write_create].}
@@ -358,10 +358,15 @@ val open' :
        {{:https://sqlite.org/uri.html}URI syntax} is allowed for [file].}
     {- [vfs] is the {{:https://sqlite.org/vfs.html}vfs} to use.}
     {- [stmt_cache_size] is the connection's statement cache size,
-       it defaults to [10].}}
+       it defaults to [10].}
+    {- [foreign_keys]'s value is used to immediately invoke the
+       {{:https://sqlite.org/pragma.html#pragma_foreign_keys}[foreign_keys]}
+       pragma on the database connection. Defaults to [true] to
+       enforce constraints, this is not SQLite's default.}}
 
     See {{:https://sqlite.org/c3ref/open.html}[sqlite3_open_v2]} for more
-    details about the parameters (except [stmt_cache_size]). *)
+    details about the parameters (except [stmt_cache_size] and
+    [foreign_keys]). *)
 
 val close : t -> (unit, error) result
 (** [close db] closes the connection to database [db].

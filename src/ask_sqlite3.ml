@@ -467,10 +467,15 @@ type mutex = Tsqlite3.mutex = No | Full
 let[@inline] validate db =
   if db.closed then invalid_arg "connection closed" else ()
 
-let open' ?(stmt_cache_size = 10) ?vfs ?uri ?mutex ?mode f =
+let open'
+    ?(foreign_keys = true) ?(stmt_cache_size = 10) ?vfs ?uri ?mutex ?mode f
+  =
   match Tsqlite3.open' ?vfs ?uri ?mode ?mutex f with
   | Error rc -> Error (Error.v rc (Error.code_to_string rc))
   | Ok db ->
+      let foreign_keys = strf "PRAGMA foreign_keys = %b" foreign_keys in
+      let rc = Tsqlite3.exec db foreign_keys in
+      if rc <> 0 then Error (Error.v rc (Error.code_to_string rc)) else
       let stmt_cache = Cache.create stmt_cache_size in
       Ok { db; stmt_cache_size; stmt_cache; closed = false }
 
