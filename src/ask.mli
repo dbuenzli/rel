@@ -167,15 +167,10 @@ module Col : sig
 
       See {!Ask.Sql} for more parameters. *)
 
-  type param +=
-  | Primary_key
-  | Unique (** *)
-  (** Common column parameters. {b FIXME} This mirror SQL but it seems
-      a bit of a mess, maybe we should only
-      deal with these two parameters at the table level.
-      {ul
-      {- [Primary_key] is a primary key constraint (PRIMARY KEY NOT NULL).}
-      {- [Unique] is a uniqueness constraint (UNIQUE).}} *)
+  (* TODO add when we get
+  type ('r, 'a) param +=
+    | Default of 'a
+*)
 
   (** {1:fmt Formatters} *)
 

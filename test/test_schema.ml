@@ -159,10 +159,12 @@ module Products_with_adts = struct
     let name p = p.name
     let price p = p.price
 
-    let pid' = Col.v "pid" Type.Int pid ~params:[Col.Primary_key]
-    let name' = Col.v "name" Type.Text name ~params:[Col.Unique]
+    let pid' = Col.v "pid" Type.Int pid
+    let name' = Col.v "name" Type.Text name
     let price' = Col.v "price" Type.Int price
-    let table = Table.v "product" Row.(unit v * pid' * name' * price')
+    let table =
+      let params = Table.[Primary_key [Col.V pid']; Unique [Col.V name']] in
+      Table.v "product" ~params Row.(unit v * pid' * name' * price')
   end
 
   module Order : sig
@@ -252,9 +254,11 @@ module Duos = struct
     let name p = p.name
     let age p = p.age
 
-    let name' = Col.v "name" Type.Text name ~params:[Col.Primary_key]
+    let name' = Col.v "name" Type.Text name
     let age' = Col.v "age" Type.Int age
-    let table = Table.v "person" Row.(unit v * name' * age')
+    let table =
+      let params = Table.[Primary_key [Col.V name']] in
+      Table.v "person" ~params Row.(unit v * name' * age')
   end
 
   module Duo : sig
@@ -351,8 +355,10 @@ module Org = struct
     type t = { name : string }
     let v name = { name }
     let name p = p.name
-    let name' = Col.v "name" Type.Text name ~params:[Col.Primary_key]
-    let table = Table.v "department" Row.(unit v * name')
+    let name' = Col.v "name" Type.Text name
+    let table =
+      let params = Table.[Primary_key [Col.V name']] in
+      Table.v "department" ~params Row.(unit v * name')
   end
 
   module Person : sig
@@ -368,9 +374,11 @@ module Org = struct
     let v name department = { name; department }
     let name p = p.name
     let department p = p.department
-    let name' = Col.v "name" Type.Text name ~params:[Col.Primary_key]
+    let name' = Col.v "name" Type.Text name
     let department' = Col.v "department" Type.Text department
-    let table = Table.v "person" Row.(unit v * name' * department')
+    let table =
+      let params = Table.[Primary_key [Col.V name']] in
+      Table.v "person" ~params Row.(unit v * name' * department')
   end
 
   module Task : sig

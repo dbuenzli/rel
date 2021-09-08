@@ -82,7 +82,6 @@ end
 
 module Col = struct
   type param = ..
-  type param += Primary_key | Unique
   type ('r, 'a) t =
     { name : string; params : param list; type' : 'a Type.t;
       proj : ('r -> 'a) }
@@ -783,16 +782,14 @@ module Sql = struct
   | Col_constraint of string
 
   let col_params col =
-    let rec loop sql cs pkey r unique = function
-    | [] -> sql, List.rev cs, pkey, r, unique
-    | Col sql :: ps -> loop (Some sql) cs pkey r unique ps
-    | Col_constraint c :: ps -> loop sql (c :: cs) pkey r unique ps
-    | Col.Primary_key :: ps -> loop sql cs true r unique ps
-    | Table.Col_reference _ as r :: ps -> loop sql cs pkey (Some r) unique ps
-    | Col.Unique :: ps -> loop sql cs pkey r true ps
-    | _ :: ps -> loop sql cs pkey r true ps
+    let rec loop sql cs r = function
+    | [] -> sql, List.rev cs, r
+    | Col sql :: ps -> loop (Some sql) cs r ps
+    | Col_constraint c :: ps -> loop sql (c :: cs) r ps
+    | Table.Col_reference _ as r :: ps -> loop sql cs (Some r) ps
+    | _ :: ps -> loop sql cs r ps
     in
-    loop None [] false None false (Col.params col)
+    loop None [] None (Col.params col)
 
   let references = function
   | Table.Col_reference (t, c) ->
@@ -800,20 +797,15 @@ module Sql = struct
   | _ -> assert false
 
   let col_def (Col.V col) =
-    let sql, cs, pkey, r, unique = col_params col in
+    let sql, cs, r = col_params col in
     match sql with
     | Some sql -> Fmt.str "%s %s" (col_id col) sql
     | None ->
         let type', not_null = Bag_sql.type_of_type (Col.type' col) in
-        let not_null = if not_null && not pkey then " NOT NULL" else "" in
-        (* Note the NOT NULL here is because of sqlite which does
-           not imply it on primary keys. *)
-        let primary_key = if pkey then " PRIMARY KEY NOT NULL" else "" in
-        let unique = if unique && not pkey then " UNIQUE" else "" in
+        let not_null = if not_null then " NOT NULL" else "" in
         let cs = if cs = [] then "" else String.concat " " (" " :: cs) in
         let r = match r with None -> "" | Some ref -> references ref in
-        Fmt.str "%s %s%s%s%s%s%s"
-          (col_id col) type' not_null primary_key unique cs r
+        Fmt.str "%s %s%s%s%s" (col_id col) type' not_null cs r
 
   let col_defs t = List.map col_def (Table.cols t)
 

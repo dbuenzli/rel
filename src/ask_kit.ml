@@ -34,15 +34,11 @@ module Schema_diagram = struct
 
   let table_primary_keys t =
     let add_col acc (Col.V c) = Sset.add (Col.name c) acc in
-    let add_col_pks acc (Col.V c as c')=
-      if List.mem Col.Primary_key (Col.params c) then add_col acc c' else acc
-    in
     let add_table_pk acc = function
     | Table.Primary_key cs -> List.fold_left add_col acc cs
     | _ -> acc
     in
-    let pks = List.fold_left add_col_pks Sset.empty (Table.cols t) in
-    List.fold_left add_table_pk pks (Table.params t)
+    List.fold_left add_table_pk Sset.empty (Table.params t)
 
   let pf = Format.fprintf
   let strf = Format.asprintf
