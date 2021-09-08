@@ -244,9 +244,6 @@ module Table = struct
   let indexes t =
     let find_index = function Index i -> Some i | _ -> None in
     List.filter_map find_index t.params
-
-  type Col.param +=
-  | Col_reference : 'r t * ('r, 'a) Col.t -> Col.param
 end
 
 module Ask_private = struct
@@ -796,30 +793,23 @@ module Sql = struct
   | Col_constraint of string
 
   let col_params col =
-    let rec loop sql cs r = function
-    | [] -> sql, List.rev cs, r
-    | Col sql :: ps -> loop (Some sql) cs r ps
-    | Col_constraint c :: ps -> loop sql (c :: cs) r ps
-    | Table.Col_reference _ as r :: ps -> loop sql cs (Some r) ps
-    | _ :: ps -> loop sql cs r ps
+    let rec loop sql cs = function
+    | [] -> sql, List.rev cs
+    | Col sql :: ps -> loop (Some sql) cs ps
+    | Col_constraint c :: ps -> loop sql (c :: cs) ps
+    | _ :: ps -> loop sql cs ps
     in
-    loop None [] None (Col.params col)
-
-  let references = function
-  | Table.Col_reference (t, c) ->
-      Fmt.str " REFERENCES %s (%s)" (table_id t) (col_id c)
-  | _ -> assert false
+    loop None [] (Col.params col)
 
   let col_def (Col.V col) =
-    let sql, cs, r = col_params col in
+    let sql, cs = col_params col in
     match sql with
     | Some sql -> Fmt.str "%s %s" (col_id col) sql
     | None ->
         let type', not_null = Bag_sql.type_of_type (Col.type' col) in
         let not_null = if not_null then " NOT NULL" else "" in
         let cs = if cs = [] then "" else String.concat " " (" " :: cs) in
-        let r = match r with None -> "" | Some ref -> references ref in
-        Fmt.str "%s %s%s%s%s" (col_id col) type' not_null cs r
+        Fmt.str "%s %s%s%s" (col_id col) type' not_null cs
 
   let col_defs t = List.map col_def (Table.cols t)
 

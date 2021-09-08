@@ -15,13 +15,6 @@ module Schema_diagram = struct
   | R : 'r Table.t * ('r, 'a) Col.t * 's Table.t * ('s, 'b) Col.t -> ref
 
   let table_references t =
-    let rec add_col_refs acc (Col.V c) =
-      let rec loop = function
-      | Table.Col_reference (t', c') :: _ -> R (t, c, t', c') :: acc
-      | p :: ps -> loop ps | [] -> acc
-      in
-      loop (Col.params c)
-    in
     let rec add_foreign_keys acc = function
     | Table.Foreign_key fk :: ps ->
         let cs = Table.foreign_key_cols fk in
@@ -31,8 +24,7 @@ module Schema_diagram = struct
     | p :: ps -> add_foreign_keys acc ps
     | [] -> acc
     in
-    let refs = List.fold_left add_col_refs [] (Table.cols t) in
-    add_foreign_keys refs (Table.params t)
+    add_foreign_keys [] (Table.params t)
 
   let table_primary_keys t =
     let add_col acc (Col.V c) = Sset.add (Col.name c) acc in

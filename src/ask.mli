@@ -414,16 +414,6 @@ module Table : sig
   val indexes : 'r t -> 'r Index.t list
   (** [indexes t] are the indexes of table [t] found in the table's
       {{!val-params}parameters}. *)
-
-  (** {1:col_params Column parameters} *)
-
-  type Col.param +=
-  | Col_reference : 'r t * ('r, 'a) Col.t -> Col.param (** *)
-  (** Additional column parameters. {b FIXME} Drop in favour
-      of foreign key ?
-      {ul
-      {- [Col_reference (t, c)] declares that a column references
-         column [c] in [t].}} *)
 end
 
 (** {1:query_lang Query language}

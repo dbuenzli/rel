@@ -188,12 +188,16 @@ module Products_with_adts = struct
 
 
     let oid' = Col.v "oid" Type.Int oid
-    let pid' =
-      let params = [Table.Col_reference (Product.table, Product.pid')] in
-      Col.v "pid" Type.Int pid ~params
+    let pid' = Col.v "pid" Type.Int pid
 
     let qty' = Col.v "qty" Type.Int qty
-    let table = Table.v "order" Row.(unit v * oid' * pid' * qty')
+    let table =
+      let params = Table.[
+          Foreign_key (foreign_key
+                         ~cols:[Col.V pid']
+                         ~reference:(Product.table, [Col.V Product.pid']) ())]
+      in
+      Table.v "order" ~params Row.(unit v * oid' * pid' * qty')
   end
 
   type sales = <pid:int; name:string; sale:int>
