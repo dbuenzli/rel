@@ -388,12 +388,14 @@ module Table : sig
 
   type 'r param +=
   | Primary_key : 'r Col.v list -> 'r param
+  | Unique : 'r Col.v list -> 'r param
   | Foreign_key : 'r Col.v list * ('s t * 's Col.v list) -> 'r param
   | Index : 'r Index.t -> 'r param (** *)
-  (** Common table parameters. {b FIXME.} Add multi column [Unique].
+  (** Common table parameters.
       {ul
-      {- [Primary_key cols], declares a table primary key on columns [cols].
-         FIXME why isn't Col.Primary_key sufficient ?}
+      {- [Primary_key cols], declares a table primary key constraint
+         on columns [cols].}
+      {- [Unique cols], declares a uniqueness constraint on [cols]}
       {- [Foreign_key (cols, (t, cols'))] declares a foreign key
          between [cols] and the columns cols' of [t]. Can be repeated.}
       {- [Index] is an index specification for the table.}} *)
@@ -423,7 +425,6 @@ end
 type 'a value
 (** The type for representing values of type ['a]. FIXME
     depending on the final open strategy put that in its own module. *)
-
 
 (** Booleans. *)
 module Bool : sig

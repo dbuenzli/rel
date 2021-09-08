@@ -212,6 +212,7 @@ module Table = struct
   type v = V : 'r t -> v
   type 'r param +=
   | Primary_key : 'r Col.v list -> 'r param
+  | Unique : 'r Col.v list -> 'r param
   | Foreign_key : 'r Col.v list * ('a t * 'a Col.v list) -> 'r param
   | Index : 'r Index.t -> 'r param
 
@@ -817,18 +818,23 @@ module Sql = struct
   let col_defs t = List.map col_def (Table.cols t)
 
   let table_params t =
-    let rec loop sql cs fks pk = function
-    | [] -> sql, List.rev cs, List.rev fks, pk
-    | Table sql :: ps -> loop (Some sql) cs fks pk ps
-    | Table_constraint c :: ps -> loop sql (c :: cs) fks pk ps
-    | Table.Foreign_key _ as fk :: ps -> loop sql cs (fk :: fks) pk ps
-    | Table.Primary_key _ as pk :: ps -> loop sql cs fks (Some pk) ps
-    | _ :: ps -> loop sql cs fks pk ps
+    let rec loop sql cs fks pk us = function
+    | [] -> sql, List.rev cs, List.rev fks, pk, List.rev us
+    | Table sql :: ps -> loop (Some sql) cs fks pk us ps
+    | Table_constraint c :: ps -> loop sql (c :: cs) fks pk us ps
+    | Table.Foreign_key _ as fk :: ps -> loop sql cs (fk :: fks) pk us ps
+    | Table.Primary_key _ as pk :: ps -> loop sql cs fks (Some pk) us ps
+    | Table.Unique _ as u :: ps -> loop sql cs fks pk (u :: us) ps
+    | _ :: ps -> loop sql cs fks pk us ps
     in
-    loop None [] [] None (Table.params t)
+    loop None [] [] None [] (Table.params t)
 
   let primary_key = function
   | Table.Primary_key cs -> Fmt.str "PRIMARY KEY (%a)" pp_col_ids cs
+  | _ -> assert false
+
+  let unique = function
+  | Table.Unique cs -> Fmt.str "UNIQUE (%a)" pp_col_ids cs
   | _ -> assert false
 
   let foreign_references = function
@@ -853,7 +859,7 @@ module Sql = struct
   let create_table ?schema ?(if_not_exists = false) t =
     let if_not_exists = if if_not_exists then " IF NOT EXISTS" else "" in
     let pp_sep ppf () = Fmt.pf ppf ",@," in
-    let sql, cs, fks, pk = table_params t in
+    let sql, cs, fks, pk, us = table_params t in
     let sql = match sql with
     | Some sql ->
         Fmt.str "@[<v2>CREATE TABLE%s %s (@,@[%a@]@]@,);"
@@ -861,7 +867,8 @@ module Sql = struct
     | None ->
         let pk = match pk with None -> [] | Some pk -> [primary_key pk] in
         let fks = List.map foreign_key fks in
-        let defs = col_defs t @ pk @ fks @ cs in
+        let us = List.map unique us in
+        let defs = col_defs t @ pk @ us @ fks @ cs in
         Fmt.str "@[<v2>CREATE TABLE%s %s (@,%a@]@,);"
           if_not_exists (in_schema ?schema t) Fmt.(list ~sep:pp_sep string) defs
     in
