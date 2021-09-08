@@ -381,11 +381,19 @@ module Table : sig
 
   (** {1:params Parameters} *)
 
-  type ('r, 's) foreign_key
-  (** The type for representing foreign keys from table ['r] to ['s]. *)
+  (** {2:foreign_keys Foreign keys} *)
 
   type foreign_key_action = [ `Set_null | `Set_default | `Cascade | `Restrict ]
   (** The type for foreign key actions. *)
+
+  type ('r, 's) foreign_key =
+      { cols : 'r Col.v list;
+        reference : 's t * 's Col.v list;
+        on_delete : foreign_key_action option;
+        on_update : foreign_key_action option; }
+  (** The type for representing foreign keys from table ['r] to ['s].
+      This is exposed for recursive defs reasons, use {!foreign_key}
+      unless you get into trouble. *)
 
   val foreign_key :
     ?on_delete:foreign_key_action ->
@@ -396,6 +404,8 @@ module Table : sig
 
   val foreign_key_cols : ('r, 's) foreign_key -> 'r Col.v list
   val foreign_key_reference : ('r, 's) foreign_key -> 's t * 's Col.v list
+
+  (** {1:params Parameters} *)
 
   type 'r param +=
   | Primary_key : 'r Col.v list -> 'r param
