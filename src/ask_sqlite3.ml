@@ -529,6 +529,8 @@ let exec db st =
   with
   | Stmt'.Error e -> Error e
 
+type transaction_kind = [ `Deferred | `Immediate | `Exclusive ]
+
 let with_transaction kind db f =
   validate db;
   let kind = match kind with

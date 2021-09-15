@@ -393,7 +393,8 @@ module Table : sig
         on_update : foreign_key_action option; }
   (** The type for representing foreign keys from table ['r] to ['s].
       This is exposed for recursive defs reasons, use {!foreign_key}
-      unless you get into trouble. *)
+      unless you get into trouble. {b FIXME.} At least provide
+      a default empty value so that [with] can be used. *)
 
   val foreign_key :
     ?on_delete:foreign_key_action ->

@@ -437,15 +437,17 @@ val exec : t -> unit Sql.Stmt.t -> (unit, error) result
 (** [exec db st] is like {!fold} but executes statement [sql] only for
     its side effect. *)
 
+type transaction_kind = [ `Deferred | `Immediate | `Exclusive ]
+(** The type for {{:https://www.sqlite.org/lang_transaction.html#deferred_immediate_and_exclusive_transactions}
+    transaction kinds}. *)
+
 val with_transaction :
-  [`Deferred | `Immediate | `Exclusive] -> t ->
-  (t -> ('a, 'b) result) -> (('a, 'b) result, error) result
+  transaction_kind -> t -> (t -> ('a, 'b) result) ->
+  (('a, 'b) result, error) result
 (** [with_transaction kind db f] wraps the call to [f db] in an SQL
-    transaction of
-    {{:https://www.sqlite.org/lang_transaction.html#deferred_immediate_and_exclusive_transactions}given
-    [kind]}. If [f] raises, returns an error or if the commit fails
-    (including if the error was {!Error.busy_timeout}, FIXME should we
-    include a retry parameter ?) the transaction is rollback.
+    transaction of given kind. If [f] raises, returns an error or if
+    the commit fails (including if the error was {!Error.busy_timeout},
+    FIXME should we include a retry parameter ?) the transaction is rollback.
 
     {b Note.} Nested transactions are not supported so [f] should not call
     {!with_transaction} itself (use
