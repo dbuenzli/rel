@@ -404,13 +404,17 @@ module Stmt' = struct
   let step s st = match Tsqlite3.step s.stmt with
   | 101 (* SQLITE_DONE *) -> stop s; None
   | 100 (* SQLITE_ROW *) -> Some (unpack_row s st)
-  | rc ->  error (stmt_error rc s.stmt)
+  | rc ->
+      let err = stmt_error rc s.stmt in
+      stop s; error err
 
   let fold s st f acc =
     let rec loop s st f acc = match Tsqlite3.step s.stmt with
     | 100 (* SQLITE_ROW *) -> loop s st f (f (unpack_row s st) acc)
     | 101 (* SQLITE_DONE *) -> stop s; acc
-    | rc -> error (stmt_error rc s.stmt)
+    | rc ->
+        let err = stmt_error rc s.stmt in
+        stop s; error err
     in
     loop s st f acc
 
@@ -420,7 +424,9 @@ module Stmt' = struct
 
   let exec s = match Tsqlite3.step s.stmt with
   | 100 | 101 (* SQLITE_{ROW,DONE} *) -> stop s
-  | rc -> error (stmt_error rc s.stmt)
+  | rc ->
+      let err = stmt_error rc s.stmt in
+      stop s; error err
 end
 
 (* Database connection *)
