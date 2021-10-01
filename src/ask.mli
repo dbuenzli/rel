@@ -664,7 +664,9 @@ module Text : sig
   (** [x ^ y] appends [y] to [x]. *)
 
   val like : string value -> string value -> bool value
-  (** [like s pat] is [true] if pattern [pat] matches [s]. *)
+  (** [like s pat] is [true] if pattern [pat] matches [s].
+
+      {b TODO.} add an escape syntax and automatically use it. *)
 
   (** {1:conv Conversions} *)
 
@@ -956,12 +958,16 @@ module Sql : sig
 
   (** {1:insupd Inserting, updating and deleting} *)
 
+  type insert_or_action = [`Abort | `Fail | `Ignore | `Replace | `Rollback ]
+
   val insert_into :
+    ?or_action:insert_or_action ->
     ?schema:string -> ?ignore:'r Col.v list -> 'r Table.t -> ('r -> unit Stmt.t)
   (** [insert_into ~ignore t] is an SQL INSERT INTO statement
       which inserts i [t] values draw from an value values drawn from
       a provided OCaml table row. Columns mentioned in [col] of the
-      row are ignored for the insertion. *)
+      row are ignored for the insertion. [insert_or_action] specifies
+      a corresponding [INSERT OR]. *)
 
   val insert_into_cols :
     ?schema:string -> ?ignore:'r Col.v list -> 'r Table.t ->

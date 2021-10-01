@@ -937,7 +937,13 @@ module Sql = struct
     let sql = String.concat "\n" (drops @ creates) in
     Stmt.(func sql @@ unit)
 
-  let insert_into ?schema ?(ignore = []) t =
+  type insert_or_action = [`Abort | `Fail | `Ignore | `Replace | `Rollback ]
+
+  let insert_or_action = function
+  | `Abort -> " OR ABORT" | `Fail -> " OR FAIL" | `Ignore -> " OR IGNORE"
+  | `Replace -> " OR REPLACE" | `Rollback -> " OR ROLLBACK"
+
+  let insert_into ?or_action ?schema ?(ignore = []) t =
     let ignore c = List.exists (fun (Col.V i) -> Col.equal_name i c) ignore in
     let rec loop :
       type r a. (r, a) Row.prod -> r Col.v list * (r -> unit Stmt.t) Stmt.func
@@ -951,10 +957,11 @@ module Sql = struct
     let cs, f = loop (Table.row t) in
     let cs = List.rev cs in
     let vars = List.mapi (fun i _ -> "?" ^ string_of_int (i + 1)) cs in
+    let or_action = Option.fold ~none:"" ~some:insert_or_action or_action in
     let sql =
       let pp_vars = Fmt.(hbox @@ list ~sep:comma string) in
-      Fmt.str "@[<v>INSERT INTO %s (%a)@,VALUES (%a)@]"
-        (in_schema ?schema t) pp_col_ids cs pp_vars vars
+      Fmt.str "@[<v>INSERT%s INTO %s (%a)@,VALUES (%a)@]"
+        or_action (in_schema ?schema t) pp_col_ids cs pp_vars vars
     in
     Stmt.func sql f
 
