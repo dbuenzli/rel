@@ -516,12 +516,12 @@ module Bag_sql = struct   (* Target SQL fragment to compile bags *)
      This without ignore_result this compiles to illegal SQL:
 
      SELECT c.* FROM "container" as c WHERE
-     EXISTS (SELECT c.* FROM "element" as e WITH ...
+     EXISTS (SELECT c.* FROM "element" as e WHERE ...
 
      FIXME it feels wrong to do it at that level ! *)
 
   and to_string ~ignore_result = function
-  | Empty -> "SELECT * FROM (VALUES ('empty')) WITH 1 = 0"
+  | Empty -> "SELECT * FROM (VALUES ('empty')) WHERE 1 = 0"
   | Union_all (s0, s1) ->
       let s0 = to_string ~ignore_result s0 in
       let s1 = to_string ~ignore_result s1 in
