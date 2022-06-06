@@ -331,14 +331,14 @@ let cmd =
         See https://erratique.ch/software/ask for contact information"; ]
   in
   let exits =
-    Term.exit_info ~doc:"on indiscriminate error reported on stderr." 2 ::
-    Term.default_exits
+    Cmd.Exit.info ~doc:"on indiscriminate error reported on stderr." 2 ::
+    Cmd.Exit.defaults
   in
-  Term.(pure sqlite3 $ db $ is_sql),
-  Term.info "ask-sqlite3" ~version:"%%VERSION%%" ~doc ~man ~exits
+  Cmd.v (Cmd.info "ask-sqlite3" ~version:"%%VERSION%%" ~doc ~man ~exits)
+    Term.(const sqlite3 $ db $ is_sql)
 
-let main () = Term.exit_status @@ Term.eval cmd
-let () = if !Sys.interactive then () else main ()
+let main () = Cmd.eval' cmd
+let () = if !Sys.interactive then () else exit (main ())
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The ask programmers

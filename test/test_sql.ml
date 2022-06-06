@@ -164,7 +164,7 @@ module Test_duos = struct
       let age = p #. Person.age' in
       Q.pred pred age
     in
-    Q.persons_sat in_thirties
+    Q.persons_sat ~sat:in_thirties
 
   let thirties_by_pred' db =
     let row = Row.Quick.(t1 (text "name")) in
