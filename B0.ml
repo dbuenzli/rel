@@ -27,10 +27,13 @@ let ask_kit_lib =
   B0_ocaml.lib ask_kit ~doc:"Ask toolkit library" ~srcs ~requires
 
 let ask_sqlite3_lib =
-  let srcs = mod_srcs "ask_sqlite3" in
+  let stubs =`File (Fpath.v "src/ask_sqlite3_stubs.c") in
+  let srcs = stubs :: mod_srcs "ask_sqlite3" in
+  let c_requires = Cmd.atom "-lsqlite3" in
   let requires = [ask] in
   let name = "ask_sqlite3_lib" (* FIXME b0 map . to _ for name *) in
-  B0_ocaml.lib ~name ask_sqlite3 ~doc:"Ask sqlite3 library" ~srcs ~requires
+  B0_ocaml.lib ~name ask_sqlite3 ~doc:"Ask sqlite3 library" ~srcs
+    ~requires ~c_requires
 
 let ask_pool_lib =
   let srcs = mod_srcs "ask_pool" in
