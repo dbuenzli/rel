@@ -1,5 +1,5 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers. All rights reserved.
+   Copyright (c) 2020 The rel programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
@@ -9,7 +9,7 @@
     thread safe. Besides using different connections with different
     threads provides proper
     {{:https://sqlite.org/isolation.html}isolation}. If you are using
-    multiple threads {!Ask_pool} the connections.
+    multiple threads {!Rel_pool} the connections.
 
     {b Concurrency.} Reader and writer concurrency can be improved by
     setting your database in {{:https://sqlite.org/wal.html}WAL mode}.
@@ -23,10 +23,10 @@
        errorlog}, the backup API (really ? look into VACUUM) and the blob API.}
     {- Have a look again at {{:https://sqlite.org/tclsqlite.html}tcl's binding}
        feature set.}
-    {- [ask-sqlite3] tool, support for indexes}
+    {- [rel-sqlite3] tool, support for indexes}
     {- Low-level statement interface provide support for the sql remainder.}} *)
 
-open Ask
+open Rel
 
 (** {1:err Errors} *)
 
@@ -39,7 +39,7 @@ module Error : sig
   (** {1:codes Result codes} *)
 
   type code
-  (** The type for result codes. [Ask_sqlite3] database connections
+  (** The type for result codes. [Rel_sqlite3] database connections
       exposes only
       {{:https://sqlite.org/rescode.html#primary_result_codes_versus_extended_result_codes}extended result} codes. See {{!Error.cst}constants}. *)
 
@@ -344,7 +344,7 @@ type mutex =
     {{:https://sqlite.org/threadsafe.html}threading mode}. *)
 
 type t
-(** The type for SQLite3 connections. {b Warning.} [Ask_sqlite3]'s
+(** The type for SQLite3 connections. {b Warning.} [Rel_sqlite3]'s
     abstraction of connections is not thread-safe.  *)
 
 val open' :
@@ -373,7 +373,7 @@ val close : t -> (unit, error) result
 
     This will only ever error if there are ressources of [db] that
     were not disposed properly. For example if you use the
-    {{!Ask_sqlite3.Stmt}low-level} statement interface and forget to
+    {{!Rel_sqlite3.Stmt}low-level} statement interface and forget to
     dispose the statements before closing the database. *)
 
 val busy_timeout_ms : t -> int -> (unit, error) result
@@ -414,7 +414,7 @@ val exec_sql : t -> string -> (unit, error) result
 (** [exec_sql db sql] executes the SQL statements [sql] on [db] and
     ignores the result. [sql] is neither prepared nor cached. Use this
     to execute SQL scripts. If you are doing lots of inserts or
-    updates make a {{!Ask_sqlite3.with_transaction}transaction} to
+    updates make a {{!Rel_sqlite3.with_transaction}transaction} to
     ensure good performance. *)
 
 val exec_once : t -> unit Sql.Stmt.t -> (unit, error) result
@@ -464,7 +464,7 @@ val explain : ?query_plan:bool -> t -> 'a Sql.Stmt.t -> (string, error) result
 module Stmt : sig
 
   type db = t
-  (** See {!Ask_sqlite3.t}. *)
+  (** See {!Rel_sqlite3.t}. *)
 
   type t
   (** The type for pepared statements. *)
@@ -540,7 +540,7 @@ end
 *)
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers
+   Copyright (c) 2020 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

@@ -1,5 +1,5 @@
 /*---------------------------------------------------------------------------
-   Copyright (c) 2021 The ask programmers. All rights reserved.
+   Copyright (c) 2021 The rel programmers. All rights reserved.
    Distributed under the ISC license, see license at the end of the file.
    --------------------------------------------------------------------------*/
 
@@ -27,19 +27,19 @@
 
 /* Library information and configuration */
 
-CAMLprim value ocaml_ask_sqlite3_version_number (value unit)
+CAMLprim value ocaml_rel_sqlite3_version_number (value unit)
 {
   return (Val_int (sqlite3_libversion_number ()));
 }
 
-CAMLprim value ocaml_ask_sqlite3_errstr (value rc)
+CAMLprim value ocaml_rel_sqlite3_errstr (value rc)
 {
   return caml_copy_string (sqlite3_errstr (Sqlite3_rc_val (rc)));
 }
 
 /* Database connections */
 
-CAMLprim value ocaml_ask_sqlite3_open (value file, value uri, value mode,
+CAMLprim value ocaml_rel_sqlite3_open (value file, value uri, value mode,
                                        value mutex, value vfs)
 {
   CAMLparam5 (file, uri, mode, mutex, vfs);
@@ -92,32 +92,32 @@ CAMLprim value ocaml_ask_sqlite3_open (value file, value uri, value mode,
   CAMLreturn (ret);
 }
 
-CAMLprim value ocaml_ask_sqlite3_close (value db)
+CAMLprim value ocaml_rel_sqlite3_close (value db)
 {
   return Val_sqlite3_rc (sqlite3_close (Sqlite3_val (db)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_errmsg (value db)
+CAMLprim value ocaml_rel_sqlite3_errmsg (value db)
 {
   return caml_copy_string (sqlite3_errmsg (Sqlite3_val (db)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_extended_errcode (value db)
+CAMLprim value ocaml_rel_sqlite3_extended_errcode (value db)
 {
   return Val_int (sqlite3_extended_errcode (Sqlite3_val (db)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_busy_timeout (value db, value ms)
+CAMLprim value ocaml_rel_sqlite3_busy_timeout (value db, value ms)
 {
   return Val_sqlite3_rc (sqlite3_busy_timeout (Sqlite3_val(db), Int_val(ms)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_changes (value db)
+CAMLprim value ocaml_rel_sqlite3_changes (value db)
 {
   return Val_int (sqlite3_changes (Sqlite3_val (db)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_last_insert_rowid (value db)
+CAMLprim value ocaml_rel_sqlite3_last_insert_rowid (value db)
 {
   return caml_copy_int64
     (sqlite3_last_insert_rowid (Sqlite3_val (db)));
@@ -125,7 +125,7 @@ CAMLprim value ocaml_ask_sqlite3_last_insert_rowid (value db)
 
 /* Queries */
 
-CAMLprim value ocaml_ask_sqlite3_exec (value db, value sql)
+CAMLprim value ocaml_rel_sqlite3_exec (value db, value sql)
 {
   if (!caml_string_is_c_safe (sql))
     caml_invalid_argument ("sqlite3_exec: SQL string is not C safe.");
@@ -141,14 +141,14 @@ CAMLprim value ocaml_ask_sqlite3_exec (value db, value sql)
 
 /* Prepared statements */
 
-CAMLprim value ocaml_ask_sqlite3_stmt_errmsg (value stmt)
+CAMLprim value ocaml_rel_sqlite3_stmt_errmsg (value stmt)
 {
   sqlite3_stmt *stmtc = Sqlite3_stmt_val (stmt);
   sqlite3 *dbc = sqlite3_db_handle (stmtc);
   return caml_copy_string (sqlite3_errmsg (dbc));
 }
 
-CAMLprim value ocaml_ask_sqlite3_prepare (value db, value sql)
+CAMLprim value ocaml_rel_sqlite3_prepare (value db, value sql)
 {
   CAMLparam2 (db, sql);
   CAMLlocal1 (ret);
@@ -177,17 +177,17 @@ CAMLprim value ocaml_ask_sqlite3_prepare (value db, value sql)
   CAMLreturn (ret);
 }
 
-CAMLprim value ocaml_ask_sqlite3_finalize (value stmt)
+CAMLprim value ocaml_rel_sqlite3_finalize (value stmt)
 {
   return Val_sqlite3_rc (sqlite3_finalize (Sqlite3_stmt_val (stmt)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_reset (value stmt)
+CAMLprim value ocaml_rel_sqlite3_reset (value stmt)
 {
   return Val_sqlite3_rc (sqlite3_reset (Sqlite3_stmt_val (stmt)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_step (value stmt)
+CAMLprim value ocaml_rel_sqlite3_step (value stmt)
 {
   sqlite3_stmt *stmtc = Sqlite3_stmt_val (stmt);
   caml_release_runtime_system ();
@@ -196,49 +196,49 @@ CAMLprim value ocaml_ask_sqlite3_step (value stmt)
   return Val_sqlite3_rc (rc);
 }
 
-CAMLprim value ocaml_ask_sqlite3_column_count (value stmt)
+CAMLprim value ocaml_rel_sqlite3_column_count (value stmt)
 {
   return Val_int (sqlite3_column_count (Sqlite3_stmt_val (stmt)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_bind_paramater_count (value stmt)
+CAMLprim value ocaml_rel_sqlite3_bind_paramater_count (value stmt)
 {
   return Val_int (sqlite3_bind_parameter_count (Sqlite3_stmt_val (stmt)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_bind_null (value stmt, value i)
+CAMLprim value ocaml_rel_sqlite3_bind_null (value stmt, value i)
 {
   return Val_sqlite3_rc
     (sqlite3_bind_null (Sqlite3_stmt_val (stmt), Int_val (i)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_bind_bool (value stmt, value i, value v)
+CAMLprim value ocaml_rel_sqlite3_bind_bool (value stmt, value i, value v)
 {
   return Val_sqlite3_rc
     (sqlite3_bind_int64 (Sqlite3_stmt_val (stmt), Int_val (i),
                          Bool_val (v) ? 1 : 0));
 }
 
-CAMLprim value ocaml_ask_sqlite3_bind_int (value stmt, value i, value v)
+CAMLprim value ocaml_rel_sqlite3_bind_int (value stmt, value i, value v)
 {
   return Val_sqlite3_rc
     (sqlite3_bind_int64 (Sqlite3_stmt_val (stmt), Int_val (i), Int_val (v)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_bind_int64 (value stmt, value i, value v)
+CAMLprim value ocaml_rel_sqlite3_bind_int64 (value stmt, value i, value v)
 {
   return Val_sqlite3_rc
     (sqlite3_bind_int64 (Sqlite3_stmt_val (stmt), Int_val (i), Int64_val (v)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_bind_double (value stmt, value i, value v)
+CAMLprim value ocaml_rel_sqlite3_bind_double (value stmt, value i, value v)
 {
   return Val_sqlite3_rc
     (sqlite3_bind_double (Sqlite3_stmt_val (stmt), Int_val (i),
                           Double_val (v)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_bind_text (value stmt, value i, value v)
+CAMLprim value ocaml_rel_sqlite3_bind_text (value stmt, value i, value v)
 {
   return Val_sqlite3_rc
     (sqlite3_bind_text (Sqlite3_stmt_val (stmt), Int_val (i),
@@ -246,7 +246,7 @@ CAMLprim value ocaml_ask_sqlite3_bind_text (value stmt, value i, value v)
                         SQLITE_TRANSIENT));
 }
 
-CAMLprim value ocaml_ask_sqlite3_bind_blob (value stmt, value i, value v)
+CAMLprim value ocaml_rel_sqlite3_bind_blob (value stmt, value i, value v)
 {
   return Val_sqlite3_rc
     (sqlite3_bind_blob (Sqlite3_stmt_val (stmt), Int_val (i),
@@ -254,40 +254,40 @@ CAMLprim value ocaml_ask_sqlite3_bind_blob (value stmt, value i, value v)
                         SQLITE_TRANSIENT));
 }
 
-CAMLprim value ocaml_ask_sqlite3_clear_bindings (value stmt)
+CAMLprim value ocaml_rel_sqlite3_clear_bindings (value stmt)
 {
   return Val_sqlite3_rc (sqlite3_clear_bindings (Sqlite3_stmt_val (stmt)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_column_is_null (value stmt, value i)
+CAMLprim value ocaml_rel_sqlite3_column_is_null (value stmt, value i)
 {
   return Val_bool (sqlite3_column_type (Sqlite3_stmt_val (stmt), Int_val (i))
                    == SQLITE_NULL);
 }
 
-CAMLprim value ocaml_ask_sqlite3_column_bool (value stmt, value i)
+CAMLprim value ocaml_rel_sqlite3_column_bool (value stmt, value i)
 {
   return Val_bool (sqlite3_column_int (Sqlite3_stmt_val (stmt), Int_val (i)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_column_int (value stmt, value i)
+CAMLprim value ocaml_rel_sqlite3_column_int (value stmt, value i)
 {
   return Val_int (sqlite3_column_int64 (Sqlite3_stmt_val (stmt), Int_val (i)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_column_int64 (value stmt, value i)
+CAMLprim value ocaml_rel_sqlite3_column_int64 (value stmt, value i)
 {
   return caml_copy_int64
     (sqlite3_column_int64 (Sqlite3_stmt_val (stmt), Int_val (i)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_column_double (value stmt, value i)
+CAMLprim value ocaml_rel_sqlite3_column_double (value stmt, value i)
 {
   return caml_copy_double
     (sqlite3_column_double (Sqlite3_stmt_val (stmt), Int_val (i)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_column_text (value stmt, value i)
+CAMLprim value ocaml_rel_sqlite3_column_text (value stmt, value i)
 {
   sqlite3_stmt *stmtc = Sqlite3_stmt_val (stmt);
   int len = sqlite3_column_bytes (stmtc, Int_val (i));
@@ -295,7 +295,7 @@ CAMLprim value ocaml_ask_sqlite3_column_text (value stmt, value i)
     (len, (char *)sqlite3_column_text (stmtc, Int_val (i)));
 }
 
-CAMLprim value ocaml_ask_sqlite3_column_blob (value stmt, value i)
+CAMLprim value ocaml_rel_sqlite3_column_blob (value stmt, value i)
 {
   sqlite3_stmt *stmtc = Sqlite3_stmt_val (stmt);
   int len = sqlite3_column_bytes (stmtc, Int_val (i));
@@ -304,7 +304,7 @@ CAMLprim value ocaml_ask_sqlite3_column_blob (value stmt, value i)
 }
 
 /*---------------------------------------------------------------------------
-   Copyright (c) 2021 The ask programmers
+   Copyright (c) 2021 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

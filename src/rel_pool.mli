@@ -1,5 +1,5 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2021 The ask programmers. All rights reserved.
+   Copyright (c) 2021 The rel programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
@@ -42,7 +42,7 @@ val dispose : ('a, 'b) t -> (unit, 'b list) result
     given to {!create}. *)
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2021 The ask programmers
+   Copyright (c) 2021 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

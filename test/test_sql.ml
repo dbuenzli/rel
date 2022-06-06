@@ -1,13 +1,13 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers. All rights reserved.
+   Copyright (c) 2020 The rel programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
 
 (* FIXME rewrites w.r.t. to API evolution. *)
 
-open Ask
-open Ask.Syntax
+open Rel
+open Rel.Syntax
 
 let ( let* ) = Result.bind
 
@@ -18,12 +18,12 @@ let log_if_error ~use = function
 
 let create_schema db schema =
   log_sql "schema" (Sql.Stmt.src schema);
-  Ask_sqlite3.exec_once db schema
+  Rel_sqlite3.exec_once db schema
 
 let insert_row db sql r =
   let st = sql r in
   log_sql "insert" (Sql.Stmt.src st);
-  Ask_sqlite3.exec db st
+  Rel_sqlite3.exec db st
 
 let rec insert_rows db sql t = function
 | [] -> Ok ()
@@ -35,14 +35,14 @@ let rec insert_rows db sql t = function
 let select_rows db bag row =
   let st = Sql.of_bag row bag in
   log_sql "select" (Sql.Stmt.src st);
-  let* ops = Ask_sqlite3.fold db st List.cons [] in
+  let* ops = Rel_sqlite3.fold db st List.cons [] in
   let ops = List.rev ops in
   log "@[<v>%a@,---@]" (Row.list_pp ~header:true row) ops;
   Ok ()
 
 module Test_sql_src = struct
   open Test_schema.Products_flat_with_objects
-  open Ask.Syntax
+  open Rel.Syntax
 
   let sql = "SELECT * FROM product WHERE name = $1 and price = $2"
   let req =
@@ -78,7 +78,7 @@ module Test_products = struct
 
   let get_products db =
     let get_products =
-      let open Ask.Syntax in
+      let open Rel.Syntax in
       let* p = Bag.table Product.table in
       Bag.yield p
     in
@@ -88,7 +88,7 @@ module Test_products = struct
   let get_order2 db = select_rows db order2 (Table.row Order.table)
 
   let order2_sales =
-    let open Ask.Syntax in
+    let open Rel.Syntax in
     let* o = order2 in
     Q.get_order_sales o
 
@@ -100,10 +100,10 @@ module Test_products = struct
 
   let run () =
     log "Testing Products schema";
-    Ask_sqlite3.error_string @@
-    let* db = Ask_sqlite3.(open' ~mode:Ask_sqlite3.Memory "") in
+    Rel_sqlite3.error_string @@
+    let* db = Rel_sqlite3.(open' ~mode:Rel_sqlite3.Memory "") in
     let finally () =
-      log_if_error ~use:() Ask_sqlite3.(error_string @@ close db)
+      log_if_error ~use:() Rel_sqlite3.(error_string @@ close db)
     in
     Fun.protect ~finally @@ fun () ->
     let* () = create_schema db schema in
@@ -129,7 +129,7 @@ module Test_duos = struct
     select_rows db diff row
 
   let thirties =
-    let open Ask.Syntax in
+    let open Rel.Syntax in
     Q.persons_in_age_range ~first:(Int.v 30) ~last:(Int.v 39)
 
   let thirties db =
@@ -137,7 +137,7 @@ module Test_duos = struct
     select_rows db thirties row
 
   let thirties' =
-    let open Ask.Syntax in
+    let open Rel.Syntax in
     let in_thirties p =
       let age = p #. Person.age' in
       Int.(v 30 <= age && age <= v 39)
@@ -149,7 +149,7 @@ module Test_duos = struct
     select_rows db thirties' row
 
   let between_edna_and_bert_excl =
-    let open Ask.Syntax in
+    let open Rel.Syntax in
     let* edna = Q.person_age ~name:(Text.v "Edna") in
     let* bert = Q.person_age ~name:(Text.v "Bert") in
     Q.persons_in_age_range ~first:edna ~last:(Int.(bert - v 1))
@@ -159,7 +159,7 @@ module Test_duos = struct
     select_rows db between_edna_and_bert_excl row
 
   let thirties_by_pred pred =
-    let open Ask.Syntax in
+    let open Rel.Syntax in
     let in_thirties p =
       let age = p #. Person.age' in
       Q.pred pred age
@@ -176,10 +176,10 @@ module Test_duos = struct
 
   let run () =
     log "Testing Duos schema";
-    Ask_sqlite3.error_string @@
-    let* db = Ask_sqlite3.open' ~mode:Ask_sqlite3.Memory "" in
+    Rel_sqlite3.error_string @@
+    let* db = Rel_sqlite3.open' ~mode:Rel_sqlite3.Memory "" in
     let finally () =
-      log_if_error ~use:() Ask_sqlite3.(error_string @@ close db)
+      log_if_error ~use:() Rel_sqlite3.(error_string @@ close db)
     in
     Fun.protect ~finally @@ fun () ->
     let* () = create_schema db schema in
@@ -204,7 +204,7 @@ module Test_org = struct
   let insert_task = Sql.insert_into Task.table
 
   let abstract_expertise =
-    let open Ask.Syntax in
+    let open Rel.Syntax in
     Q.department_expertise ~task:(Text.v "abstract")
 
   let abstract_expertise db =
@@ -213,10 +213,10 @@ module Test_org = struct
 
   let run () =
     log "Testing Org schema";
-    Ask_sqlite3.error_string @@
-    let* db = Ask_sqlite3.open' ~mode:Ask_sqlite3.Memory "" in
+    Rel_sqlite3.error_string @@
+    let* db = Rel_sqlite3.open' ~mode:Rel_sqlite3.Memory "" in
     let finally () =
-      log_if_error ~use:() Ask_sqlite3.(error_string @@ close db)
+      log_if_error ~use:() Rel_sqlite3.(error_string @@ close db)
     in
     Fun.protect ~finally @@ fun () ->
     let* () = create_schema db schema in
@@ -240,7 +240,7 @@ let tests () =
 let () = exit (tests ())
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers
+   Copyright (c) 2020 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

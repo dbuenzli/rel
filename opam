@@ -1,23 +1,8 @@
 opam-version: "2.0"
-synopsis: """Relational database programming for OCaml"""
-maintainer: ["Daniel Bünzli <daniel.buenzl i@erratique.ch>"]
-authors: ["The ask programmers"]
-homepage: "https://erratique.ch/software/ask"
-doc: "https://erratique.ch/software/ask/doc"
-dev-repo: "git+https://erratique.ch/repos/ask.git"
-bug-reports: "https://github.com/dbuenzli/ask/issues"
-license: ["ISC"]
-tags: ["database" "query" "SQL" "org:erratique"]
-depends: ["ocaml" {>= "4.08.0"}
-          "ocamlfind" {build}
-          "ocamlbuild" {build}
-          "topkg" {build & >= "1.0.3"}
-          "conf-sqlite3" {build}
-          "cmdliner" {>= "1.0.0"}]
-build: [["ocaml" "pkg/pkg.ml" "build" "--dev-pkg" "%{dev}%"
-          "--with-conf-sqlite3" "%{conf-sqlite3:installed}%" ]]
-description: """
-Ask is a library for programming with relational databases in OCaml.
+name: "rel"
+synopsis: "Relational database programming for OCaml"
+description: """\
+Rel is a library for programming with relational databases in OCaml.
 It provides:
 
 * Typed combinators to describe tables and their representation 
@@ -32,8 +17,35 @@ It provides:
 * Support for SQLite3 databases (optional). Run SQL statements 
   and generate OCaml table descriptions for existing databases.
 
-Ask is distributed under the ISC license. The basic library has no
-dependencies. The SQLite support depends on the C SQLite3 library (at
-least v3.26.2).
+Rel is distributed under the ISC license. The basic library has no
+dependencies. 
 
-Homepage: https://erratique.ch/software/ask"""
+The SQLite support depends on the C SQLite3 library (at least
+v3.26.2).
+
+Homepage: https://erratique.ch/software/rel"""
+maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
+authors: "The rel programmers"
+license: "ISC"
+tags: ["database" "query" "SQL" "org:erratique"]
+homepage: "https://erratique.ch/software/rel"
+doc: "https://erratique.ch/software/rel/doc"
+bug-reports: "https://github.com/dbuenzli/rel/issues"
+depends: [
+  "ocaml" {>= "4.08.0"}
+  "ocamlfind" {build}
+  "ocamlbuild" {build}
+  "topkg" {build & >= "1.0.3"}
+  "conf-sqlite3" {build}
+  "cmdliner" {>= "1.0.0"}
+]
+build: [
+  "ocaml"
+  "pkg/pkg.ml"
+  "build"
+  "--dev-pkg"
+  "%{dev}%"
+  "--with-conf-sqlite3"
+  "%{conf-sqlite3:installed}%"
+]
+dev-repo: "git+https://erratique.ch/repos/rel.git"

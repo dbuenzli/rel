@@ -1,9 +1,9 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers. All rights reserved.
+   Copyright (c) 2020 The rel programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-open Ask
+open Rel
 
 let ( let* ) = Result.bind
 
@@ -27,7 +27,7 @@ let playlists db =
   let row = Table.row Playlist.table in
   let sql = "select * from playlists" in
   let st = Sql.Stmt.(func sql @@ ret row) in
-  let* ps = Ask_sqlite3.fold db st List.cons [] in
+  let* ps = Rel_sqlite3.fold db st List.cons [] in
   Format.printf "%a" (Row.list_pp ~header:true row) (List.rev ps);
   Ok ()
 
@@ -35,16 +35,16 @@ let playlist_id db id =
   let row = Table.row Playlist.table in
   let sql = "select * from playlists where PlaylistId = ?1" in
   let playlist_with_id = Sql.Stmt.(func sql @@ int @-> ret row) in
-  let* ps = Ask_sqlite3.fold db (playlist_with_id id) List.cons [] in
+  let* ps = Rel_sqlite3.fold db (playlist_with_id id) List.cons [] in
   Format.printf "\n\nplaylist %d: %a" id Playlist.pp (List.hd ps);
   Ok ()
 
 let test_db () =
   log_error ~use:1 @@
-  let mode = Ask_sqlite3.Read_write in
-  Ask_sqlite3.error_string @@
-  let* db = Ask_sqlite3.open' ~mode "tmp/chinook.db" in
-  let finally () = log_error ~use:() Ask_sqlite3.(error_string @@ close db) in
+  let mode = Rel_sqlite3.Read_write in
+  Rel_sqlite3.error_string @@
+  let* db = Rel_sqlite3.open' ~mode "tmp/chinook.db" in
+  let finally () = log_error ~use:() Rel_sqlite3.(error_string @@ close db) in
   Fun.protect ~finally @@ fun () ->
   let* () = playlists db in
   let* ()=  playlist_id db 3 in
@@ -56,7 +56,7 @@ let main () = test_db ()
 let () = if !Sys.interactive then () else (exit (main ()))
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers
+   Copyright (c) 2020 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

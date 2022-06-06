@@ -1,5 +1,5 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers. All rights reserved.
+   Copyright (c) 2020 The rel programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
@@ -56,7 +56,7 @@ end
 (* Thin bindings to SQLite3 *)
 
 module Tsqlite3 = struct
-  external version_number : unit -> int = "ocaml_ask_sqlite3_version_number"
+  external version_number : unit -> int = "ocaml_rel_sqlite3_version_number"
   let version () =
     let v = version_number () and s = string_of_int in
     let mmaj = 1000000 and mmin = 1000 in
@@ -70,7 +70,7 @@ module Tsqlite3 = struct
   type rc = int (* N.B. sqlite defines these as int32 but they are small
                    so that should work on 32-bit platforms too. *)
 
-  external errstr : rc -> string = "ocaml_ask_sqlite3_errstr"
+  external errstr : rc -> string = "ocaml_rel_sqlite3_errstr"
 
   (* Database connection *)
 
@@ -80,94 +80,94 @@ module Tsqlite3 = struct
 
   external _open' :
     string -> uri:bool -> mode:mode -> mutex:mutex -> vfs:string ->
-    (t, rc) result = "ocaml_ask_sqlite3_open"
+    (t, rc) result = "ocaml_rel_sqlite3_open"
 
   let open'
       ?(vfs = "") ?(uri = true) ?(mutex = Full) ?(mode = Read_write_create) f
     =
     _open' ~vfs ~uri ~mode ~mutex f
 
-  external close : t -> rc = "ocaml_ask_sqlite3_close"
-  external extended_errcode : t -> int = "ocaml_ask_sqlite3_extended_errcode"
-  external errmsg : t -> string = "ocaml_ask_sqlite3_errmsg"
-  external busy_timeout : t -> int -> rc = "ocaml_ask_sqlite3_busy_timeout"
-  external changes : t -> int = "ocaml_ask_sqlite3_changes"
+  external close : t -> rc = "ocaml_rel_sqlite3_close"
+  external extended_errcode : t -> int = "ocaml_rel_sqlite3_extended_errcode"
+  external errmsg : t -> string = "ocaml_rel_sqlite3_errmsg"
+  external busy_timeout : t -> int -> rc = "ocaml_rel_sqlite3_busy_timeout"
+  external changes : t -> int = "ocaml_rel_sqlite3_changes"
   external last_insert_rowid : t -> int64 =
-    "ocaml_ask_sqlite3_last_insert_rowid"
+    "ocaml_rel_sqlite3_last_insert_rowid"
 
   (* Queries *)
 
-  external exec : t -> string -> rc = "ocaml_ask_sqlite3_exec"
+  external exec : t -> string -> rc = "ocaml_rel_sqlite3_exec"
 
   (* Pepared statements *)
 
   type stmt (* Boxed pointer to sqlite3_stmt struct *)
 
   external stmt_errmsg : stmt -> string =
-    "ocaml_ask_sqlite3_stmt_errmsg"
+    "ocaml_rel_sqlite3_stmt_errmsg"
 
   external prepare : t -> string -> (stmt, rc) result =
-    "ocaml_ask_sqlite3_prepare"
+    "ocaml_rel_sqlite3_prepare"
 
   external finalize : stmt -> rc =
-    "ocaml_ask_sqlite3_finalize"
+    "ocaml_rel_sqlite3_finalize"
 
   external reset : stmt -> rc =
-    "ocaml_ask_sqlite3_reset"
+    "ocaml_rel_sqlite3_reset"
 
   external step : stmt -> rc =
-    "ocaml_ask_sqlite3_step"
+    "ocaml_rel_sqlite3_step"
 
   external column_count : stmt -> int =
-    "ocaml_ask_sqlite3_column_count"
+    "ocaml_rel_sqlite3_column_count"
 
   external bind_parameter_count : stmt -> int =
-    "ocaml_ask_sqlite3_bind_paramater_count"
+    "ocaml_rel_sqlite3_bind_paramater_count"
 
   external bind_null : stmt -> int -> rc =
-    "ocaml_ask_sqlite3_bind_null"
+    "ocaml_rel_sqlite3_bind_null"
 
   external bind_bool : stmt -> int -> bool -> rc =
-    "ocaml_ask_sqlite3_bind_bool"
+    "ocaml_rel_sqlite3_bind_bool"
 
   external bind_int : stmt -> int -> int -> rc =
-    "ocaml_ask_sqlite3_bind_int"
+    "ocaml_rel_sqlite3_bind_int"
 
   external bind_int64 : stmt -> int -> int64 -> rc =
-    "ocaml_ask_sqlite3_bind_int64"
+    "ocaml_rel_sqlite3_bind_int64"
 
   external bind_double : stmt -> int -> float -> rc =
-    "ocaml_ask_sqlite3_bind_double"
+    "ocaml_rel_sqlite3_bind_double"
 
   external bind_text : stmt -> int -> string -> rc =
-    "ocaml_ask_sqlite3_bind_text"
+    "ocaml_rel_sqlite3_bind_text"
 
   external bind_blob : stmt -> int -> string -> rc =
-    "ocaml_ask_sqlite3_bind_blob"
+    "ocaml_rel_sqlite3_bind_blob"
 
   external clear_bindings : stmt -> rc =
-    "ocaml_ask_sqlite3_clear_bindings"
+    "ocaml_rel_sqlite3_clear_bindings"
 
   external column_is_null : stmt -> int -> bool =
-    "ocaml_ask_sqlite3_column_is_null"
+    "ocaml_rel_sqlite3_column_is_null"
 
   external column_bool : stmt -> int -> bool =
-    "ocaml_ask_sqlite3_column_bool"
+    "ocaml_rel_sqlite3_column_bool"
 
   external column_int : stmt -> int -> int =
-    "ocaml_ask_sqlite3_column_int"
+    "ocaml_rel_sqlite3_column_int"
 
   external column_int64 : stmt -> int -> int64 =
-    "ocaml_ask_sqlite3_column_int64"
+    "ocaml_rel_sqlite3_column_int64"
 
   external column_double : stmt -> int -> float =
-    "ocaml_ask_sqlite3_column_double"
+    "ocaml_rel_sqlite3_column_double"
 
   external column_text : stmt -> int -> string =
-    "ocaml_ask_sqlite3_column_text"
+    "ocaml_rel_sqlite3_column_text"
 
   external column_blob : stmt -> int -> string =
-    "ocaml_ask_sqlite3_column_blob"
+    "ocaml_rel_sqlite3_column_blob"
 end
 
 (* Errors *)
@@ -265,7 +265,7 @@ type error = Error.t
 let error_string r = Result.map_error Error.message r
 let db_error rc db = Error.v rc (Tsqlite3.errmsg db)
 
-open Ask
+open Rel
 
 let strf = Printf.sprintf
 
@@ -378,7 +378,7 @@ module Stmt' = struct
 
   let unpack_row : type r. t -> r Sql.Stmt.t -> r = fun s st ->
     let rec cols :
-      type r a. Tsqlite3.stmt -> int -> (r, a) Ask_private.prod -> a
+      type r a. Tsqlite3.stmt -> int -> (r, a) Rel_private.prod -> a
     =
     fun s idx r -> match r with
     | Unit f -> f
@@ -387,12 +387,12 @@ module Stmt' = struct
         f (unpack_col s idx c)
     | Cat (cs, _, row) ->
         let f = cols s
-            (idx - Row.col_count (Ask_private.prod_to_prod row)) cs
+            (idx - Row.col_count (Rel_private.prod_to_prod row)) cs
         in
         let v = cols s idx row in
         f v
     in
-    let row = Ask_private.prod_of_prod (Sql.Stmt.result st) in
+    let row = Rel_private.prod_of_prod (Sql.Stmt.result st) in
     cols s.stmt (s.col_count - 1) row
 
   let stop s =
@@ -633,7 +633,7 @@ end
 *)
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers
+   Copyright (c) 2020 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

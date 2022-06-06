@@ -5,16 +5,16 @@ open Topkg
 
 let sqlite3 = Conf.with_pkg "conf-sqlite3"
 let () =
-  Pkg.describe "ask" @@ fun c ->
+  Pkg.describe "rel" @@ fun c ->
   let sqlite3 = Conf.value c sqlite3 in
   Ok [
-    Pkg.mllib "src/ask.mllib";
-    Pkg.mllib "src/ask_kit.mllib" ~dst_dir:"kit";
-    Pkg.mllib "src/ask_pool.mllib" ~dst_dir:"pool";
-    Pkg.mllib ~cond:sqlite3 "src/ask_sqlite3.mllib" ~dst_dir:"sqlite3";
+    Pkg.mllib "src/rel.mllib";
+    Pkg.mllib "src/rel_kit.mllib" ~dst_dir:"kit";
+    Pkg.mllib "src/rel_pool.mllib" ~dst_dir:"pool";
+    Pkg.mllib ~cond:sqlite3 "src/rel_sqlite3.mllib" ~dst_dir:"sqlite3";
     Pkg.clib
-      ~cond:sqlite3 "src/libask_sqlite3_stubs.clib" ~lib_dst_dir:"sqlite3";
-    Pkg.bin ~cond:sqlite3 "test/ask_sqlite3_tool" ~dst:"ask-sqlite3";
+      ~cond:sqlite3 "src/librel_sqlite3_stubs.clib" ~lib_dst_dir:"sqlite3";
+    Pkg.bin ~cond:sqlite3 "test/rel_sqlite3_tool" ~dst:"rel-sqlite3";
     Pkg.doc "doc/index.mld" ~dst:"odoc-pages/index.mld";
     Pkg.doc "doc/sqlite3_howto.mld" ~dst:"odoc-pages/sqlite3_howto.mld";
     Pkg.doc "doc/tutorial.mld" ~dst:"odoc-pages/tutorial.mld";

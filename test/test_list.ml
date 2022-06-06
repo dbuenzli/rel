@@ -1,16 +1,16 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers. All rights reserved.
+   Copyright (c) 2020 The rel programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-open Ask
-open Ask.Syntax
+open Rel
+open Rel.Syntax
 open Test_schema.Products_flat_with_objects
 
 let env =
-  Ask_list.Table_env.empty
-  |> Ask_list.Table_env.add S.product_table Data.products
-  |> Ask_list.Table_env.add S.order_table Data.orders
+  Rel_list.Table_env.empty
+  |> Rel_list.Table_env.add S.product_table Data.products
+  |> Rel_list.Table_env.add S.order_table Data.orders
 
 let pp_orders = Row.list_pp ~header:true (Table.row S.order_table)
 let pp_sales = Row.list_pp ~header:true S.sales_row
@@ -47,22 +47,22 @@ let tests () =
   let log fmt = Format.printf (fmt ^^ "@.") in
   let print_result pp_ok = function
   | Ok vs -> log "%a@." pp_ok vs
-  | Error e -> log "%s" (Ask_list.error_to_string e)
+  | Error e -> log "%s" (Rel_list.error_to_string e)
   in
   log "get_order_2:";
-  print_result pp_orders (Ask_list.of_bag env get_order_2);
+  print_result pp_orders (Rel_list.of_bag env get_order_2);
   log "get_order_2':";
-  print_result pp_orders (Ask_list.of_bag env get_order_2');
+  print_result pp_orders (Rel_list.of_bag env get_order_2');
   log "get_order_2'':";
-  print_result pp_orders (Ask_list.of_bag env get_order_2'');
+  print_result pp_orders (Rel_list.of_bag env get_order_2'');
   log "order_sales:";
-  print_result pp_sales (Ask_list.of_bag env order_2_sales);
+  print_result pp_sales (Rel_list.of_bag env order_2_sales);
   ()
 
 let () = tests ()
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers
+   Copyright (c) 2020 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

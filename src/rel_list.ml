@@ -1,9 +1,9 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers. All rights reserved.
+   Copyright (c) 2020 The rel programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-open Ask.Std
+open Rel.Std
 
 module Table_env = struct
 
@@ -65,7 +65,7 @@ let rec eval_div : type t. t Type.t -> t -> t -> t = function
 | Type.Int -> Int.div | Type.Int64 -> Int64.div | Type.Float -> Float.div
 | _ -> unknown_extension "division"
 
-open Ask.Ask_private
+open Rel.Rel_private
 
 let eval_unop : type a r. (a, r) unop -> a -> r =
 fun op x -> match op with
@@ -106,7 +106,7 @@ fun e v -> match v with
 | Const (_, v) -> v
 | Unop (op, v) -> eval_unop op (eval_value e v)
 | Binop (op, x, y) -> eval_binop op (eval_value e x) (eval_value e y)
-| Proj (r, c) -> (Ask.Col.proj c) (eval_value e r)
+| Proj (r, c) -> (Rel.Col.proj c) (eval_value e r)
 | Row f -> f
 | Tuple (f, v) -> (eval_value e f) (eval_value e v)
 | Exists b -> eval_bag e b <> []
@@ -132,7 +132,7 @@ let of_bag e b = try Ok (eval_bag e (bag_to_bag b)) with
 | Error k -> Error k
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers
+   Copyright (c) 2020 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

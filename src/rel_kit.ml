@@ -1,10 +1,10 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2021 The ask programmers. All rights reserved.
+   Copyright (c) 2021 The rel programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
 module Schema_diagram = struct
-  open Ask.Std
+  open Rel.Std
 
   module Sset = Set.Make (String)
 
@@ -113,7 +113,7 @@ module Schema_diagram = struct
 end
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2021 The ask programmers
+   Copyright (c) 2021 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

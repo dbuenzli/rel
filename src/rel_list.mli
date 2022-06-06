@@ -1,25 +1,46 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2021 The ask programmers. All rights reserved.
+   Copyright (c) 2020 The rel programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-(** Ask tools. *)
+(** Query OCaml lists of rows.
 
-(** Entity-relationship diagrams from {!Ask.Table.t} values. *)
-module Schema_diagram : sig
-  val pp_dot :
-    ?rankdir:string -> unit -> Format.formatter -> Ask.Table.v list -> unit
-    (** [pp_dit ~rankdir () ppf ts] dumps writes entity relationship diagram
-        in {{:https://graphviz.org/doc/info/lang.html}dot format} on [ppf]
-        using {{:https://graphviz.org/docs/attrs/rankdir/}direction}
-        [rankdir] (defaults to [BT]).
+    Given a suitable map from table to their content as lists of values, this
+    module (slowly) runs queries in memory. *)
 
-        This can be rendered to {{:https://graphviz.org/docs/outputs/}many
-        formats}. For example SVG with [dot -Tsvg]. *)
+open Rel
+
+(** Table environments. *)
+module Table_env : sig
+
+  type t
+  (** The type for table environments. Maps tables to their content. *)
+
+  val empty : t
+  (** [empty] has no tables. *)
+
+  val add : 'a Table.t -> 'a list -> t -> t
+  (** [add t l env] binds table [t] to [l] in [env]. *)
+
+  val find : 'a Table.t -> t -> 'a list option
+  (** [find t env] finds table [t] in [env]. .*)
 end
 
+type error =
+[ `Undefined_table of Table.v
+| `Unknown_extension of string
+| `Unexpected_variable of string ]
+(** The type for query errors. *)
+
+val error_to_string : error -> string
+(** [error_to_string e] is [e] as a human readable string. *)
+
+val of_bag : Table_env.t -> ('a, 'e) Bag.t -> ('a list, error) result
+(** [of_bag env b] is the result of [b] given tables the table environment
+    [env]. *)
+
 (*---------------------------------------------------------------------------
-   Copyright (c) 2021 The ask programmers
+   Copyright (c) 2020 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

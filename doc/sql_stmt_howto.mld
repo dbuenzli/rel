@@ -2,17 +2,17 @@
 
 Note that this is a rather low-level mecanism that uses raw SQL
 strings. If possible you should prefer the higher level functions
-of {!Ask.Sql}.
+of {!Rel.Sql}.
 
 {1:basics Binding basics}
 
-The {!Ask.Sql.Stmt} module provides a low-level mecanism to type the
+The {!Rel.Sql.Stmt} module provides a low-level mecanism to type the
 parameters and results of SQL statements.
 
 Using this mecanism results in a {e binding function} that binds OCaml
 values to SQL parameters and returns a value of type ['a Stmt.t] that
 specifies the type of rows ['a] returned by the statement. The type
-[unit] is used for the {{!Ask.Row.empty}empty row}.
+[unit] is used for the {{!Rel.Row.empty}empty row}.
 
 For example if you have this SQL statement:
 
@@ -31,7 +31,7 @@ let names_with_age_or_surname : int -> string -> string Sql.Stmt.t =
 
 Note that the binding function is only positional in nature it always
 binds arguments from left to right. You then get the arguments in that
-order {{!Ask.Sql.Stmt.rev_args}but reversed}, which your database
+order {{!Rel.Sql.Stmt.rev_args}but reversed}, which your database
 driver should bind sequentially according to its scheme. This also
 means you need to be careful if you later reorder parameters either
 in your binding function description or in your SQL.
@@ -56,7 +56,7 @@ which we update by projecting values from an OCaml value of type
 we want the type [person -> unit Sql.Stmt.t].
 
 
-This can be achieved with {{!Ask.Sql.Stmt.projs}these combinators}
+This can be achieved with {{!Rel.Sql.Stmt.projs}these combinators}
 as follows:
 
 {[

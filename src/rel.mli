@@ -1,5 +1,5 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers. All rights reserved.
+   Copyright (c) 2020 The rel programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
@@ -7,9 +7,9 @@
 
     Open one of these modules (FIXME not yet sure):
     {ul
-    {- Open {!Ask.Std}, to describe your database and its SQL
+    {- Open {!Rel.Std}, to describe your database and its SQL
        interaction.}
-    {- Open {!Ask.Syntax}, to define bags using the embedded query language.
+    {- Open {!Rel.Syntax}, to define bags using the embedded query language.
        Note that this redefines some standard library modules like [Bool]
        in your scope.}} *)
 
@@ -46,7 +46,7 @@ module Type : sig
   module Coded : sig
 
     type 'a repr = 'a t
-    (** See {!Ask.Type.t}. *)
+    (** See {!Rel.Type.t}. *)
 
     type ('a, 'b) map = 'a -> ('b, string) result
     (** The type for partially mapping values of type ['a] to values of
@@ -165,7 +165,7 @@ module Col : sig
 
   (** {1:params Parameters}
 
-      See {!Ask.Sql} for more parameters. *)
+      See {!Rel.Sql} for more parameters. *)
 
   (* TODO add when we get
   type ('r, 'a) param +=
@@ -432,7 +432,7 @@ end
     The expressiveness of the query language is currently limited.
     Note that you can always switch to raw SQL statements and
     {{!Sql.Stmt}type} them for execution. To define queries
-    you should open {!Ask.Syntax} which has more definitions and
+    you should open {!Rel.Syntax} which has more definitions and
     operator overloading. *)
 
 type 'a value
@@ -952,9 +952,9 @@ module Sql : sig
       {!drop_table} and {!drop_index} statements are issued to clear
       the way (defaults to [false]).
 
-      Make sure to use {!Ask_sqlite3.exec} otherwise only the first
+      Make sure to use {!Rel_sqlite3.exec} otherwise only the first
       statement gets executed, wrapping the whole thing in
-      {!Ask_sqlite3.with_transaction} is a good idea as well. *)
+      {!Rel_sqlite3.with_transaction} is a good idea as well. *)
 
   (** {1:insupd Inserting, updating and deleting} *)
 
@@ -1156,7 +1156,7 @@ end
 
     For the language extender and backend writer. Subject to change
     even between minor versions of the library. *)
-module Ask_private : sig
+module Rel_private : sig
 
   (** {1:rows Rows} *)
 
@@ -1203,7 +1203,7 @@ module Ask_private : sig
   (** {1:vals_and_bags Values and bags} *)
 
   type 'a value' = 'a value
-  (** See {!Askt.value}. *)
+  (** See {!Relt.value}. *)
 
   type 'a value =
   | Var : string -> 'a value (* only for compiling *)
@@ -1243,7 +1243,7 @@ end
 
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers
+   Copyright (c) 2020 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

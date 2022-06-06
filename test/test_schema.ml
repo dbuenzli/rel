@@ -1,10 +1,10 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers. All rights reserved.
+   Copyright (c) 2020 The rel programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-open Ask
-open Ask.Syntax
+open Rel
+open Rel.Syntax
 
 (* TODO rewrite with new convention. Forget about
    objects representation. *)
@@ -30,16 +30,16 @@ module Products_flat_with_objects = struct
     val qty : <qty:int; ..> value -> int value
     val sale : <sale:int; ..> value -> int value
 
-    val name' : (<name:string; ..>, string) Ask.Col.t
-    val price' : (<price:int; ..>, int) Ask.Col.t
-    val pid' : (<pid:int; ..>, int) Ask.Col.t
-    val oid' : (<oid:int; ..>, int) Ask.Col.t
-    val qty' : (<qty:int; ..>, int) Ask.Col.t
-    val sale' : (<sale:int; ..>, int) Ask.Col.t
+    val name' : (<name:string; ..>, string) Rel.Col.t
+    val price' : (<price:int; ..>, int) Rel.Col.t
+    val pid' : (<pid:int; ..>, int) Rel.Col.t
+    val oid' : (<oid:int; ..>, int) Rel.Col.t
+    val qty' : (<qty:int; ..>, int) Rel.Col.t
+    val sale' : (<sale:int; ..>, int) Rel.Col.t
 
-    val product_table : product Ask.Table.t
-    val order_table : order Ask.Table.t
-    val sales_row : sales Ask.Row.t
+    val product_table : product Rel.Table.t
+    val order_table : order Rel.Table.t
+    val sales_row : sales Rel.Row.t
 
   end = struct
     type product = <pid:int; name:string; price:int>
@@ -97,11 +97,11 @@ module Products_flat_with_objects = struct
     let sales_row = Row.(unit sales' * pid' * name' * sale')
   end
   module Q : sig
-    val get_order : int value -> (S.order, Ask.Bag.unordered) Ask.Bag.t
+    val get_order : int value -> (S.order, Rel.Bag.unordered) Rel.Bag.t
 
     val get_order_sales :
       < pid : int; qty : int; .. > value ->
-      (S.sales, Ask.Bag.unordered) Ask.Bag.t
+      (S.sales, Rel.Bag.unordered) Rel.Bag.t
   end = struct
 
     let get_order oid =
@@ -148,10 +148,10 @@ module Products_with_adts = struct
     val name : t -> string
     val price : t -> int
 
-    val pid' : (t, int) Ask.Col.t
-    val name' : (t, string) Ask.Col.t
-    val price' : (t, int) Ask.Col.t
-    val table : t Ask.Table.t
+    val pid' : (t, int) Rel.Col.t
+    val name' : (t, string) Rel.Col.t
+    val price' : (t, int) Rel.Col.t
+    val table : t Rel.Table.t
   end = struct
     type t = { pid : int; name : string; price : int }
     let v pid name price = { pid; name; price }
@@ -175,10 +175,10 @@ module Products_with_adts = struct
     val qty : t -> int
 
 
-    val oid' : (t, int) Ask.Col.t
-    val pid' : (t, int) Ask.Col.t
-    val qty' : (t, int) Ask.Col.t
-    val table : t Ask.Table.t
+    val oid' : (t, int) Rel.Col.t
+    val pid' : (t, int) Rel.Col.t
+    val qty' : (t, int) Rel.Col.t
+    val table : t Rel.Table.t
   end = struct
     type t = { oid : int; pid : int; qty : int }
     let v oid pid qty = { oid; pid; qty }
@@ -205,8 +205,8 @@ module Products_with_adts = struct
     object method pid = pid method name = name; method sale = sale end
 
   module Q : sig
-    val get_order : int value -> (Order.t, Ask.Bag.unordered) Ask.Bag.t
-    val get_order_sales : Order.t value -> (sales, Ask.Bag.unordered) Ask.Bag.t
+    val get_order : int value -> (Order.t, Rel.Bag.unordered) Rel.Bag.t
+    val get_order_sales : Order.t value -> (sales, Rel.Bag.unordered) Rel.Bag.t
   end = struct
     let get_order oid =
       let* o = Bag.table Order.table in
@@ -570,7 +570,7 @@ end
 *)
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers
+   Copyright (c) 2020 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

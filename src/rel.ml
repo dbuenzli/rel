@@ -1,5 +1,5 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers. All rights reserved.
+   Copyright (c) 2020 The rel programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
@@ -54,9 +54,9 @@ module Type = struct
 
   type 'a t += Coded : ('a, 'b) Coded.t -> 'a t
 
-  let invalid_unknown () = invalid_arg "Unknown 'a Ask.Type.t case."
+  let invalid_unknown () = invalid_arg "Unknown 'a Rel.Type.t case."
   let invalid_nested_option () =
-    invalid_arg "Nested option in 'a Ask.Type.t are unsupported."
+    invalid_arg "Nested option in 'a Rel.Type.t are unsupported."
 
   let rec pp : type a. a t Fmt.t = fun ppf t -> match t with
   | Bool -> Fmt.string ppf "bool" | Int -> Fmt.string ppf "int"
@@ -246,7 +246,7 @@ module Table = struct
     List.filter_map find_index t.params
 end
 
-module Ask_private = struct
+module Rel_private = struct
   type ('r, 'a) prod = ('r, 'a) Row.prod =
   | Unit : 'a -> ('r, 'a) prod
   | Prod : ('r, 'a -> 'b) prod * ('r, 'a) Col.t -> ('r, 'b) prod
@@ -369,9 +369,9 @@ module Ask_private = struct
   let bag_to_bag = Fun.id
 end
 
-type 'a value = 'a Ask_private.value'
+type 'a value = 'a Rel_private.value'
 module Bag = struct
-  open Ask_private
+  open Rel_private
   type 'a order = 'a
   type unordered = unit order
   type ('a, 'e) t = ('a, 'e) bag
@@ -543,7 +543,7 @@ module Bag_sql = struct   (* Target SQL fragment to compile bags *)
 end
 
 module Bag_to_sql = struct
-  open Ask_private
+  open Rel_private
 
   (* FIXME double quote and escape identifiers. *)
 
@@ -553,21 +553,21 @@ module Bag_to_sql = struct
   type gen = { table_sym : unit -> string; col_sym : unit -> string }
   let gen () = { table_sym = gen_sym "t"; col_sym = gen_sym "c" }
 
-  let unop_to_sql : type a r. (a, r) Ask_private.unop -> bool * string =
+  let unop_to_sql : type a r. (a, r) Rel_private.unop -> bool * string =
     fun op -> match op with
-    | Ask_private.Neg t ->
+    | Rel_private.Neg t ->
         begin match t with
         | Type.Bool -> true, "NOT"
         | Type.(Int | Int64 | Float) -> true, "-"
-        | _ -> failwith "Ask_sql: unimplemented unary operation"
+        | _ -> failwith "Rel_sql: unimplemented unary operation"
         end
     | Is_null -> false, "IS NULL"
     | Is_not_null -> false, "IS NOT NULL"
     | Get_some -> true, ""
-    | _ -> failwith "Ask_sql: unimplemented unary operation"
+    | _ -> failwith "Rel_sql: unimplemented unary operation"
 
   let arith_to_sql = function
-  | Ask_private.Add -> "+" | Sub -> "-" | Mul -> "*" | Div -> "/"
+  | Rel_private.Add -> "+" | Sub -> "-" | Mul -> "*" | Div -> "/"
 
   let cmp_to_sql = function
   | Eq -> "=" | Neq -> "<>" | Lt -> "<" | Leq -> "<=" | Gt -> ">"
@@ -579,7 +579,7 @@ module Bag_to_sql = struct
   | Cmp (cmp, _) -> cmp_to_sql cmp
   | And -> "AND" | Or -> "OR"
   | Cat -> "||" | Like -> "LIKE"
-  | _ -> failwith "Ask_sql: unimplemented binary operation"
+  | _ -> failwith "Rel_sql: unimplemented binary operation"
 
   let rec value_to_sql : type r. gen -> r value -> Bag_sql.exp =
   fun g v -> match v with
@@ -1022,7 +1022,7 @@ module Sql = struct
     let arg t f =
       let argc = f.argc + 1 in
       let func = Stmt.arg t f.func in
-      let bag = f.bag (Ask_private.Var (Printf.sprintf "?%d" argc)) in
+      let bag = f.bag (Rel_private.Var (Printf.sprintf "?%d" argc)) in
       { argc; bag; func }
 
     let ( @-> ) = arg
@@ -1042,7 +1042,7 @@ module Sql = struct
 end
 
 module Bool = struct
-  open Ask_private
+  open Rel_private
   let v b = Const (Type.Bool, b)
   let true' = Const (Type.Bool, true)
   let false' = Const (Type.Bool, false)
@@ -1059,7 +1059,7 @@ module Bool = struct
 end
 
 module Int = struct
-  open Ask_private
+  open Rel_private
   let v x = Const (Type.Int, x)
   let zero = Const (Type.Int, 0)
   let one = Const (Type.Int, 1)
@@ -1083,7 +1083,7 @@ module Int = struct
 end
 
 module Int64 = struct
-  open Ask_private
+  open Rel_private
   let v x = Const (Type.Int64, x)
   let zero = Const (Type.Int64, 0L)
   let one = Const (Type.Int64, 1L)
@@ -1102,7 +1102,7 @@ module Int64 = struct
 end
 
 module Float = struct
-  open Ask_private
+  open Rel_private
   let v x = Const (Type.Float, x)
   let zero = Const (Type.Float, 0.0)
   let one = Const (Type.Float, 1.0)
@@ -1121,7 +1121,7 @@ module Float = struct
 end
 
 module Text = struct
-  open Ask_private
+  open Rel_private
   let v s = Const (Type.Text, s)
   let empty = Const (Type.Text, "")
   let equal x y = Binop (Cmp (Eq, Type.Text), x, y)
@@ -1136,7 +1136,7 @@ module Text = struct
 end
 
 module Option = struct
-  open Ask_private
+  open Rel_private
   let v t o = Const (Type.Option t, o)
   let none t = Const (Type.Option t, None)
   let some t v = Const (Type.Option t, Some v)
@@ -1197,7 +1197,7 @@ module Std = struct
 end
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2020 The ask programmers
+   Copyright (c) 2020 The rel programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

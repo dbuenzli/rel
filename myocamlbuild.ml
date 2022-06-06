@@ -57,7 +57,7 @@ let () =
   dispatch begin function
   | After_rules ->
       lib_with_clib
-        ~lib:"ask_sqlite3" ~clib:"sqlite3" ~has_lib:"-DHAS_SQLITE3"
-        ~src_dir:"src" ~stublib:"ask_sqlite3_stubs";
+        ~lib:"rel_sqlite3" ~clib:"sqlite3" ~has_lib:"-DHAS_SQLITE3"
+        ~src_dir:"src" ~stublib:"rel_sqlite3_stubs";
   | _ -> ()
   end
