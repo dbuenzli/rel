@@ -43,7 +43,7 @@ let rel_pool_lib =
 (* Tools *)
 
 let rel_sqlite3_tool =
-  let srcs = Fpath.[`File (v "test/rel_sqlite3_tool.ml")] in
+  let srcs = Fpath.[`File (v "tools/rel_sqlite3_tool.ml")] in
   let requires = [cmdliner; rel; rel_sqlite3 ] in
   B0_ocaml.exe "rel-sqlite3" ~doc:"Rel sqlite3 tool" ~srcs ~requires
 

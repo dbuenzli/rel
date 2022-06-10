@@ -600,6 +600,122 @@ module Stmt = struct
   | Stmt'.Error e -> Error e
 end
 
+(* SQL schema *)
+
+module Schema = struct
+
+  module Stmt = struct
+    let strf = Format.asprintf
+    let ext c dir = match c with None -> "" | Some () -> dir
+    let if_exists_ext c = ext c " IF EXISTS"
+    let if_not_exists_ext c = ext c " IF NOT EXISTS"
+    let pp_comma ppf () = Format.fprintf ppf ",@ "
+    let pp_col_name ppf n = Format.pp_print_string ppf (Sql.Syntax.escape_id n)
+    let pp_col_names ppf cs =
+      Format.pp_open_hbox ppf ();
+      (Format.pp_print_list ~pp_sep:pp_comma pp_col_name) ppf cs;
+      Format.pp_close_box ppf ()
+
+    let rec type_of_type : type a. a Type.t -> string * bool = function
+    | Type.Bool -> "BOOL", true (* not null *)
+    | Type.Int -> "INTEGER", true
+    | Type.Int64 -> "BIGINT", true
+    | Type.Float -> "DOUBLE", true
+    | Type.Text -> "TEXT", true
+    | Type.Blob -> "BLOB", true
+    | Type.Option t -> fst (type_of_type t), false
+    | Type.Coded c -> type_of_type (Type.Coded.repr c)
+    | _ -> Type.invalid_unknown ()
+
+    let col_def col =
+      let name = Sql.Syntax.escape_id (Sql.Schema.Col.name col) in
+      let Rel.Type.V type' = Sql.Schema.Col.type' col in
+      let type', not_null = type_of_type type' in
+      let not_null = if not_null then " NOT NULL" else "" in
+      strf "%s %s%s" name type' not_null
+
+    let col_defs t = []
+
+    let foreign_key ?schema fk =
+      let ref fk =
+        let name, cs = Sql.Schema.Table.Foreign_key.ref fk in
+        if cs = [] then "" else
+        let name = Sql.Syntax.escape_id_in_schema ?schema name in
+        strf " REFERENCES %s (%a)" name pp_col_names cs
+      in
+      let action act a = match a with
+      | None -> "" | Some a ->
+          strf " %s %s" act (Sql.Schema.Table.Foreign_key.action_to_kwds a)
+      in
+      strf "FOREIGN KEY (%a)%s%s%s"
+        pp_col_names (Sql.Schema.Table.Foreign_key.cols fk)
+        (ref fk)
+        (action "ON UPDATE" (Sql.Schema.Table.Foreign_key.on_update fk))
+        (action "ON DELETE" (Sql.Schema.Table.Foreign_key.on_delete fk))
+
+    let create_table ?schema ?if_not_exists t =
+      let unique cs = strf "UNIQUE (%a)" pp_col_names cs in
+      let check (n, s) =
+        strf "CONSTRAINT %s CHECK (%s)" (Sql.Syntax.escape_id n) s
+      in
+      let if_not_exists = if_not_exists_ext if_not_exists  in
+      let name = Sql.Schema.Table.name t in
+      let name = Sql.Syntax.escape_id_in_schema ?schema name in
+      let cols = List.map col_def (Sql.Schema.Table.cols t) in
+      let uniques = List.map unique (Sql.Schema.Table.uniques t) in
+      let primary_key = match Sql.Schema.Table.primary_key t with
+      | None -> [] | Some pk -> [strf "PRIMARY KEY (%a)" pp_col_names pk]
+      in
+      let fks = Sql.Schema.Table.foreign_keys t in
+      let fks = List.map (foreign_key ?schema) fks in
+      let checks = List.map check (Sql.Schema.Table.checks t) in
+      let defs = cols @ primary_key @ uniques @ fks @ checks in
+      let sql =
+        strf "@[<v2>CREATE TABLE%s %s (@,%a@]@,);"
+          if_not_exists name
+          (Format.pp_print_list ~pp_sep:pp_comma Format.pp_print_string) defs
+      in
+      Sql.Stmt.(func sql @@ unit)
+
+    let create_index ?schema ?if_not_exists i =
+      let pp_index_col ppf c =
+        let name = Sql.Syntax.escape_id (Sql.Schema.Index.Col.name c) in
+        let ord = match Sql.Schema.Index.Col.sort_order c  with
+        | None -> "" | Some o -> " " ^ Sql.Schema.Index.Col.sort_order_to_kwd o
+        in
+        Format.fprintf ppf "%s%s" name ord
+      in
+      let unique = if Sql.Schema.Index.unique i then " UNIQUE" else "" in
+      let if_not_exists = if_not_exists_ext if_not_exists  in
+      let name = Sql.Schema.Index.name i in
+      let name = Sql.Syntax.escape_id_in_schema ?schema name in
+      let table_name = Sql.Schema.Index.table_name i in
+      let table_name = Sql.Syntax.escape_id_in_schema ?schema table_name in
+      let cols = Sql.Schema.Index.cols i in
+      let sql =
+        strf "@[<v2>CREATE%s INDEX%s %s ON %s @[<1>(%a)@];@]"
+          unique if_not_exists name table_name
+          (Format.pp_print_list ~pp_sep:pp_comma pp_index_col) cols
+      in
+      Sql.Stmt.(func sql @@ unit)
+
+    let drop_table ?schema ?if_exists t =
+      let if_exists = if_exists_ext if_exists  in
+      let name = Sql.Schema.Table.name t in
+      let name = Sql.Syntax.escape_id_in_schema ?schema name in
+      let sql = strf "DROP TABLE%s %s;" if_exists name in
+      Sql.Stmt.(func sql @@ unit)
+
+    let drop_index ?schema ?if_exists i =
+      let if_exists = if_exists_ext if_exists in
+      let name = Sql.Schema.Index.name i in
+      let name = Sql.Syntax.escape_id_in_schema ?schema name in
+      let sql = strf "DROP INDEX%s %s;" if_exists name in
+      Sql.Stmt.(func sql @@ unit)
+  end
+
+  let of_db db = failwith "TODO"
+end
 (* System tables *)
 (*
 module Table = struct

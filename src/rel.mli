@@ -33,6 +33,9 @@ module Type : sig
   | Option : 'a t -> 'a option t (** Nullable type. *)
   (** Base types supported by all database backends. *)
 
+  type v = V : 'a t -> v
+  (** The type for existential type values. *)
+
   (** {1:coded Coded types}
 
       Types coded by other types. Provides arbitrary OCaml column
@@ -232,7 +235,7 @@ module Row : sig
       used to quickly type SQL statement results.
 
       {b WARNING.} Since by default these column constructors lack
-      projection {!Row.pp} cannot be used on them. Those created with
+      projection {!Row.value_pp} cannot be used on them. Those created with
       {{!Quick.tuple}tuple constructors} do however (re)define projection. *)
   module Quick : sig
 
@@ -324,7 +327,7 @@ end
     as it {{:https://www.sqlite.org/syntax/indexed-column.html}could be}. *)
 module Index : sig
 
-  (** {1:indexes Indexes} *)
+  (** {1:indices Indices} *)
 
   type 'r t
   (** The type for indexes on a table with rows represented by ['r]. *)
@@ -392,7 +395,7 @@ module Table : sig
         on_delete : foreign_key_action option;
         on_update : foreign_key_action option; }
   (** The type for representing foreign keys from table ['r] to ['s].
-      This is exposed for recursive defs reasons, use {!foreign_key}
+      This is exposed for recursive defs reasons, use {!val-foreign_key}
       unless you get into trouble. {b FIXME.} At least provide
       a default empty value so that [with] can be used. *)
 
@@ -406,7 +409,7 @@ module Table : sig
   val foreign_key_cols : ('r, 's) foreign_key -> 'r Col.v list
   val foreign_key_reference : ('r, 's) foreign_key -> 's t * 's Col.v list
 
-  (** {1:params Parameters} *)
+  (** {1:ps Parameters} *)
 
   type 'r param +=
   | Primary_key : 'r Col.v list -> 'r param
@@ -422,8 +425,8 @@ module Table : sig
          between [cols] and the columns cols' of [t]. Can be repeated.}
       {- [Index] is an index specification for the table.}} *)
 
-  val indexes : 'r t -> 'r Index.t list
-  (** [indexes t] are the indexes of table [t] found in the table's
+  val indices : 'r t -> 'r Index.t list
+  (** [indices t] are the indices of table [t] found in the table's
       {{!val-params}parameters}. *)
 end
 
@@ -431,9 +434,9 @@ end
 
     The expressiveness of the query language is currently limited.
     Note that you can always switch to raw SQL statements and
-    {{!Sql.Stmt}type} them for execution. To define queries
-    you should open {!Rel.Syntax} which has more definitions and
-    operator overloading. *)
+    {{!Sql.Stmt}type} them for execution. To define queries you should
+    open {!Rel.Syntax} which has more definitions and operator
+    overloading. *)
 
 type 'a value
 (** The type for representing values of type ['a]. FIXME
@@ -589,7 +592,7 @@ module Int64 : sig
 
   val of_string : string value -> int64 value
   (** [of_string s] converts [s] to string if [s] can't be parsed
-        this results in [0]. *)
+      this results in [0]. *)
 end
 
 (** Floating point numbers. *)
@@ -724,7 +727,7 @@ end
       {- LIMIT and ORDER BY support, the effects.}
       {- More data type functions}
       {- Can we specialize `yield` on `Row.t` with appropriate
-         {!row} we could likely get to a scheme where we work directly
+         {!Bag.row} we could likely get to a scheme where we work directly
          with {!Row} in the language (for now we only work with {!Col})
          which should help SQL execution boilerplate. What happens to
          higher-order ? }} *)
@@ -897,20 +900,21 @@ module Sql : sig
 
   type 'a Table.param +=
   | Table of string
-  | Table_constraint of string
+  | Table_constraint of string (** *)
   (** Additional table parameters. See also {!Table.param}.
       {ul
-      {- [Sql sql] is the complete {{:https://sqlite.org/lang_createtable.html}
+      {- [Table sql] is the complete
+         {{:https://sqlite.org/lang_createtable.html}
          CREATE TABLE} statement. All other
          parameters are ignored, you are in control.}
-      {- [Sql_constraint sql] is an
+      {- [Table_constraint sql] is an
          {{:https://sqlite.org/syntax/table-constraint.html}
          SQL table constraint} added at the end of the table definition.
          Can be repeated.}} *)
 
   type Col.param +=
   | Col of string
-  | Col_constraint of string
+  | Col_constraint of string (** *)
   (** The type for column parameters. See also {!Col.param}.
       {ul
       {- [Col sql] is the full SQL column definition between the name
@@ -918,43 +922,7 @@ module Sql : sig
          are ignored, you are in control.}
       {- [Col_constraint sql] appends [sql]
          at the end of the column definition. Can be repeated.}} *)
-  val drop_table :
-    ?schema:string -> ?if_exists:bool -> 'a Table.t -> unit Stmt.t
-  (** [drop_table ~if_exist ~schema t] is an SQL DROP TABLE statement to
-      drops table [t] of schema [schema].  If [if_exists] is [true]
-      no error is reported if the table does not exist (default to [false]).  *)
 
-  val create_table :
-    ?schema:string -> ?if_not_exists:bool -> 'a Table.t -> unit Stmt.t
-  (** [create_table t] is an SQL CREATE TABLE statement for [t].  If
-      [if_not_exists] is [true] no error is reported if the table
-      does not exist (defaults to [false]). *)
-
-  val create_index :
-    ?schema:string -> ?if_not_exists:bool -> 'a Table.t -> 'a Index.t ->
-    unit Stmt.t
-  (** [create_index t i] is an SQL CREATE INDEX statement for index [i]
-      on table [t]. If [if_not_exists] is [true] no error is reported
-      if the index does not exist (defaults to [false]). *)
-
-  val drop_index :
-    ?schema:string -> ?if_exists:bool -> 'a Table.t -> 'a Index.t ->
-    unit Stmt.t
-  (** [drop_index t i] is an SQL DROP INDEX statement for index [i] on
-      table [t]. If [if_exist] is [true] not error is
-      reported if the index does not exist (defaults to [false]). *)
-
-  val create_schema :
-    ?schema:string -> ?drop_if_exists:bool -> Table.v list -> unit Stmt.t
-  (** [create_schema ~drop_if_exists ts] are {e multiple} SQL
-      statements to create the tables [ts] and their indices if they
-      don't exist unless [drop_if_exists] is [true] in which case
-      {!drop_table} and {!drop_index} statements are issued to clear
-      the way (defaults to [false]).
-
-      Make sure to use {!Rel_sqlite3.exec} otherwise only the first
-      statement gets executed, wrapping the whole thing in
-      {!Rel_sqlite3.with_transaction} is a good idea as well. *)
 
   (** {1:insupd Inserting, updating and deleting} *)
 
@@ -962,7 +930,8 @@ module Sql : sig
 
   val insert_into :
     ?or_action:insert_or_action ->
-    ?schema:string -> ?ignore:'r Col.v list -> 'r Table.t -> ('r -> unit Stmt.t)
+    ?schema:string -> ?ignore:'r Col.v list -> 'r Table.t ->
+    ('r -> unit Stmt.t)
   (** [insert_into ~ignore t] is an SQL INSERT INTO statement
       which inserts i [t] values draw from an value values drawn from
       a provided OCaml table row. Columns mentioned in [col] of the
@@ -993,7 +962,7 @@ module Sql : sig
 
       {b FIXME.} Can't we get rid of the ['a Row.t] argument in [of_bag].
       Related to the comment of specializing yield on [Row.t]. Maybe
-      the {!Bag.t} combinator should take a row rather than an arbitrary
+      the {!Rel.Bag.t} combinator should take a row rather than an arbitrary
       function. *)
 
   val of_bag : 'a Row.t -> ('a, 'b) Bag.t -> 'a Stmt.t
@@ -1023,13 +992,306 @@ module Sql : sig
     val normalize : ('a, 'e) Bag.t -> ('a, 'e) Bag.t
   end
 
-(** {1:todo TODO multibackend SQL support}
+  (** SQL syntax fragment helpers. *)
+  module Syntax : sig
+
+    val escape_id : string -> string
+    (** [escape_id id] is [id] between double quotes (['\"']) with double quotes
+        in [s] properly escaped. *)
+
+    val escape_id_in_schema : ?schema:string -> string -> string
+    (** [escape_id_in_schema] is like {!escape_id} but prefixes an escaped
+        [schema] if specified. *)
+
+    val escape_string : string -> string
+    (** [string s] is [s] between single quotes (['\'']) with single quotes
+        in [s] properly escaped. *)
+  end
+
+  (** DBMS agnostic representation of SQL schemas. *)
+  module Schema : sig
+    type table = Table.v
+
+    (** Column descriptions. *)
+    module Col : sig
+
+      type default = [ `Expr of string | `Value of string ]
+      (** The type for column defaults. *)
+
+      type name = string
+      (** The type for column names. *)
+
+      type t
+      (** The type for describing columns. *)
+
+      val v : name:name -> type':Type.v -> default:default option -> t
+      (** [v ~name ~type' ~default] is a column with given
+          parameters. See corresponding accessors for semantics. *)
+
+      val name : t -> name
+      (** [name c] is the column name of [c] *)
+
+      val type' : t -> Type.v
+      (** [type' c] is the column type of [c] *)
+
+      val default : t -> default option
+      (** [default c] is the default value for [c]. *)
+    end
+
+    (** Index descriptions. *)
+    module Index : sig
+
+      (** Indexed column descriptions. *)
+      module Col : sig
+        type t
+        (** The type for index column descriptions. *)
+
+        type sort_order = [`Asc | `Desc]
+        (** The type for sort order. *)
+
+        val sort_order_to_kwd : sort_order -> string
+        (** [sort_order_to_kwd o] is the SQL keyword for [o]. *)
+
+        val v : name:Col.name -> sort_order:sort_order option -> t
+        (** [v ~name ~sort_order] is an indexed column with given
+            parameters. See corresponding accessors for semantics. *)
+
+        val name : t -> Col.name
+        (** [name c] is the indexed column name of [c]. *)
+
+        val sort_order : t -> sort_order option
+        (** [sort_order c] is the sort order of [c]. *)
+      end
+
+      type t
+      (** The type for index column descriptions. *)
+
+      val v :
+        name:string -> table_name:string -> cols:Col.t list -> unique:bool -> t
+      (** [v ~name ~table_name ~cols ~unique] is an index with given parameters.
+          See corresponding accessors for semantics. *)
+
+      val name : t -> string
+      (** [name i] is the index name of [i] *)
+
+      val table_name : t -> string
+      (** [table_name i] is the name of the indexed table of [i]. *)
+
+      val cols : t -> Col.t list
+      (** [cols i] are the indexed columns of [i] *)
+
+      val unique : t -> bool
+      (** [unique i] indicates that index entries have to be unique. *)
+
+      val auto_name : table_name:string -> Col.t list -> string
+      (** [auto_name ~table_name cs] is an index name derived from
+          [table_name] and [cs]. *)
+
+      val of_index : table_name:string -> 'r Index.t -> t
+      (** [of_index t i] is an index from [i] on table named [table_name]. *)
+    end
+
+    (** Table descriptions. *)
+    module Table : sig
+
+      type name = string
+      (** The type for table names. *)
+
+      (** Foreign keys. *)
+      module Foreign_key : sig
+
+        type action = [`Set_null | `Set_default | `Cascade | `Restrict]
+        (** The type for foreign key actions. *)
+
+        val action_to_kwds : action -> string
+        (** [action_to_kwds a] are the SQL keywords for [a]. *)
+
+        type t
+        (** The type for foreign keys. *)
+        val v :
+          ?on_delete:action -> ?on_update:action -> cols:Col.name list ->
+          ref:name * Col.name list -> unit -> t
+        (** [v] is a foreign key with given parameters. See corresponding
+            accessors for semantics. *)
+
+        val cols : t -> Col.name list
+        (** [cols fk] are the columns of [fk]. *)
+
+        val ref : t -> name * Col.name list
+        (** [ref fk] is the table and the columns refered to by [fk]'s
+            {!cols}. *)
+
+        val on_delete : t -> action option
+        (** [on_delete fk] is the action taken whenever [fk] is deleted. *)
+
+        val on_update : t -> action option
+        (** [on_update fk] is the action taken whenever [fk] is updated. *)
+      end
+
+      type primary_key = Col.name list
+      (** The type for primary keys. *)
+
+      type unique = Col.name list
+      (** The type for unique constraints. *)
+
+      type check = string * string
+      (** The type for table checks. A constraint name and the
+          SQL expression. *)
+
+      type t
+      (** The type for describing tables. *)
+
+      val v :
+        name:string -> cols:Col.t list -> primary_key:primary_key option ->
+        uniques:unique list -> foreign_keys:Foreign_key.t list ->
+        checks:check list -> t
+      (** [v] is a table with given parameters. See corresponding
+          accessors for semantics. *)
+
+      val name : t -> string
+      (** [name t] is name of [t]. *)
+
+      val cols : t -> Col.t list
+      (** [cols t] are the columns of [t]. *)
+
+      val primary_key : t -> primary_key option
+      (** [primary_key t] is the primary key of [t] (if any) *)
+
+      val uniques : t -> unique list
+      (** [uniques t] are the unique constraint of [t]. *)
+
+      val foreign_keys : t -> Foreign_key.t list
+      (** [foreign_keys t] are the foreign keys of [t]. *)
+
+      val checks : t -> check list
+      (** [check t] are the checks of [t]. *)
+
+      val of_table : table -> t
+      (** [of_table t] is a table from [t]. *)
+    end
+
+    type t
+    (** The type for describing SQL schemas. *)
+
+    val v :
+      ?schema:string -> tables:Table.t list -> indices:Index.t list -> unit -> t
+    (** [v ~schema ~tables ()] is a schema with given parameters. See
+        corresponding accessors for semantics. *)
+
+    val schema : t -> string option
+    (** [schema s] is the schema name (if any). *)
+
+    val tables : t -> Table.t list
+    (** [tables s] are the tables in the schema. *)
+
+    val indices : t -> Index.t list
+    (** [indices s] are the indices in the schema. *)
+
+    val of_tables : ?schema:string -> table list -> t
+    (** [of_tables ~schema ts] is a schema for the given [Rel] tables. *)
+
+    (** {1:sql SQL} *)
+
+    (** SQL data definition statements. *)
+    module type STMT = sig
+
+      (** {1:creating Creating} *)
+
+      val create_table :
+        ?schema:string -> ?if_not_exists:unit -> Table.t -> unit Stmt.t
+      (** [create_table t] is a CREATE TABLE statement for [t]. The
+          table is created in [schema] if specified. The statement is
+          CREATE TABLE IF NOT EXISTS when [~if_not_exists:()] is
+          given. *)
+
+      val create_index :
+        ?schema:string -> ?if_not_exists:unit -> Index.t -> unit Stmt.t
+      (** [create_index i] is a CREATE INDEX statement for [i]. The
+          index is created for a table in [schema] if specified. The
+          statement is CREATE INDEX IF NOT EXISTS when
+          [~if_not_exists:()] is given. *)
+
+      (** {1:dropping Dropping} *)
+
+      val drop_table :
+        ?schema:string -> ?if_exists:unit -> Table.t -> unit Stmt.t
+      (** [drop_table t] is a DROP TABLE statement for [t]. The
+          dropped table is in [schema] if specified. The statement is
+          DROP TABLE IF EXISTS when [~if_exists:()] is given. *)
+
+      val drop_index :
+        ?schema:string -> ?if_exists:unit -> Index.t -> unit Stmt.t
+      (** [drop_index t i] is a DROP INDEX statement to drop index [i]
+          of table [t]. The index and table are in [schema] if specified. The
+          statement is DROP INDEX IF EXISTS when [~if_exists:()] is
+          given. *)
+    end
+
+    val create_stmts : (module STMT) -> drop_if_exists:bool -> t -> unit Stmt.t
+    (** [create_stmts stmt ~drop_if_exists s] is the sequence of [stmt]
+        statements to create schema [s]. If [drop_if_exists] is [true], the
+        sequence starts by dropping the tables and indexes in [s] if they
+        exist, {b this erases any pre-existing data in the database}. *)
+
+    val change_stmts : (module STMT) ->
+      ?table_renames:(Table.name * Table.name) list ->
+      ?col_renames:(Table.name * (Col.name * Col.name) list) list ->
+      from:t -> to':t -> (unit Stmt.t, string) result
+   (** [change ~from ~to'] is a sequence of statement to change
+       from schema [from] to schema [to']. Renames are automatically inferred
+       and must be specified:
+       {ul
+       {- [table_renames] lists table renames as [(src, dst)] pairs.
+          [src] must be defined in [from] and [dst] must be defined in [to']
+          otherwise [Invalid_argument] is raised.}
+       {- [col_renames] lists columns in destination tables (i.e. using
+          the table names of [to], table renames occur as first step),
+          as pairs from the old names to the new name.}}
+
+       {b WARNING} You should always inspect manually the statement
+       and possibly tweak them before running them. *)
+
+    (** {1:serial Serialisation}
+
+        {b Warning.} At the moment the serialization scheme is unspecified,
+        unstable accross versions and may be binary. *)
+
+    val to_string : t -> string
+    val of_string : string -> (t, string) result
+  end
+
+  (** {2:low Low-level schema statements} *)
+
+  val create_table :
+    (module Schema.STMT) -> ?schema:string -> ?if_not_exists:unit ->
+    'a Table.t -> unit Stmt.t
+  (** [create_table stmt t] create table [t] using [stmt]. See
+      {!Schema.STMT.create_table}. *)
+
+  val create_index :
+    (module Schema.STMT) -> ?schema:string -> ?if_not_exists:unit ->
+    'a Table.t -> 'a Index.t -> unit Stmt.t
+  (** [create_table stmt t] create index [i] on table [t] using [stmt]. See
+      {!Schema.STMT.create_index}. *)
+
+  val drop_table :
+    (module Schema.STMT) -> ?schema:string -> ?if_exists:unit ->
+    'a Table.t -> unit Stmt.t
+  (** [drop_table stmt t] drops table [t] using [stmt]. See
+      {!Schema.STMT.drop_table}. *)
+
+  val drop_index :
+    (module Schema.STMT) -> ?schema:string -> ?if_exists:unit ->
+    'a Table.t -> 'a Index.t -> unit Stmt.t
+  (** [drop_index stmt t i] drops index [i] of table [t], see
+      {!Schema.STMT.drop_index}. *)
+
+  (** {1:todo TODO multibackend SQL support}
 
       The current interface won't do it for multiple backends. We need
       to be able to specify the SQL dialect at some point. The
       questions is where to do it so that it remains efficient for
-      backend prepared statement caches but convenient for
-      clients.
+      backend prepared statement caches but convenient for clients.
 
       One idea is to back {!Sql.Stmt.t} by an SQL AST rather
       than by an constant (sqlite3) SQL string as we have now (!Sql.Stmt.src).
@@ -1147,7 +1409,7 @@ module Syntax : sig
 
   val ( let* ) :
     ('a , _) Bag.t -> ('a value -> ('b, 'e) Bag.t) -> ('b, 'e) Bag.t
-  (** [let*] binds bag values for {!foreach}. *)
+  (** [let*] binds bag values for {!Bag.foreach}. *)
 end
 
 (** {1:private Private} *)
@@ -1203,7 +1465,7 @@ module Rel_private : sig
   (** {1:vals_and_bags Values and bags} *)
 
   type 'a value' = 'a value
-  (** See {!Relt.value}. *)
+  (** See {!Rel.value}. *)
 
   type 'a value =
   | Var : string -> 'a value (* only for compiling *)

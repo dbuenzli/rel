@@ -395,7 +395,7 @@ val last_insert_rowid : t -> int64
     INTEGER PRIMARY KEY) of the most recent successful INSERT into a
     rowid table. *)
 
-(** {2:stmt Prepared statement cache} *)
+(** {2:prep_stmt Prepared statement cache} *)
 
 val stmt_cache_size : t -> int
 (** [stmt_cache_size d] is [d]'s maximal number of cached prepared
@@ -491,6 +491,17 @@ module Stmt : sig
   (** [inalize s] finalizes statement [st]. *)
 end
 
+(** {1:schema Schema} *)
+
+module Schema : sig
+
+  module Stmt : sig
+    include Sql.Schema.STMT
+  end
+
+  val of_db : t -> (Sql.Schema.t, error) result
+  (** [of_db db] derives a [Rel] SQL schema value for [db]. *)
+end
 (*
 
 (** {1:system_tables System tables} *)

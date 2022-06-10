@@ -3,17 +3,16 @@
 Rel is a library for programming with relational databases in OCaml.
 It provides:
 
-{ul
-{- Combinators to describe tables and translate their rows
-   to custom OCaml values.}
-{- A mechanism for typing SQL statement parameters and their results.}
-{- SQL generation helpers including schema generation from table
-   descriptions.}
-{- A query language embedded in {e plain} OCaml. Queries are typed,
-   composable and compile to a single, flat, SQL query (optional and
-    experimental).}
-{- Support for SQLite3 databases (optional). Run SQL statements
-   and generate OCaml table descriptions for existing databases.}}
+- Typed combinators to describe database rows and their representation
+  as custom OCaml values.
+- Typed combinators to describe tables and indices. These descriptions
+  can be translated to SQL data definitions or, conversly, generated for
+  existing databases (external schema definition).
+- Automated schema changes via schema diffing.
+- Raw SQL statements typing and SQL generation helpers.
+- Query language embedded in *plain* OCaml. Queries are typed,
+  composable and compile to a single, flat, SQL query (experimental).
+- Support for using SQLite3 databases.
 
 {1:manuals Manuals}
 
@@ -25,7 +24,9 @@ These manuals are available:
 {- The {{!page-conventions}[Rel] database modelling conventions} provides
    conventions to model databases in OCaml with [Rel].}
 {- The {{!page-sql_stmt_howto}SQL statement typing howto} explains
-   the low-level mecanism to type SQL statements.}}
+   the low-level mecanism to type SQL statements.}
+{- The {{!page-schema_howto}schema howto} discusses options
+   for managing your schema when using Rel}}
 
 {1:rel The [rel] library}
 

@@ -9,7 +9,8 @@ true : bin_annot, safe_string
 
 <src/rel_pool*> : thread, package(threads.posix)
 
-<test/rel_sqlite3*> : package(cmdliner), use_rel_sqlite3
 <test/test_sqlite3*> : use_rel_sqlite3
 <test/test_sql*> : use_rel_sqlite3
 <test/test_chinook*> : use_rel_sqlite3
+
+<tools/rel_sqlite3*> : package(cmdliner), use_rel_sqlite3

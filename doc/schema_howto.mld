@@ -1,0 +1,77 @@
+{0 Schema management howto}
+
+{1:def Definition}
+
+Rel lets you decide where you want to define your database schema.
+You can define it either {e internally}, with OCaml {!Rel.Table.t}
+values or {e externally} using any other tool you may see fit.
+
+An internal OCaml definition can always be switched to an external one
+by generating legible SQL data definition statements for the
+{!Rel.Table.t} values.
+
+Moving from an external definition to an internal one is also possible if
+your external definition uses only features that are can be expressed
+into {!Rel.Table.t} values.
+
+More precisely:
+
+- If your schema is defined internally with {!Rel.Table.t} values,
+  a {!Rel.Sql.Schema.t} value can be derived with the
+  {!Rel.Sql.Schema.of_tables} function. This value can be translated
+  to a sequence of legible SQL data definition statements with the
+  {!Rel.Sql.Schema.create_stmts} function. Would you need to move
+  away from Rel this direction {e always} works.
+- If your schema is defined externally, the [rel-$(dbms)] command line
+  tools connects to your database to generate legible {!Rel.Table.t}
+  definitions. However if the external schema definition uses features
+  that cannot be expressed into {!Rel.Table.t} values, it is not
+  posssible to recreate the external schema from these values – they
+  are nevertheless useful to access the external schema using Rel.
+
+
+{1:changes Change}
+
+The goal of a schema change is to make the {e live schema} of a
+database instance to coincide with the {e application's schema}, that
+is the schema that your software is assuming to hold.
+
+To support schema changes, Rel provides {!Rel.Sql.Schema.t} values
+which are low-level SQL schema representations. This representation
+can be derived from {!Rel.Table.t} values and be computed on a live
+database by connecting to it – see for example
+{!Rel_sqlite3.Schema.of_db}.
+
+Given a manually provided list of table and column renames (if any),
+any two of these {!Rel.Sql.Schema.t} values can be compared to
+automatically derive the SQL data definition statement needed to bring
+one schema to the other.
+
+Note that this only handles structural changes to the database. You may
+need to provide additional statements to handle data migrations.
+
+You should always have a careful look at these steps and possibly
+tweak them, especially if you do this with externally defined schemas.
+
+{2:single Single live database instance or development mode}
+
+- Get the live database schema
+- Derive the steps to move from the live schema to the application schema.
+- Check and apply the steps statements to the live schema
+
+{2:released Released schemas}
+
+In this case we need to version the schema. The way to do this is DBMS
+dependent. Here a few ways:
+
+- Use the {{:https://www.sqlite.org/pragma.html#pragma_user_version}
+  [user_version] pragma} for sqlite3.
+
+The application keeps the latest version of the schema and diff steps
+to go from earlier versions to the next version until the latest one.
+
+Before interacting with the database:
+
+- Get the version of the live database.
+- Apply the steps to go the next version until the application database
+  version is reached.

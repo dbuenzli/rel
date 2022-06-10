@@ -31,7 +31,7 @@ module [N] ({e n} capitalized) for it.  This module should have
    column {e c{_i}}.}
 {- A value [N.table] of type {!Rel.Table.t} that defines the table.}}
 
-Note that once you have modelled your tables you can use
+Once you have modelled your tables you can use
 {!Rel.Sql.create_schema} to output the corresponding schema in SQL's
 data definition language.
 

@@ -68,7 +68,12 @@ module Test_products = struct
 
   (* SQL *)
 
-  let schema = Sql.create_schema [Table.V Product.table; Table.V Order.table ]
+  let schema =
+    let schema = [Table.V Product.table; Table.V Order.table] in
+    let schema = Sql.Schema.of_tables schema in
+    let stmt = (module Rel_sqlite3.Schema.Stmt : Rel.Sql.Schema.STMT) in
+    Sql.Schema.create_stmts stmt ~drop_if_exists:false  schema
+
   let insert_orders = Sql.insert_into Order.table
   let insert_product =
     let ignore = [(* Col.V Product.pid' *)] in
@@ -118,7 +123,12 @@ end
 module Test_duos = struct
   open Test_schema.Duos
 
-  let schema = Sql.create_schema [Table.V Person.table; Table.V Duo.table]
+  let schema =
+    let schema = [Table.V Person.table; Table.V Duo.table] in
+    let schema = Sql.Schema.of_tables schema in
+    let stmt = (module Rel_sqlite3.Schema.Stmt : Rel.Sql.Schema.STMT) in
+    Sql.Schema.create_stmts stmt ~drop_if_exists:false  schema
+
   let insert_person = Sql.insert_into Person.table
   let insert_duo = Sql.insert_into Duo.table
 
@@ -198,7 +208,11 @@ module Test_org = struct
   open Test_schema.Org
 
   let tables = Table.[V Department.table; V Person.table; V Task.table]
-  let schema = Sql.create_schema tables
+  let schema =
+    let schema = Sql.Schema.of_tables tables in
+    let stmt = (module Rel_sqlite3.Schema.Stmt : Rel.Sql.Schema.STMT) in
+    Sql.Schema.create_stmts stmt ~drop_if_exists:false  schema
+
   let insert_department = Sql.insert_into Department.table
   let insert_person = Sql.insert_into Person.table
   let insert_task = Sql.insert_into Task.table
