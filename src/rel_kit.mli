@@ -7,15 +7,22 @@
 
 (** Entity-relationship diagrams from {!Rel.Table.t} values. *)
 module Schema_diagram : sig
+  type rankdir = [ `TB | `LR | `BT | `RL ]
+  (** The type for dot {{:https://graphviz.org/docs/attr-types/rankdir/}
+      rankdir}. *)
+
   val pp_dot :
-    ?rankdir:string -> unit -> Format.formatter -> Rel.Table.v list -> unit
+    rankdir:rankdir -> unit -> Format.formatter -> Rel.Table.v list -> unit
     (** [pp_dit ~rankdir () ppf ts] dumps writes entity relationship diagram
         in {{:https://graphviz.org/doc/info/lang.html}dot format} on [ppf]
         using {{:https://graphviz.org/docs/attrs/rankdir/}direction}
-        [rankdir] (defaults to [BT]).
+        [rankdir].
 
         This can be rendered to {{:https://graphviz.org/docs/outputs/}many
-        formats}. For example SVG with [dot -Tsvg]. *)
+        formats}. For example SVG with [dot -Tsvg], if you want to change
+        the rankdir after the generation you can use
+        for example: [dot -Tsvg -Grankdir=LR].
+    *)
 end
 
 (*---------------------------------------------------------------------------

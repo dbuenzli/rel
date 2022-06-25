@@ -3,7 +3,7 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-open Rel.Std
+open Rel
 
 module Table_env = struct
 
@@ -65,7 +65,7 @@ let rec eval_div : type t. t Type.t -> t -> t -> t = function
 | Type.Int -> Int.div | Type.Int64 -> Int64.div | Type.Float -> Float.div
 | _ -> unknown_extension "division"
 
-open Rel.Rel_private
+open Rel_query.Private
 
 let eval_unop : type a r. (a, r) unop -> a -> r =
 fun op x -> match op with

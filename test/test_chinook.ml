@@ -4,7 +4,7 @@
   ---------------------------------------------------------------------------*)
 
 open Rel
-open Rel.Syntax
+open Rel_query.Syntax
 open Chinook
 
 let strf = Printf.sprintf
@@ -27,8 +27,8 @@ let select_track_cols =
              t #. Track.unitPrice')
 
 let run_bag b row =
-  let stmt = Sql.of_bag row b in
-  Format.printf "%a\n" Sql.Stmt.pp_src stmt
+  let stmt = Rel_query.Sql.of_bag row b in
+  Format.printf "%a\n" Rel_sql.Stmt.pp_src stmt
 
 let run_tests db =
   run_bag select_track_all (Table.row Track.table);

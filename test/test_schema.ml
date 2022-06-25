@@ -4,7 +4,7 @@
   ---------------------------------------------------------------------------*)
 
 open Rel
-open Rel.Syntax
+open Rel_query.Syntax
 
 (* TODO rewrite with new convention. Forget about
    objects representation. *)
@@ -97,11 +97,11 @@ module Products_flat_with_objects = struct
     let sales_row = Row.(unit sales' * pid' * name' * sale')
   end
   module Q : sig
-    val get_order : int value -> (S.order, Rel.Bag.unordered) Rel.Bag.t
+    val get_order : int value -> (S.order, Bag.unordered) Bag.t
 
     val get_order_sales :
       < pid : int; qty : int; .. > value ->
-      (S.sales, Rel.Bag.unordered) Rel.Bag.t
+      (S.sales, Bag.unordered) Bag.t
   end = struct
 
     let get_order oid =
@@ -205,8 +205,8 @@ module Products_with_adts = struct
     object method pid = pid method name = name; method sale = sale end
 
   module Q : sig
-    val get_order : int value -> (Order.t, Rel.Bag.unordered) Rel.Bag.t
-    val get_order_sales : Order.t value -> (sales, Rel.Bag.unordered) Rel.Bag.t
+    val get_order : int value -> (Order.t, Bag.unordered) Bag.t
+    val get_order_sales : Order.t value -> (sales, Bag.unordered) Bag.t
   end = struct
     let get_order oid =
       let* o = Bag.table Order.table in

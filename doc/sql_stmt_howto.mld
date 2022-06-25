@@ -1,13 +1,21 @@
+
 {0 SQL statement typing howto}
 
 Note that this is a rather low-level mecanism that uses raw SQL
-strings. If possible you should prefer the higher level functions
-of {!Rel.Sql}.
+strings.
+
+Raw SQL will have unchecked dependencies with your {!Rel} descriptions
+and depend on your DBMS. If possible you should prefer the higher
+level functions of {!Rel_sql} or the embedded query language
+{!Rel_bag}.
+
+Nevertheless this provides a good escape hatch would you find yourself
+stuck with the expressiveness of the higher-level support.
 
 {1:basics Binding basics}
 
-The {!Rel.Sql.Stmt} module provides a low-level mecanism to type the
-parameters and results of SQL statements.
+The {!Rel_sql.Stmt} module provides a low-level mecanism to type the
+parameters and results of SQL prepared statements.
 
 Using this mecanism results in a {e binding function} that binds OCaml
 values to SQL parameters and returns a value of type ['a Stmt.t] that
@@ -20,27 +28,27 @@ For example if you have this SQL statement:
 
       Assuming [age] is an integer and [name] and [surname] are text,
       a binding function for that statement would have type
-      [int -> string -> string Sql.Stmt.t]. It can be typed as follows:
+      [int -> string -> string Rel_sql.Stmt.t]. It can be typed as follows:
 {[
-let names_with_age_or_surname : int -> string -> string Sql.Stmt.t =
+let names_with_age_or_surname : int -> string -> string Rel_sql.Stmt.t =
   let sql = "SELECT name FROM person WHERE id = ? OR surname = ?" in
   let name = Row.Quick.(t1 @@ text "name") in
-  let typ = Sql.Stmt.(int @-> text @-> ret name) in
-  Sql.Stmt.func sql typ
+  let typ = Rel_sql.Stmt.(int @-> text @-> ret name) in
+  Rel_sql.Stmt.func sql typ
 ]}
 
 Note that the binding function is only positional in nature it always
 binds arguments from left to right. You then get the arguments in that
-order {{!Rel.Sql.Stmt.rev_args}but reversed}, which your database
+order {{!Rel_sql.Stmt.rev_args}but reversed}, which your database
 driver should bind sequentially according to its scheme. This also
 means you need to be careful if you later reorder parameters either
 in your binding function description or in your SQL.
 
 {1:binding_projection Binding projections}
 
-If SQL parameters values are defined by projecting components an OCaml
-values, you want to avoid having to repeat that value in the binding
-function.
+If SQL parameters values are defined by projecting components of an
+OCaml values, you want to avoid having to repeat that value in the
+binding function.
 
 For example if we have the statement:
 
@@ -51,18 +59,18 @@ v}
 which we update by projecting values from an OCaml value of type
 [person] we do not want the type:
 
-{[ person -> person -> unit Sql.Stmt.t ]}
+{[ person -> person -> unit Rel_sql.Stmt.t ]}
 
-we want the type [person -> unit Sql.Stmt.t].
+we want the type [person -> unit Rel_sql.Stmt.t].
 
 
-This can be achieved with {{!Rel.Sql.Stmt.projs}these combinators}
+This can be achieved with {{!Rel_sql.Stmt.projs}these combinators}
 as follows:
 
 {[
 type person = string * int
-let set_age : person -> unit Sql.Stmt.t =
+let set_age : person -> unit Rel_sql.Stmt.t =
   let sql = "UPDATE person SET age = ? WHERE name = ?" in
-  let typ = Sql.Stmt.(proj snd int @@ proj fst text @@ nop @@ unit) in
-  Sql.Stmt.func sql typ
+  let typ = Rel_sql.Stmt.(proj snd int @@ proj fst text @@ nop @@ unit) in
+  Rel_sql.Stmt.func sql typ
 ]}

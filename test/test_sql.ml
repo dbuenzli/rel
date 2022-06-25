@@ -7,7 +7,7 @@
 (* FIXME rewrites w.r.t. to API evolution. *)
 
 open Rel
-open Rel.Syntax
+open Rel_query.Syntax
 
 let ( let* ) = Result.bind
 
@@ -17,12 +17,12 @@ let log_if_error ~use = function
 | Ok v -> v | Error e -> Format.eprintf "Error: %s@." e; use
 
 let create_schema db schema =
-  log_sql "schema" (Sql.Stmt.src schema);
+  log_sql "schema" (Rel_sql.Stmt.src schema);
   Rel_sqlite3.exec_once db schema
 
 let insert_row db sql r =
   let st = sql r in
-  log_sql "insert" (Sql.Stmt.src st);
+  log_sql "insert" (Rel_sql.Stmt.src st);
   Rel_sqlite3.exec db st
 
 let rec insert_rows db sql t = function
@@ -33,8 +33,8 @@ let rec insert_rows db sql t = function
     | Error _ as e -> e | Ok () -> insert_rows db sql t rs
 
 let select_rows db bag row =
-  let st = Sql.of_bag row bag in
-  log_sql "select" (Sql.Stmt.src st);
+  let st = Rel_query.Sql.of_bag row bag in
+  log_sql "select" (Rel_sql.Stmt.src st);
   let* ops = Rel_sqlite3.fold db st List.cons [] in
   let ops = List.rev ops in
   log "@[<v>%a@,---@]" (Row.list_pp ~header:true row) ops;
@@ -42,11 +42,11 @@ let select_rows db bag row =
 
 module Test_sql_src = struct
   open Test_schema.Products_flat_with_objects
-  open Rel.Syntax
+  open Rel_query.Syntax
 
   let sql = "SELECT * FROM product WHERE name = $1 and price = $2"
   let req =
-    Sql.Stmt.(func sql @@ text @-> int @-> ret (Table.row S.product_table))
+    Rel_sql.Stmt.(func sql @@ text @-> int @-> ret (Table.row S.product_table))
 
   let order2 = Q.get_order (Int.v 2)
   let order2_sales =
@@ -55,11 +55,11 @@ module Test_sql_src = struct
 
   let run () =
     Format.printf "order2:\n%a\n\n"
-      Sql.Stmt.pp_src (Sql.of_bag' S.order_table order2);
+      Rel_sql.Stmt.pp_src (Rel_query.Sql.of_bag' S.order_table order2);
     Format.printf "@[<v>order2_sales:@,@[%a@]@,order2_sales_nf:@,@[%a@]@]@."
-      Bag.pp order2_sales Bag.pp (Sql.Bag.normalize order2_sales);
+      Bag.pp order2_sales Bag.pp (Rel_query.Sql.normalize order2_sales);
     Format.printf "order2_sales:\n%a\n\n"
-      Sql.Stmt.pp_src (Sql.of_bag S.sales_row order2_sales);
+      Rel_sql.Stmt.pp_src (Rel_query.Sql.of_bag S.sales_row order2_sales);
     Ok ()
 end
 
@@ -70,30 +70,30 @@ module Test_products = struct
 
   let schema =
     let schema = [Table.V Product.table; Table.V Order.table] in
-    let schema = Sql.Schema.of_tables schema in
-    let stmt = (module Rel_sqlite3.Schema.Stmt : Rel.Sql.Schema.STMT) in
-    Sql.Schema.create_stmts stmt ~drop_if_exists:false  schema
+    let schema = Rel_sql.Schema.of_tables schema in
+    let stmt = (module Rel_sqlite3.Schema.Stmt : Rel_sql.Schema.STMT) in
+    Rel_sql.Schema.create_stmts stmt ~drop_if_exists:false  schema
 
-  let insert_orders = Sql.insert_into Order.table
+  let insert_orders = Rel_sql.insert_into Order.table
   let insert_product =
     let ignore = [(* Col.V Product.pid' *)] in
-    Sql.insert_into ~ignore Product.table
+    Rel_sql.insert_into ~ignore Product.table
 
   (* TODO streamline *)
 
   let get_products db =
     let get_products =
-      let open Rel.Syntax in
+      let open Rel_query.Syntax in
       let* p = Bag.table Product.table in
       Bag.yield p
     in
     select_rows db get_products (Table.row Product.table)
 
-  let order2 = Q.get_order (Syntax.Int.v 2) (* FIXME bind *)
+  let order2 = Q.get_order (Rel_query.Int.v 2) (* FIXME bind *)
   let get_order2 db = select_rows db order2 (Table.row Order.table)
 
   let order2_sales =
-    let open Rel.Syntax in
+    let open Rel_query.Syntax in
     let* o = order2 in
     Q.get_order_sales o
 
@@ -125,12 +125,12 @@ module Test_duos = struct
 
   let schema =
     let schema = [Table.V Person.table; Table.V Duo.table] in
-    let schema = Sql.Schema.of_tables schema in
-    let stmt = (module Rel_sqlite3.Schema.Stmt : Rel.Sql.Schema.STMT) in
-    Sql.Schema.create_stmts stmt ~drop_if_exists:false  schema
+    let schema = Rel_sql.Schema.of_tables schema in
+    let stmt = (module Rel_sqlite3.Schema.Stmt : Rel_sql.Schema.STMT) in
+    Rel_sql.Schema.create_stmts stmt ~drop_if_exists:false  schema
 
-  let insert_person = Sql.insert_into Person.table
-  let insert_duo = Sql.insert_into Duo.table
+  let insert_person = Rel_sql.insert_into Person.table
+  let insert_duo = Rel_sql.insert_into Duo.table
 
   let diff = Q.diff
 
@@ -139,7 +139,7 @@ module Test_duos = struct
     select_rows db diff row
 
   let thirties =
-    let open Rel.Syntax in
+    let open Rel_query.Syntax in
     Q.persons_in_age_range ~first:(Int.v 30) ~last:(Int.v 39)
 
   let thirties db =
@@ -147,7 +147,7 @@ module Test_duos = struct
     select_rows db thirties row
 
   let thirties' =
-    let open Rel.Syntax in
+    let open Rel_query.Syntax in
     let in_thirties p =
       let age = p #. Person.age' in
       Int.(v 30 <= age && age <= v 39)
@@ -159,7 +159,7 @@ module Test_duos = struct
     select_rows db thirties' row
 
   let between_edna_and_bert_excl =
-    let open Rel.Syntax in
+    let open Rel_query.Syntax in
     let* edna = Q.person_age ~name:(Text.v "Edna") in
     let* bert = Q.person_age ~name:(Text.v "Bert") in
     Q.persons_in_age_range ~first:edna ~last:(Int.(bert - v 1))
@@ -169,7 +169,7 @@ module Test_duos = struct
     select_rows db between_edna_and_bert_excl row
 
   let thirties_by_pred pred =
-    let open Rel.Syntax in
+    let open Rel_query.Syntax in
     let in_thirties p =
       let age = p #. Person.age' in
       Q.pred pred age
@@ -209,16 +209,16 @@ module Test_org = struct
 
   let tables = Table.[V Department.table; V Person.table; V Task.table]
   let schema =
-    let schema = Sql.Schema.of_tables tables in
-    let stmt = (module Rel_sqlite3.Schema.Stmt : Rel.Sql.Schema.STMT) in
-    Sql.Schema.create_stmts stmt ~drop_if_exists:false  schema
+    let schema = Rel_sql.Schema.of_tables tables in
+    let stmt = (module Rel_sqlite3.Schema.Stmt : Rel_sql.Schema.STMT) in
+    Rel_sql.Schema.create_stmts stmt ~drop_if_exists:false  schema
 
-  let insert_department = Sql.insert_into Department.table
-  let insert_person = Sql.insert_into Person.table
-  let insert_task = Sql.insert_into Task.table
+  let insert_department = Rel_sql.insert_into Department.table
+  let insert_person = Rel_sql.insert_into Person.table
+  let insert_task = Rel_sql.insert_into Task.table
 
   let abstract_expertise =
-    let open Rel.Syntax in
+    let open Rel_query.Syntax in
     Q.department_expertise ~task:(Text.v "abstract")
 
   let abstract_expertise db =

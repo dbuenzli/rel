@@ -18,7 +18,8 @@ let mod_srcs m =
   Fpath.[ `File (v mli); `File (v ml) ]
 
 let rel_lib =
-  let srcs = mod_srcs "rel" @ mod_srcs "rel_list" in
+  let mods = ["rel"; "rel_sql"; "rel_query"; "rel_list"] in
+  let srcs = List.concat_map mod_srcs mods in
   B0_ocaml.lib rel ~doc:"Rel library" ~srcs ~requires:[]
 
 let rel_kit_lib =

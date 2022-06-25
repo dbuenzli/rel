@@ -21,17 +21,19 @@ These manuals are available:
 {ul
 {- The {{!page-sqlite3_howto}Sqlite3 howto} explains how to get
    started to query an existing sqlite database.}
+{- The {{!page-schema_howto}schema howto} discusses how to manage
+   your database schema with Rel.}
 {- The {{!page-conventions}[Rel] database modelling conventions} provides
    conventions to model databases in OCaml with [Rel].}
 {- The {{!page-sql_stmt_howto}SQL statement typing howto} explains
-   the low-level mecanism to type SQL statements.}
-{- The {{!page-schema_howto}schema howto} discusses options
-   for managing your schema when using Rel}}
+   the low-level mecanism to type SQL statements.}}
 
 {1:rel The [rel] library}
 
 {!modules:
 Rel
+Rel_sql
+Rel_query
 Rel_list
 }
 

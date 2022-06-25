@@ -35,7 +35,7 @@ type error =
 val error_to_string : error -> string
 (** [error_to_string e] is [e] as a human readable string. *)
 
-val of_bag : Table_env.t -> ('a, 'e) Bag.t -> ('a list, error) result
+val of_bag : Table_env.t -> ('a, 'e) Rel_query.Bag.t -> ('a list, error) result
 (** [of_bag env b] is the result of [b] given tables the table environment
     [env]. *)
 

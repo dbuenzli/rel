@@ -85,7 +85,7 @@ module Sql_meta = struct
      WHERE t.type = 'table' ORDER BY t.name, i.cid"
 
   let get_tables db =
-    let st = Rel.Sql.Stmt.(func cols_sql (ret cols)) in
+    let st = Rel_sql.Stmt.(func cols_sql (ret cols)) in
     let add_col c m = Smap.add_to_list c.table_name c m in
     let* ts = Rel_sqlite3.fold db st add_col Smap.empty in
     Ok (Smap.map List.rev ts)

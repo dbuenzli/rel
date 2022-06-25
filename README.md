@@ -11,7 +11,8 @@ It provides:
   can be translated to SQL data definitions or, conversly, generated for
   existing databases (external schema definition).
 - Automated schema changes via schema diffing.
-- Raw SQL statements typing and SQL generation helpers.
+- Raw SQL statements typing and SQL generation helpers (parametric on SQL
+  dialect).
 - Query language embedded in *plain* OCaml. Queries are typed,
   composable and compile to a single, flat, SQL query (experimental).
 - Support for using SQLite3 databases.

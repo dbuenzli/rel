@@ -417,23 +417,24 @@ val exec_sql : t -> string -> (unit, error) result
     updates make a {{!Rel_sqlite3.with_transaction}transaction} to
     ensure good performance. *)
 
-val exec_once : t -> unit Sql.Stmt.t -> (unit, error) result
+val exec_once : t -> unit Rel_sql.Stmt.t -> (unit, error) result
 (** [exec_once db st] is {!exec_sql} [ db (Sql.Stmt.src st)]. Use {!exec}
     if the source of [st] may be repeated in the future. *)
 
-val fold : t -> 'r Sql.Stmt.t -> ('r -> 'c -> 'c) -> 'c -> ('c, error) result
+val fold : t ->
+  'r Rel_sql.Stmt.t -> ('r -> 'c -> 'c) -> 'c -> ('c, error) result
 (** [fold db st f acc] folds with [f] over the results of the {e
     single} statement [st]. [st] is compiled to a
     prepared statement which is cached. If [st] is made of more than
     one statement subsequent statements are ignored. *)
 
-val first : t -> 'r Sql.Stmt.t -> ('r option, error) result
+val first : t -> 'r Rel_sql.Stmt.t -> ('r option, error) result
 (** [first db st] is the first row (if any) of the result of the {e
     single} statement [st]. Subsequent rows are discarded. [st] is
     compiled to a prepred statement which is cached. If [st] is made
     of more than one statement subsequent statements are ignored. *)
 
-val exec : t -> unit Sql.Stmt.t -> (unit, error) result
+val exec : t -> unit Rel_sql.Stmt.t -> (unit, error) result
 (** [exec db st] is like {!fold} but executes statement [sql] only for
     its side effect. *)
 
@@ -454,7 +455,8 @@ val with_transaction :
     {{:https://www.sqlite.org/lang_savepoint.html}savepoints} if you
     need nested transactions). *)
 
-val explain : ?query_plan:bool -> t -> 'a Sql.Stmt.t -> (string, error) result
+val explain :
+  ?query_plan:bool -> t -> 'a Rel_sql.Stmt.t -> (string, error) result
 (** [explain ~query_plan db st] explains statement [st] or its query plan
     if [query_plan] is [true] (defaults to [false]. *)
 
@@ -478,7 +480,7 @@ module Stmt : sig
   type 'r step
   (** The type for stepping through row results of type ['r]. *)
 
-  val start : t -> 'r Sql.Stmt.t -> ('r step, error) result
+  val start : t -> 'r Rel_sql.Stmt.t -> ('r step, error) result
   (** [start s sb] starts the statement [s] as bound by [sb]. This
       {{:https://www.sqlite.org/c3ref/reset.html}resets} the prepared
       statement and binds the arguments of [sb]. *)
@@ -496,10 +498,10 @@ end
 module Schema : sig
 
   module Stmt : sig
-    include Sql.Schema.STMT
+    include Rel_sql.Schema.STMT
   end
 
-  val of_db : t -> (Sql.Schema.t, error) result
+  val of_db : t -> (Rel_sql.Schema.t, error) result
   (** [of_db db] derives a [Rel] SQL schema value for [db]. *)
 end
 (*

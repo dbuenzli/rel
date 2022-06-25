@@ -4,7 +4,7 @@
   ---------------------------------------------------------------------------*)
 
 module Schema_diagram = struct
-  open Rel.Std
+  open Rel
 
   module Sset = Set.Make (String)
 
@@ -102,12 +102,16 @@ module Schema_diagram = struct
     in
     pp_list ref ppf (table_references t)
 
-  let pp_dot ?(rankdir = "BT") () ppf schema =
+  type rankdir = [ `TB | `LR | `BT | `RL ]
+  let rankdir_to_string = function
+  | `TB -> "TB" | `LR -> "LR" | `BT -> "BT" | `RL -> "RL"
+
+  let pp_dot ~rankdir () ppf schema =
     let node_atts = {|fontname=helvetica,fontsize=16,shape=none,margin=0.6|} in
     let edge_atts = strf {|color="%s"|} edge_fg in
     pf ppf
       "@[<v1>digraph db {@,rankdir=%s;@,node [%s];@,edge [%s];@,@,%a@,%a@,}"
-      rankdir node_atts edge_atts
+      (rankdir_to_string rankdir) node_atts edge_atts
       (pp_list pp_table_node) schema
       (pp_list pp_table_edges) schema
 end

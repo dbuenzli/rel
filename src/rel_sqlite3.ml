@@ -304,7 +304,7 @@ module Stmt' = struct
       col_count : int;
       mutable finalized : bool; }
 
-  type 'r step = t * 'r Sql.Stmt.t
+  type 'r step = t * 'r Rel_sql.Stmt.t
 
   let validate s = if s.finalized then invalid_arg "finalized statement" else ()
   let finalize s = match Tsqlite3.finalize s.stmt with
@@ -319,7 +319,7 @@ module Stmt' = struct
       let finalized = false in
       { stmt; col_count; finalized }
 
-  let rec bind_arg st idx (Sql.Stmt.Arg (t, v)) = match t with
+  let rec bind_arg st idx (Rel_sql.Stmt.Arg (t, v)) = match t with
   | Type.Bool -> Tsqlite3.bind_bool st idx v
   | Type.Int -> Tsqlite3.bind_int st idx v
   | Type.Int64 -> Tsqlite3.bind_int64 st idx v
@@ -329,10 +329,10 @@ module Stmt' = struct
   | Type.Option t ->
       (match v with
       | None -> Tsqlite3.bind_null st idx
-      | Some v -> bind_arg st idx (Sql.Stmt.Arg (t, v)))
+      | Some v -> bind_arg st idx (Rel_sql.Stmt.Arg (t, v)))
   | Type.Coded c ->
       (match Type.Coded.enc c v with
-      | Ok v -> bind_arg st idx (Sql.Stmt.Arg (Type.Coded.repr c, v))
+      | Ok v -> bind_arg st idx (Rel_sql.Stmt.Arg (Type.Coded.repr c, v))
       | Error e -> error (stmt_error_var_encode idx (Type.Coded.name c) e))
   | _ -> Type.invalid_unknown ()
 
@@ -353,7 +353,7 @@ module Stmt' = struct
   let bind s st =
     validate s;
     match Tsqlite3.reset s.stmt with
-    | 0 -> bind_args s.stmt (List.rev (Sql.Stmt.rev_args st))
+    | 0 -> bind_args s.stmt (List.rev (Rel_sql.Stmt.rev_args st))
     | rc -> error (stmt_error rc s.stmt)
 
   let rec unpack_col_type : type r c. Tsqlite3.stmt -> int -> c Type.t -> c =
@@ -376,9 +376,9 @@ module Stmt' = struct
   let unpack_col : type r c. Tsqlite3.stmt -> int -> (r, c) Col.t -> c =
   fun s i c -> unpack_col_type s i (Col.type' c)
 
-  let unpack_row : type r. t -> r Sql.Stmt.t -> r = fun s st ->
+  let unpack_row : type r. t -> r Rel_sql.Stmt.t -> r = fun s st ->
     let rec cols :
-      type r a. Tsqlite3.stmt -> int -> (r, a) Rel_private.prod -> a
+      type r a. Tsqlite3.stmt -> int -> (r, a) Rel.Row.Private.prod' -> a
     =
     fun s idx r -> match r with
     | Unit f -> f
@@ -387,12 +387,12 @@ module Stmt' = struct
         f (unpack_col s idx c)
     | Cat (cs, _, row) ->
         let f = cols s
-            (idx - Row.col_count (Rel_private.prod_to_prod row)) cs
+            (idx - Row.col_count (Rel.Row.Private.prod_to_prod row)) cs
         in
         let v = cols s idx row in
         f v
     in
-    let row = Rel_private.prod_of_prod (Sql.Stmt.result st) in
+    let row = Rel.Row.Private.prod_of_prod (Rel_sql.Stmt.result st) in
     cols s.stmt (s.col_count - 1) row
 
   let stop s =
@@ -509,12 +509,12 @@ let exec_sql db sql =
   match Tsqlite3.exec db.db sql with
   | 0 -> Ok () | rc -> Error (db_error rc db.db)
 
-let exec_once db st = exec_sql db (Sql.Stmt.src st)
+let exec_once db st = exec_sql db (Rel_sql.Stmt.src st)
 
 let fold db st f acc =
   validate db;
   try
-    let s = Cache.stmt db (Sql.Stmt.src st) in
+    let s = Cache.stmt db (Rel_sql.Stmt.src st) in
     Stmt'.bind s st; Ok (Stmt'.fold s st f acc)
   with
   | Stmt'.Error e -> Error e
@@ -522,7 +522,7 @@ let fold db st f acc =
 let first db st =
   validate db;
   try
-    let s = Cache.stmt db (Sql.Stmt.src st) in
+    let s = Cache.stmt db (Rel_sql.Stmt.src st) in
     Stmt'.bind s st; Ok (Stmt'.first s st)
   with
   | Stmt'.Error e -> Error e
@@ -530,7 +530,7 @@ let first db st =
 let exec db st =
   validate db;
   try
-    let s = Cache.stmt db (Sql.Stmt.src st) in
+    let s = Cache.stmt db (Rel_sql.Stmt.src st) in
     Stmt'.bind s st; Ok (Stmt'.exec s)
   with
   | Stmt'.Error e -> Error e
@@ -567,10 +567,10 @@ let explain ?(query_plan = false) db st =
   try
     let explain = if query_plan then "EXPLAIN QUERY PLAN " else "EXPLAIN " in
     (* Maybe we should skip the cache. *)
-    let src = explain ^ Sql.Stmt.src st in
-    let rev_args = Sql.Stmt.rev_args st in
+    let src = explain ^ Rel_sql.Stmt.src st in
+    let rev_args = Rel_sql.Stmt.rev_args st in
     let result = Row.Quick.(t1 (text "explanation")) in
-    let st = Sql.Stmt.v src ~rev_args ~result in
+    let st = Rel_sql.Stmt.v src ~rev_args ~result in
     let s = Cache.stmt db src in (* XXX skip the cache ? *)
     Stmt'.bind s st;
     let lines = List.rev (Stmt'.fold s st List.cons []) in
@@ -610,7 +610,7 @@ module Schema = struct
     let if_exists_ext c = ext c " IF EXISTS"
     let if_not_exists_ext c = ext c " IF NOT EXISTS"
     let pp_comma ppf () = Format.fprintf ppf ",@ "
-    let pp_col_name ppf n = Format.pp_print_string ppf (Sql.Syntax.escape_id n)
+    let pp_col_name ppf n = Format.pp_print_string ppf (Rel_sql.Syntax.id n)
     let pp_col_names ppf cs =
       Format.pp_open_hbox ppf ();
       (Format.pp_print_list ~pp_sep:pp_comma pp_col_name) ppf cs;
@@ -628,8 +628,8 @@ module Schema = struct
     | _ -> Type.invalid_unknown ()
 
     let col_def col =
-      let name = Sql.Syntax.escape_id (Sql.Schema.Col.name col) in
-      let Rel.Type.V type' = Sql.Schema.Col.type' col in
+      let name = Rel_sql.Syntax.id (Rel_sql.Schema.Col.name col) in
+      let Rel.Type.V type' = Rel_sql.Schema.Col.type' col in
       let type', not_null = type_of_type type' in
       let not_null = if not_null then " NOT NULL" else "" in
       strf "%s %s%s" name type' not_null
@@ -638,80 +638,80 @@ module Schema = struct
 
     let foreign_key ?schema fk =
       let ref fk =
-        let name, cs = Sql.Schema.Table.Foreign_key.ref fk in
+        let name, cs = Rel_sql.Schema.Table.Foreign_key.ref fk in
         if cs = [] then "" else
-        let name = Sql.Syntax.escape_id_in_schema ?schema name in
+        let name = Rel_sql.Syntax.id_in_schema ?schema name in
         strf " REFERENCES %s (%a)" name pp_col_names cs
       in
       let action act a = match a with
       | None -> "" | Some a ->
-          strf " %s %s" act (Sql.Schema.Table.Foreign_key.action_to_kwds a)
+          strf " %s %s" act (Rel_sql.Schema.Table.Foreign_key.action_to_kwds a)
       in
       strf "FOREIGN KEY (%a)%s%s%s"
-        pp_col_names (Sql.Schema.Table.Foreign_key.cols fk)
+        pp_col_names (Rel_sql.Schema.Table.Foreign_key.cols fk)
         (ref fk)
-        (action "ON UPDATE" (Sql.Schema.Table.Foreign_key.on_update fk))
-        (action "ON DELETE" (Sql.Schema.Table.Foreign_key.on_delete fk))
+        (action "ON UPDATE" (Rel_sql.Schema.Table.Foreign_key.on_update fk))
+        (action "ON DELETE" (Rel_sql.Schema.Table.Foreign_key.on_delete fk))
 
     let create_table ?schema ?if_not_exists t =
       let unique cs = strf "UNIQUE (%a)" pp_col_names cs in
       let check (n, s) =
-        strf "CONSTRAINT %s CHECK (%s)" (Sql.Syntax.escape_id n) s
+        strf "CONSTRAINT %s CHECK (%s)" (Rel_sql.Syntax.id n) s
       in
       let if_not_exists = if_not_exists_ext if_not_exists  in
-      let name = Sql.Schema.Table.name t in
-      let name = Sql.Syntax.escape_id_in_schema ?schema name in
-      let cols = List.map col_def (Sql.Schema.Table.cols t) in
-      let uniques = List.map unique (Sql.Schema.Table.uniques t) in
-      let primary_key = match Sql.Schema.Table.primary_key t with
+      let name = Rel_sql.Schema.Table.name t in
+      let name = Rel_sql.Syntax.id_in_schema ?schema name in
+      let cols = List.map col_def (Rel_sql.Schema.Table.cols t) in
+      let uniques = List.map unique (Rel_sql.Schema.Table.uniques t) in
+      let primary_key = match Rel_sql.Schema.Table.primary_key t with
       | None -> [] | Some pk -> [strf "PRIMARY KEY (%a)" pp_col_names pk]
       in
-      let fks = Sql.Schema.Table.foreign_keys t in
+      let fks = Rel_sql.Schema.Table.foreign_keys t in
       let fks = List.map (foreign_key ?schema) fks in
-      let checks = List.map check (Sql.Schema.Table.checks t) in
+      let checks = List.map check (Rel_sql.Schema.Table.checks t) in
       let defs = cols @ primary_key @ uniques @ fks @ checks in
       let sql =
         strf "@[<v2>CREATE TABLE%s %s (@,%a@]@,);"
           if_not_exists name
           (Format.pp_print_list ~pp_sep:pp_comma Format.pp_print_string) defs
       in
-      Sql.Stmt.(func sql @@ unit)
+      Rel_sql.Stmt.(func sql @@ unit)
 
     let create_index ?schema ?if_not_exists i =
       let pp_index_col ppf c =
-        let name = Sql.Syntax.escape_id (Sql.Schema.Index.Col.name c) in
-        let ord = match Sql.Schema.Index.Col.sort_order c  with
-        | None -> "" | Some o -> " " ^ Sql.Schema.Index.Col.sort_order_to_kwd o
+        let name = Rel_sql.Syntax.id (Rel_sql.Schema.Index.Col.name c) in
+        let ord = match Rel_sql.Schema.Index.Col.sort_order c  with
+        | None -> "" | Some o -> " " ^ Rel_sql.Schema.Index.Col.sort_order_to_kwd o
         in
         Format.fprintf ppf "%s%s" name ord
       in
-      let unique = if Sql.Schema.Index.unique i then " UNIQUE" else "" in
+      let unique = if Rel_sql.Schema.Index.unique i then " UNIQUE" else "" in
       let if_not_exists = if_not_exists_ext if_not_exists  in
-      let name = Sql.Schema.Index.name i in
-      let name = Sql.Syntax.escape_id_in_schema ?schema name in
-      let table_name = Sql.Schema.Index.table_name i in
-      let table_name = Sql.Syntax.escape_id_in_schema ?schema table_name in
-      let cols = Sql.Schema.Index.cols i in
+      let name = Rel_sql.Schema.Index.name i in
+      let name = Rel_sql.Syntax.id_in_schema ?schema name in
+      let table_name = Rel_sql.Schema.Index.table_name i in
+      let table_name = Rel_sql.Syntax.id_in_schema ?schema table_name in
+      let cols = Rel_sql.Schema.Index.cols i in
       let sql =
         strf "@[<v2>CREATE%s INDEX%s %s ON %s @[<1>(%a)@];@]"
           unique if_not_exists name table_name
           (Format.pp_print_list ~pp_sep:pp_comma pp_index_col) cols
       in
-      Sql.Stmt.(func sql @@ unit)
+      Rel_sql.Stmt.(func sql @@ unit)
 
     let drop_table ?schema ?if_exists t =
       let if_exists = if_exists_ext if_exists  in
-      let name = Sql.Schema.Table.name t in
-      let name = Sql.Syntax.escape_id_in_schema ?schema name in
+      let name = Rel_sql.Schema.Table.name t in
+      let name = Rel_sql.Syntax.id_in_schema ?schema name in
       let sql = strf "DROP TABLE%s %s;" if_exists name in
-      Sql.Stmt.(func sql @@ unit)
+      Rel_sql.Stmt.(func sql @@ unit)
 
     let drop_index ?schema ?if_exists i =
       let if_exists = if_exists_ext if_exists in
-      let name = Sql.Schema.Index.name i in
-      let name = Sql.Syntax.escape_id_in_schema ?schema name in
+      let name = Rel_sql.Schema.Index.name i in
+      let name = Rel_sql.Syntax.id_in_schema ?schema name in
       let sql = strf "DROP INDEX%s %s;" if_exists name in
-      Sql.Stmt.(func sql @@ unit)
+      Rel_sql.Stmt.(func sql @@ unit)
   end
 
   let of_db db = failwith "TODO"

@@ -4,7 +4,7 @@
   ---------------------------------------------------------------------------*)
 
 open Rel
-open Rel.Syntax
+open Rel_query.Syntax
 open Test_schema.Products_flat_with_objects
 
 let env =

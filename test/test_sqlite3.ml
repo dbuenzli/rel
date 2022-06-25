@@ -26,7 +26,7 @@ end
 let playlists db =
   let row = Table.row Playlist.table in
   let sql = "select * from playlists" in
-  let st = Sql.Stmt.(func sql @@ ret row) in
+  let st = Rel_sql.Stmt.(func sql @@ ret row) in
   let* ps = Rel_sqlite3.fold db st List.cons [] in
   Format.printf "%a" (Row.list_pp ~header:true row) (List.rev ps);
   Ok ()
@@ -34,7 +34,7 @@ let playlists db =
 let playlist_id db id =
   let row = Table.row Playlist.table in
   let sql = "select * from playlists where PlaylistId = ?1" in
-  let playlist_with_id = Sql.Stmt.(func sql @@ int @-> ret row) in
+  let playlist_with_id = Rel_sql.Stmt.(func sql @@ int @-> ret row) in
   let* ps = Rel_sqlite3.fold db (playlist_with_id id) List.cons [] in
   Format.printf "\n\nplaylist %d: %a" id Playlist.pp (List.hd ps);
   Ok ()
