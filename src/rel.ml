@@ -84,17 +84,23 @@ end
 
 module Col = struct
   type param = ..
+  type 'a default = [ `Expr of string | `Value of 'a ]
   type ('r, 'a) t =
-    { name : string; params : param list; type' : 'a Type.t;
+    { name : string; params : param list;
+      type' : 'a Type.t;
+      default : 'a default option;
       proj : ('r -> 'a) }
 
   type 'r v = V : ('r, 'a) t -> 'r v
   type 'r value = Value : ('r, 'a) t * 'a -> 'r value
 
-  let v ?(params = []) name type' proj = { name; params; type'; proj }
+  let v ?(params = []) ?default name type' proj =
+    { name; params; type'; default; proj }
+
   let name c = c.name
   let params c = c.params
   let type' c = c.type'
+  let default c = c.default
   let proj c = c.proj
   let with_proj proj c = { c with proj }
   let no_proj _ = invalid_arg "No projection defined"

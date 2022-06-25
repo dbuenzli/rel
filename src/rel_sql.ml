@@ -120,7 +120,10 @@ module Schema = struct
      it to be easy to compare them. *)
 
   module Col = struct
-    type default = [`Expr of string | `Value of string ]
+    type default =
+    | Expr : string -> default
+    | Value : 'a Rel.Type.t * 'a -> default
+
     type name = string
     type t =
       { name : string;
@@ -234,7 +237,11 @@ module Schema = struct
     let col (Rel.Col.V c) =
       let name = Rel.Col.name c in
       let type' = Rel.Col.type' c in
-      let default = None in
+      let default = match Rel.Col.default c with
+      | None -> None
+      | Some (`Expr sql) -> Some (Col.Expr sql)
+      | Some (`Value v) -> Some (Col.Value (Rel.Col.type' c, v))
+      in
       Col.v ~name ~type':(Rel.Type.V type') ~default
 
     let of_table (Rel.Table.V t) =

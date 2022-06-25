@@ -57,27 +57,27 @@ module Products_flat_with_objects = struct
 
 
     let name' =
-      { Col.name = "name"; params = []; type' = Type.Text;
+      { Col.name = "name"; params = []; type' = Type.Text; default = None;
         proj = fun o -> o # name }
 
     let price' =
-      { Col.name = "price"; params = []; type' = Type.Int;
+      { Col.name = "price"; params = []; type' = Type.Int; default = None;
         proj = fun o -> o # price }
 
     let pid' =
-      { Col.name = "pid"; params =  []; type' = Type.Int;
+      { Col.name = "pid"; params =  []; type' = Type.Int; default = None;
         proj = fun o -> o # pid }
 
     let oid' =
-      { Col.name = "oid"; params = []; type' = Type.Int;
+      { Col.name = "oid"; params = []; type' = Type.Int; default = None;
         proj = fun o -> o # oid }
 
     let qty' =
-      { Col.name = "qty"; params =  []; type' =  Type.Int;
+      { Col.name = "qty"; params =  []; type' =  Type.Int; default = None;
         proj = fun o -> o # qty }
 
     let sale' =
-      { Col.name = "sale"; params = []; type' = Type.Int;
+      { Col.name = "sale"; params = []; type' = Type.Int; default = None;
         proj = fun o -> o # sale }
 
     let name r = Bag.proj r name'

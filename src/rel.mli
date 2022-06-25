@@ -132,9 +132,12 @@ module Col : sig
       {b FIXME.} Add columns parameters like we did for {!Table.param}.
       For now it oddly breaks compilation. *)
 
+  type 'a default = [ `Expr of string | `Value of 'a ]
+  (** The type for column defaults. {b FIXME} Expr case. *)
+
   type ('r, 'a) t =
     { name : string; params : param list;
-      type' : 'a Type.t; proj : ('r -> 'a) }
+      type' : 'a Type.t; default : 'a default option; proj : ('r -> 'a) }
   (** The type for a column of type ['a] which is part of a row stored
       in an OCaml value of type ['r]. Unless you get into recursive
       trouble use constructor {!val-v}. *)
@@ -146,8 +149,8 @@ module Col : sig
   (** The type for a column value for a row of type ['r]. *)
 
   val v :
-    ?params:param list -> string -> 'a Type.t -> ('r -> 'a) ->
-    ('r, 'a) t
+    ?params:param list -> ?default:'a default -> string -> 'a Type.t ->
+    ('r -> 'a) -> ('r, 'a) t
   (** [v name t proj ~params] is a column named [name] with type [t], row
       projection function [proj] and parameters [params] (defaults to [[]]). *)
 
@@ -160,6 +163,9 @@ module Col : sig
   val type' : ('r, 'a) t -> 'a Type.t
   (** [type'] is the type of [c]. *)
 
+  val default : ('r, 'a) t -> 'a default option
+  (** [default] is the default value of [c] (if any). *)
+
   val proj : ('r, 'a) t -> ('r -> 'a)
   (** [proj c] is the projection function of [c]. *)
 
@@ -170,15 +176,6 @@ module Col : sig
 
   val equal_name : ('r, 'a) t ->  ('s, 'b) t -> bool
   (** [equal_name c0 c1] is [true] if [c0] and [c1] have the same name. *)
-
-  (** {1:params Parameters}
-
-      See {!Rel_sql} for more parameters. *)
-
-  (* TODO add when we get
-  type ('r, 'a) param +=
-    | Default of 'a
-*)
 
   (** {1:fmt Formatters} *)
 

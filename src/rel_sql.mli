@@ -148,7 +148,6 @@ type Rel.Col.param +=
       {- [Col_constraint sql] appends [sql]
          at the end of the column definition. Can be repeated.}} *)
 
-
 (** {1:insupd Inserting, updating and deleting} *)
 
 type insert_or_action = [`Abort | `Fail | `Ignore | `Replace | `Rollback ]
@@ -205,7 +204,9 @@ module Schema : sig
   (** Column descriptions. *)
   module Col : sig
 
-    type default = [ `Expr of string | `Value of string ]
+    type default =
+    | Expr : string -> default
+    | Value : 'a Rel.Type.t * 'a -> default
     (** The type for column defaults. *)
 
     type name = string

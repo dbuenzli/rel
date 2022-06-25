@@ -627,12 +627,36 @@ module Schema = struct
     | Type.Coded c -> type_of_type (Type.Coded.repr c)
     | _ -> Type.invalid_unknown ()
 
+    (* FIXME streamline with Rel_query, this should be part of dialect. *)
+    let rec const_to_string : type a. a Rel.Type.t -> a -> string =
+    fun t v -> match t with
+    | Type.Bool -> (match v with true -> "1" | false -> "0")
+    | Type.Int -> string_of_int v
+    | Type.Int64 -> Int64.to_string v
+    | Type.Float -> Float.to_string v
+    | Type.Text -> Rel_sql.Syntax.string v
+    | Type.Blob (* FIXME nonsense *) -> Rel_sql.Syntax.string v
+    | Type.Option t ->
+        (match v with None -> "NULL" | Some v -> const_to_string t v)
+    | Rel.Type.Coded c ->
+        (match Rel.Type.Coded.enc c v with
+        | Ok v -> const_to_string (Rel.Type.Coded.repr c) v
+        | Error e ->
+            let name = Rel.Type.Coded.name c in
+            invalid_arg (strf "invalid %s constant %s" name e))
+    | _ -> Rel.Type.invalid_unknown ()
+
     let col_def col =
       let name = Rel_sql.Syntax.id (Rel_sql.Schema.Col.name col) in
       let Rel.Type.V type' = Rel_sql.Schema.Col.type' col in
       let type', not_null = type_of_type type' in
       let not_null = if not_null then " NOT NULL" else "" in
-      strf "%s %s%s" name type' not_null
+      let default = match Rel_sql.Schema.Col.default col with
+      | None -> ""
+      | Some (Expr expr) -> strf " DEFAULT (%s)" expr
+      | Some (Value (t, v)) -> strf " DEFAULT %s" (const_to_string t v)
+      in
+      strf "%s %s%s%s" name type' not_null default
 
     let col_defs t = []
 
@@ -681,7 +705,8 @@ module Schema = struct
       let pp_index_col ppf c =
         let name = Rel_sql.Syntax.id (Rel_sql.Schema.Index.Col.name c) in
         let ord = match Rel_sql.Schema.Index.Col.sort_order c  with
-        | None -> "" | Some o -> " " ^ Rel_sql.Schema.Index.Col.sort_order_to_kwd o
+        | None -> ""
+        | Some o -> " " ^ Rel_sql.Schema.Index.Col.sort_order_to_kwd o
         in
         Format.fprintf ppf "%s%s" name ord
       in
