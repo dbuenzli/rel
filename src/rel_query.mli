@@ -9,8 +9,8 @@
 
     The expressiveness of the query language is currently limited.
     Note that you can always switch to raw SQL statements and
-    {{!Sql.Stmt}type} them for execution. To define queries you should
-    open {!Rel.Syntax} which has more definitions and operator
+    {{!Rel_sql.Stmt}type} them for execution. To define queries you should
+    open {!Syntax} which has more definitions and operator
     overloading. *)
 
 type 'a value
@@ -303,7 +303,7 @@ end
       {- More data type functions}
       {- Can we specialize `yield` on `Row.t` with appropriate
          {!Bag.row} we could likely get to a scheme where we work directly
-         with {!Row} in the language (for now we only work with {!Col})
+         with {!Rel.Row} in the language (for now we only work with {!Rel.Col})
          which should help SQL execution boilerplate. What happens to
          higher-order ? }} *)
 module Bag : sig
@@ -359,7 +359,7 @@ module Bag : sig
 end
 
 
-(** FIXME can't we merge that into {!Stmt} ? *)
+(** FIXME can't we merge that into {!Rel_sql.Stmt} ? *)
 module Sql : sig
 
   type ('a, 'f, 'r) func
@@ -514,7 +514,7 @@ module Private : sig
   (** {1:vals_and_bags Values and bags} *)
 
   type 'a value' = 'a value
-  (** See {!Rel.value}. *)
+  (** See {!Rel_query.value}. *)
 
   type 'a value =
   | Var : string -> 'a value (* only for compiling *)

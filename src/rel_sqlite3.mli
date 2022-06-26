@@ -493,19 +493,18 @@ module Stmt : sig
   (** [inalize s] finalizes statement [st]. *)
 end
 
-(** {1:schema Schema} *)
+(** {1:sql SQL} *)
 
-module Schema : sig
+module Dialect : Rel_sql.DIALECT
+(** [Dialect] implements the sqlite3 SQL dialect. *)
 
-  module Stmt : sig
-    include Rel_sql.Schema.STMT
-  end
+val dialect : Rel_sql.dialect
+(** [dialect] is the sqlite3 dialect. *)
 
-  val of_db : t -> (Rel_sql.Schema.t, error) result
-  (** [of_db db] derives a [Rel] SQL schema value for [db]. *)
-end
+val sql_schema_of_db : t -> (Rel_sql.Schema.t, error) result
+(** [sql_schema_of_db db] derives a [Rel] SQL schema value for [db]. *)
+
 (*
-
 (** {1:system_tables System tables} *)
 
 (** SQLite system tables. *)

@@ -7,7 +7,7 @@ strings.
 Raw SQL will have unchecked dependencies with your {!Rel} descriptions
 and depend on your DBMS. If possible you should prefer the higher
 level functions of {!Rel_sql} or the embedded query language
-{!Rel_bag}.
+{!Rel_query}.
 
 Nevertheless this provides a good escape hatch would you find yourself
 stuck with the expressiveness of the higher-level support.

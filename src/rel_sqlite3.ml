@@ -600,147 +600,150 @@ module Stmt = struct
   | Stmt'.Error e -> Error e
 end
 
-(* SQL schema *)
+(* SQL *)
 
-module Schema = struct
+module Dialect = struct
+  let kind = "sqlite2"
 
-  module Stmt = struct
-    let strf = Format.asprintf
-    let ext c dir = match c with None -> "" | Some () -> dir
-    let if_exists_ext c = ext c " IF EXISTS"
-    let if_not_exists_ext c = ext c " IF NOT EXISTS"
-    let pp_comma ppf () = Format.fprintf ppf ",@ "
-    let pp_col_name ppf n = Format.pp_print_string ppf (Rel_sql.Syntax.id n)
-    let pp_col_names ppf cs =
-      Format.pp_open_hbox ppf ();
-      (Format.pp_print_list ~pp_sep:pp_comma pp_col_name) ppf cs;
-      Format.pp_close_box ppf ()
+  let strf = Format.asprintf
+  let ext c dir = match c with None -> "" | Some () -> dir
+  let if_exists_ext c = ext c " IF EXISTS"
+  let if_not_exists_ext c = ext c " IF NOT EXISTS"
+  let pp_comma ppf () = Format.fprintf ppf ",@ "
+  let pp_col_name ppf n = Format.pp_print_string ppf (Rel_sql.Syntax.id n)
+  let pp_col_names ppf cs =
+    Format.pp_open_hbox ppf ();
+    (Format.pp_print_list ~pp_sep:pp_comma pp_col_name) ppf cs;
+    Format.pp_close_box ppf ()
 
-    let rec type_of_type : type a. a Type.t -> string * bool = function
-    | Type.Bool -> "BOOL", true (* not null *)
-    | Type.Int -> "INTEGER", true
-    | Type.Int64 -> "BIGINT", true
-    | Type.Float -> "DOUBLE", true
-    | Type.Text -> "TEXT", true
-    | Type.Blob -> "BLOB", true
-    | Type.Option t -> fst (type_of_type t), false
-    | Type.Coded c -> type_of_type (Type.Coded.repr c)
-    | _ -> Type.invalid_unknown ()
+  let rec type_of_type : type a. a Type.t -> string * bool = function
+  | Type.Bool -> "BOOL", true (* not null *)
+  | Type.Int -> "INTEGER", true
+  | Type.Int64 -> "BIGINT", true
+  | Type.Float -> "DOUBLE", true
+  | Type.Text -> "TEXT", true
+  | Type.Blob -> "BLOB", true
+  | Type.Option t -> fst (type_of_type t), false
+  | Type.Coded c -> type_of_type (Type.Coded.repr c)
+  | _ -> Type.invalid_unknown ()
 
-    (* FIXME streamline with Rel_query, this should be part of dialect. *)
-    let rec const_to_string : type a. a Rel.Type.t -> a -> string =
-    fun t v -> match t with
-    | Type.Bool -> (match v with true -> "1" | false -> "0")
-    | Type.Int -> string_of_int v
-    | Type.Int64 -> Int64.to_string v
-    | Type.Float -> Float.to_string v
-    | Type.Text -> Rel_sql.Syntax.string v
-    | Type.Blob (* FIXME nonsense *) -> Rel_sql.Syntax.string v
-    | Type.Option t ->
-        (match v with None -> "NULL" | Some v -> const_to_string t v)
-    | Rel.Type.Coded c ->
-        (match Rel.Type.Coded.enc c v with
-        | Ok v -> const_to_string (Rel.Type.Coded.repr c) v
-        | Error e ->
-            let name = Rel.Type.Coded.name c in
-            invalid_arg (strf "invalid %s constant %s" name e))
-    | _ -> Rel.Type.invalid_unknown ()
+  (* FIXME streamline with Rel_query, this should be part of dialect. *)
+  let rec const_to_string : type a. a Rel.Type.t -> a -> string =
+  fun t v -> match t with
+  | Type.Bool -> (match v with true -> "1" | false -> "0")
+  | Type.Int -> string_of_int v
+  | Type.Int64 -> Int64.to_string v
+  | Type.Float -> Float.to_string v
+  | Type.Text -> Rel_sql.Syntax.string v
+  | Type.Blob (* FIXME nonsense *) -> Rel_sql.Syntax.string v
+  | Type.Option t ->
+      (match v with None -> "NULL" | Some v -> const_to_string t v)
+  | Rel.Type.Coded c ->
+      (match Rel.Type.Coded.enc c v with
+      | Ok v -> const_to_string (Rel.Type.Coded.repr c) v
+      | Error e ->
+          let name = Rel.Type.Coded.name c in
+          invalid_arg (strf "invalid %s constant %s" name e))
+  | _ -> Rel.Type.invalid_unknown ()
 
-    let col_def col =
-      let name = Rel_sql.Syntax.id (Rel_sql.Schema.Col.name col) in
-      let Rel.Type.V type' = Rel_sql.Schema.Col.type' col in
-      let type', not_null = type_of_type type' in
-      let not_null = if not_null then " NOT NULL" else "" in
-      let default = match Rel_sql.Schema.Col.default col with
+  let col_def col =
+    let name = Rel_sql.Syntax.id (Rel_sql.Col.name col) in
+    let Rel.Type.V type' = Rel_sql.Col.type' col in
+    let type', not_null = type_of_type type' in
+    let not_null = if not_null then " NOT NULL" else "" in
+    let default = match Rel_sql.Col.default col with
+    | None -> ""
+    | Some (Expr expr) -> strf " DEFAULT (%s)" expr
+    | Some (Value (t, v)) -> strf " DEFAULT %s" (const_to_string t v)
+    in
+    strf "%s %s%s%s" name type' not_null default
+
+  let col_defs t = []
+
+  let foreign_key ?schema fk =
+    let ref fk =
+      let name, cs = Rel_sql.Table.Foreign_key.ref fk in
+      if cs = [] then "" else
+      let name = Rel_sql.Syntax.id_in_schema ?schema name in
+      strf " REFERENCES %s (%a)" name pp_col_names cs
+    in
+    let action act a = match a with
+    | None -> "" | Some a ->
+        strf " %s %s" act (Rel_sql.Table.Foreign_key.action_to_kwds a)
+    in
+    strf "FOREIGN KEY (%a)%s%s%s"
+      pp_col_names (Rel_sql.Table.Foreign_key.cols fk)
+      (ref fk)
+      (action "ON UPDATE" (Rel_sql.Table.Foreign_key.on_update fk))
+      (action "ON DELETE" (Rel_sql.Table.Foreign_key.on_delete fk))
+
+  let create_table ?schema ?if_not_exists t =
+    let unique cs = strf "UNIQUE (%a)" pp_col_names cs in
+    let check (n, s) =
+      strf "CONSTRAINT %s CHECK (%s)" (Rel_sql.Syntax.id n) s
+    in
+    let if_not_exists = if_not_exists_ext if_not_exists  in
+    let name = Rel_sql.Table.name t in
+    let name = Rel_sql.Syntax.id_in_schema ?schema name in
+    let cols = List.map col_def (Rel_sql.Table.cols t) in
+    let uniques = List.map unique (Rel_sql.Table.uniques t) in
+    let primary_key = match Rel_sql.Table.primary_key t with
+    | None -> [] | Some pk -> [strf "PRIMARY KEY (%a)" pp_col_names pk]
+    in
+    let fks = Rel_sql.Table.foreign_keys t in
+    let fks = List.map (foreign_key ?schema) fks in
+    let checks = List.map check (Rel_sql.Table.checks t) in
+    let defs = cols @ primary_key @ uniques @ fks @ checks in
+    let sql =
+      strf "@[<v2>CREATE TABLE%s %s (@,%a@]@,);"
+        if_not_exists name
+        (Format.pp_print_list ~pp_sep:pp_comma Format.pp_print_string) defs
+    in
+    Rel_sql.Stmt.(func sql @@ unit)
+
+  let create_index ?schema ?if_not_exists i =
+    let pp_index_col ppf c =
+      let name = Rel_sql.Syntax.id (Rel_sql.Index.Col.name c) in
+      let ord = match Rel_sql.Index.Col.sort_order c  with
       | None -> ""
-      | Some (Expr expr) -> strf " DEFAULT (%s)" expr
-      | Some (Value (t, v)) -> strf " DEFAULT %s" (const_to_string t v)
+      | Some o -> " " ^ Rel_sql.Index.Col.sort_order_to_kwd o
       in
-      strf "%s %s%s%s" name type' not_null default
+      Format.fprintf ppf "%s%s" name ord
+    in
+    let unique = if Rel_sql.Index.unique i then " UNIQUE" else "" in
+    let if_not_exists = if_not_exists_ext if_not_exists  in
+    let name = Rel_sql.Index.name i in
+    let name = Rel_sql.Syntax.id_in_schema ?schema name in
+    let table_name = Rel_sql.Index.table_name i in
+    let table_name = Rel_sql.Syntax.id_in_schema ?schema table_name in
+    let cols = Rel_sql.Index.cols i in
+    let sql =
+      strf "@[<v2>CREATE%s INDEX%s %s ON %s @[<1>(%a)@];@]"
+        unique if_not_exists name table_name
+        (Format.pp_print_list ~pp_sep:pp_comma pp_index_col) cols
+    in
+    Rel_sql.Stmt.(func sql @@ unit)
 
-    let col_defs t = []
+  let drop_table ?schema ?if_exists t =
+    let if_exists = if_exists_ext if_exists  in
+    let name = Rel_sql.Table.name t in
+    let name = Rel_sql.Syntax.id_in_schema ?schema name in
+    let sql = strf "DROP TABLE%s %s;" if_exists name in
+    Rel_sql.Stmt.(func sql @@ unit)
 
-    let foreign_key ?schema fk =
-      let ref fk =
-        let name, cs = Rel_sql.Schema.Table.Foreign_key.ref fk in
-        if cs = [] then "" else
-        let name = Rel_sql.Syntax.id_in_schema ?schema name in
-        strf " REFERENCES %s (%a)" name pp_col_names cs
-      in
-      let action act a = match a with
-      | None -> "" | Some a ->
-          strf " %s %s" act (Rel_sql.Schema.Table.Foreign_key.action_to_kwds a)
-      in
-      strf "FOREIGN KEY (%a)%s%s%s"
-        pp_col_names (Rel_sql.Schema.Table.Foreign_key.cols fk)
-        (ref fk)
-        (action "ON UPDATE" (Rel_sql.Schema.Table.Foreign_key.on_update fk))
-        (action "ON DELETE" (Rel_sql.Schema.Table.Foreign_key.on_delete fk))
-
-    let create_table ?schema ?if_not_exists t =
-      let unique cs = strf "UNIQUE (%a)" pp_col_names cs in
-      let check (n, s) =
-        strf "CONSTRAINT %s CHECK (%s)" (Rel_sql.Syntax.id n) s
-      in
-      let if_not_exists = if_not_exists_ext if_not_exists  in
-      let name = Rel_sql.Schema.Table.name t in
-      let name = Rel_sql.Syntax.id_in_schema ?schema name in
-      let cols = List.map col_def (Rel_sql.Schema.Table.cols t) in
-      let uniques = List.map unique (Rel_sql.Schema.Table.uniques t) in
-      let primary_key = match Rel_sql.Schema.Table.primary_key t with
-      | None -> [] | Some pk -> [strf "PRIMARY KEY (%a)" pp_col_names pk]
-      in
-      let fks = Rel_sql.Schema.Table.foreign_keys t in
-      let fks = List.map (foreign_key ?schema) fks in
-      let checks = List.map check (Rel_sql.Schema.Table.checks t) in
-      let defs = cols @ primary_key @ uniques @ fks @ checks in
-      let sql =
-        strf "@[<v2>CREATE TABLE%s %s (@,%a@]@,);"
-          if_not_exists name
-          (Format.pp_print_list ~pp_sep:pp_comma Format.pp_print_string) defs
-      in
-      Rel_sql.Stmt.(func sql @@ unit)
-
-    let create_index ?schema ?if_not_exists i =
-      let pp_index_col ppf c =
-        let name = Rel_sql.Syntax.id (Rel_sql.Schema.Index.Col.name c) in
-        let ord = match Rel_sql.Schema.Index.Col.sort_order c  with
-        | None -> ""
-        | Some o -> " " ^ Rel_sql.Schema.Index.Col.sort_order_to_kwd o
-        in
-        Format.fprintf ppf "%s%s" name ord
-      in
-      let unique = if Rel_sql.Schema.Index.unique i then " UNIQUE" else "" in
-      let if_not_exists = if_not_exists_ext if_not_exists  in
-      let name = Rel_sql.Schema.Index.name i in
-      let name = Rel_sql.Syntax.id_in_schema ?schema name in
-      let table_name = Rel_sql.Schema.Index.table_name i in
-      let table_name = Rel_sql.Syntax.id_in_schema ?schema table_name in
-      let cols = Rel_sql.Schema.Index.cols i in
-      let sql =
-        strf "@[<v2>CREATE%s INDEX%s %s ON %s @[<1>(%a)@];@]"
-          unique if_not_exists name table_name
-          (Format.pp_print_list ~pp_sep:pp_comma pp_index_col) cols
-      in
-      Rel_sql.Stmt.(func sql @@ unit)
-
-    let drop_table ?schema ?if_exists t =
-      let if_exists = if_exists_ext if_exists  in
-      let name = Rel_sql.Schema.Table.name t in
-      let name = Rel_sql.Syntax.id_in_schema ?schema name in
-      let sql = strf "DROP TABLE%s %s;" if_exists name in
-      Rel_sql.Stmt.(func sql @@ unit)
-
-    let drop_index ?schema ?if_exists i =
-      let if_exists = if_exists_ext if_exists in
-      let name = Rel_sql.Schema.Index.name i in
-      let name = Rel_sql.Syntax.id_in_schema ?schema name in
-      let sql = strf "DROP INDEX%s %s;" if_exists name in
-      Rel_sql.Stmt.(func sql @@ unit)
-  end
-
-  let of_db db = failwith "TODO"
+  let drop_index ?schema ?if_exists i =
+    let if_exists = if_exists_ext if_exists in
+    let name = Rel_sql.Index.name i in
+    let name = Rel_sql.Syntax.id_in_schema ?schema name in
+    let sql = strf "DROP INDEX%s %s;" if_exists name in
+    Rel_sql.Stmt.(func sql @@ unit)
 end
+
+let dialect = (module Dialect : Rel_sql.DIALECT)
+
+
+let sql_schema_of_db db = failwith "TODO"
+
 (* System tables *)
 (*
 module Table = struct

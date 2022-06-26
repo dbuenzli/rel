@@ -127,7 +127,7 @@ module Col : sig
   (** {1:cols Columns} *)
 
   type param = ..
-  (** The type for extensible column parameters. See {!section-params}.
+  (** The type for extensible column parameters.
 
       {b FIXME.} Add columns parameters like we did for {!Table.param}.
       For now it oddly breaks compilation. *)

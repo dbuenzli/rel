@@ -19,10 +19,10 @@ into {!Rel.Table.t} values.
 More precisely:
 
 - If your schema is defined internally with {!Rel.Table.t} values,
-  a {!Rel.Sql.Schema.t} value can be derived with the
-  {!Rel.Sql.Schema.of_tables} function. This value can be translated
+  a {!Rel_sql.Schema.t} value can be derived with the
+  {!Rel_sql.Schema.of_tables} function. This value can be translated
   to a sequence of legible SQL data definition statements with the
-  {!Rel.Sql.Schema.create_stmts} function. Would you need to move
+  {!Rel_sql.Schema.create_stmts} function. Would you need to move
   away from Rel this direction {e always} works.
 - If your schema is defined externally, the [rel-$(dbms)] command line
   tools connects to your database to generate legible {!Rel.Table.t}
@@ -37,14 +37,14 @@ The goal of a schema change is to make the {e live schema} of a
 database instance to coincide with the {e application's schema}, that
 is the schema that your software is assuming to hold.
 
-To support schema changes, Rel provides {!Rel.Sql.Schema.t} values
+To support schema changes, Rel provides {!Rel_sql.Schema.t} values
 which are low-level SQL schema representations. This representation
 can be derived from {!Rel.Table.t} values and be computed on a live
 database by connecting to it – see for example
-{!Rel_sqlite3.Schema.of_db}.
+{!Rel_sqlite3.sql_schema_of_db}.
 
 Given a manually provided list of table and column renames (if any),
-any two of these {!Rel.Sql.Schema.t} values can be compared to
+any two of these {!Rel_sql.Schema.t} values can be compared to
 automatically derive the SQL data definition statement needed to bring
 one schema to the other.
 
@@ -118,7 +118,7 @@ module [N] ({e n} capitalized) for it.  This module should have
 {- A value [N.table] of type {!Rel.Table.t} that defines the table.}}
 
 Once you have modelled your tables you can use
-{!Rel_sql.Schema.of_table} and {!Rel_sql.Schema.create_stmts} to
+{!Rel_sql.Schema.of_tables} and {!Rel_sql.Schema.create_stmts} to
 output the corresponding schema in SQL's data definition language.
 
 {2:example Example}

@@ -3,31 +3,38 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-module Fmt = struct
-  type 'a t = Format.formatter -> 'a -> unit
-  let pf = Format.fprintf
-  let str = Format.asprintf
-  let cut ppf _ = Format.pp_print_cut ppf ()
-  let sp ppf _ = Format.pp_print_space ppf ()
-  let comma ppf _ = Format.pp_print_char ppf ','; sp ppf ()
-  let string = Format.pp_print_string
-  let list ?sep pp_v ppf v = Format.pp_print_list ?pp_sep:sep pp_v ppf v
-  let bool = Format.pp_print_bool
-  let int = Format.pp_print_int
-  let int64 ppf v = pf ppf "%Ld" v
-  let float ppf v = pf ppf "%g" v
-  let blob ppf v = pf ppf "<blob>"
-  let nullable pp_v ppf = function
-  | None -> string ppf "NULL" | Some v -> pp_v ppf v
+let strf = Format.asprintf
+let pf = Format.fprintf
+let pp_comma ppf _ = Format.pp_print_char ppf ','; Format.pp_print_space ppf ()
+let pp_string = Format.pp_print_string
+let pp_hbox pp_v ppf v =
+  Format.(pp_open_hbox ppf (); pp_v ppf v; pp_close_box ppf ())
 
-  let hbox pp_v ppf v =
-    Format.(pp_open_hbox ppf (); pp_v ppf v; pp_close_box ppf ())
+let pp_lines ppf s =
+  let ls = String.split_on_char '\n' s in
+  Format.pp_print_list ~pp_sep:Format.pp_force_newline pp_string ppf ls
 
-  let lines ppf s =
-    let ls = String.split_on_char '\n' s in
-    Format.pp_print_list ~pp_sep:Format.pp_force_newline string ppf ls
+module Syntax = struct
+  let sql_quote qchar s =
+    let len = String.length s in
+    let qlen = ref (len + 2) in
+    for i = 0 to len - 1 do if s.[i] = qchar then incr qlen done;
+    let b = Bytes.make !qlen qchar in
+    match !qlen = len + 2 with
+    | true -> Bytes.blit_string s 0 b 1 len; Bytes.unsafe_to_string b
+    | false ->
+        let k = ref 1 in
+        for i = 0 to len - 1 do
+          Bytes.set b !k s.[i];
+          k := !k + if s.[i] = qchar then 2 else 1;
+        done;
+        Bytes.unsafe_to_string b
+
+  let string s = sql_quote '\'' s
+  let id s = sql_quote '\"' s
+  let id_in_schema ?schema i = match schema with
+  | None -> id i | Some s -> strf "%s.%s" (id s) (id i)
 end
-
 
 module Stmt = struct
   open Rel
@@ -39,10 +46,12 @@ module Stmt = struct
   let src st = st.src
   let result st = st.result
   let rev_args st = st.rev_args
-  let pp_src ppf st = Fmt.lines ppf st.src
+  let pp_src ppf st = pp_lines ppf st.src
   let pp ppf st =
-    Fmt.pf ppf "@[<v>%a@,@[%a@]@]"
-      Fmt.lines st.src Fmt.(list ~sep:sp pp_arg) (List.rev st.rev_args)
+    pf ppf "@[<v>%a@,@[%a@]@]"
+      pp_lines st.src
+      (Format.pp_print_list ~pp_sep:(Format.pp_print_space) pp_arg)
+      (List.rev st.rev_args)
 
   type 'a func = string -> arg list -> 'a
   let func src f = f src []
@@ -82,183 +91,173 @@ type Rel.Col.param +=
   | Col of string
   | Col_constraint of string
 
-(*
-let table_id t = sql_id (Table.name t)
-let col_id c = sql_id (Col.name c)
-let in_schema ?schema t = match schema with
-| None -> table_id t | Some s -> Fmt.str "%s.%s" (sql_id s) (table_id t)
 
-let pp_col_id ppf (Col.V c) = Fmt.string ppf (col_id c)
-let pp_col_ids ppf cs = Fmt.hbox Fmt.(list ~sep:comma pp_col_id) ppf cs
-*)
 
-module Syntax = struct
-  let sql_quote qchar s =
-    let len = String.length s in
-    let qlen = ref (len + 2) in
-    for i = 0 to len - 1 do if s.[i] = qchar then incr qlen done;
-    let b = Bytes.make !qlen qchar in
-    match !qlen = len + 2 with
-    | true -> Bytes.blit_string s 0 b 1 len; Bytes.unsafe_to_string b
-    | false ->
-        let k = ref 1 in
-        for i = 0 to len - 1 do
-          Bytes.set b !k s.[i];
-          k := !k + if s.[i] = qchar then 2 else 1;
-        done;
-        Bytes.unsafe_to_string b
+(* SQL schema descriptions. *)
 
-  let string s = sql_quote '\'' s
-  let id s = sql_quote '\"' s
-  let id_in_schema ?schema i = match schema with
-  | None -> id i | Some s -> Fmt.str "%s.%s" (id s) (id i)
+module Col = struct
+  type default =
+  | Expr : string -> default
+  | Value : 'a Rel.Type.t * 'a -> default
 
+  type name = string
+  type t =
+    { name : string;
+      type' : Rel.Type.v;
+      default : default option }
+
+  let v ~name ~type' ~default = { name; type'; default}
+  let name c = c.name
+  let type' c = c.type'
+  let default c = c.default
 end
+
+module Index = struct
+  module Col = struct
+    type sort_order = [`Asc | `Desc]
+    let sort_order_to_kwd = function `Asc -> "ASC" | `Desc -> "DESC"
+    type t = { name : string; sort_order : sort_order option }
+    let v ~name ~sort_order = { name; sort_order }
+    let name c = c.name
+    let sort_order c = c.sort_order
+      let of_col (Rel.Col.V c) = { name = Rel.Col.name c; sort_order = None }
+    end
+
+  type name = string
+  let auto_name ~table_name:t cs =
+    String.concat "_" (t :: List.map Col.name cs)
+
+  type t =
+    { name : name;
+      table_name : string;
+      cols : Col.t list;
+      unique : bool }
+
+  let v ~name ~table_name ~cols ~unique = { name; table_name; cols; unique }
+  let name i = i.name
+  let table_name i = i.table_name
+  let cols i = i.cols
+  let unique i = i.unique
+  let of_index ~table_name i =
+    let cols = List.map Col.of_col (Rel.Index.cols i) in
+    let name = match Rel.Index.name i with
+    | Some name -> name | None -> auto_name ~table_name cols
+    in
+    v ~name ~table_name ~cols ~unique:(Rel.Index.unique i)
+end
+
+module Table = struct
+  type name = string
+  module Foreign_key = struct
+    type action = [`Set_null | `Set_default | `Cascade | `Restrict]
+    let action_to_kwds = function
+    | `Set_null -> "SET NULL" | `Set_default -> "SET DEFAULT"
+    | `Cascade -> "CASCADE" | `Restrict -> "RESTRICT"
+
+    type t =
+      { cols : Col.name list;
+        ref : name * Col.name list;
+        on_delete : action option;
+        on_update : action option; }
+
+    let v ?on_delete ?on_update ~cols ~ref () =
+      { cols; ref; on_delete; on_update }
+
+    let cols fk = fk.cols
+    let ref fk = fk.ref
+    let on_delete fk = fk.on_delete
+    let on_update fk = fk.on_update
+  end
+
+  type unique = Col.name list
+  type primary_key = Col.name list
+  type check = string * string
+  type t =
+    { name : string;
+      cols : Col.t list;
+      primary_key : primary_key option;
+      uniques : unique list;
+      foreign_keys : Foreign_key.t list;
+      checks : check list }
+
+  let v ~name ~cols ~primary_key ~uniques ~foreign_keys ~checks =
+    { name; cols; primary_key; uniques; foreign_keys; checks }
+
+  let name t = t.name
+  let cols t = t.cols
+  let primary_key t = t.primary_key
+  let uniques t = t.uniques
+  let foreign_keys t = t.foreign_keys
+  let checks t = t.checks
+
+  let rel_col_name (Rel.Col.V c) = Rel.Col.name c
+
+  let primary_key_param = function
+  | Rel.Table.Primary_key cs -> Some (List.map rel_col_name cs) | _ -> None
+
+  let unique_param = function
+  | Rel.Table.Unique cs -> Some (List.map rel_col_name cs) | _ -> None
+
+  let foreign_key_param = function
+  | Rel.Table.Foreign_key fk ->
+      let cols = List.map rel_col_name (Rel.Table.foreign_key_cols fk) in
+      let rt = Rel.Table.name (fst (Rel.Table.foreign_key_reference fk)) in
+      let rcs =
+        List.map rel_col_name (snd (Rel.Table.foreign_key_reference fk))
+      in
+      let ref = rt, rcs in
+      let on_delete = fk.on_delete and on_update = fk.on_update in
+      Some (Foreign_key.v ?on_delete ?on_update ~cols ~ref ())
+  | _ -> None
+
+  let col (Rel.Col.V c) =
+    let name = Rel.Col.name c in
+    let type' = Rel.Col.type' c in
+    let default = match Rel.Col.default c with
+    | None -> None
+    | Some (`Expr sql) -> Some (Col.Expr sql)
+    | Some (`Value v) -> Some (Col.Value (Rel.Col.type' c, v))
+    in
+    Col.v ~name ~type':(Rel.Type.V type') ~default
+
+  let of_table (Rel.Table.V t) =
+    let name = Rel.Table.name t in
+    let cols = List.map col (Rel.Table.cols t) in
+    let primary_key = match List.filter_map primary_key_param t.params with
+    | pk :: _ -> Some pk | [] -> None
+    in
+    let uniques = List.filter_map unique_param t.params in
+    let foreign_keys = List.filter_map foreign_key_param t.params in
+    let checks = [] in
+    v ~name ~cols ~primary_key ~uniques ~foreign_keys ~checks
+
+  let indices_of_table (Rel.Table.V t) =
+    let table_name = Rel.Table.name t in
+    List.map (Index.of_index ~table_name) (Rel.Table.indices t)
+end
+
+module type DIALECT = sig
+  val kind : string
+
+  val create_table :
+    ?schema:string -> ?if_not_exists:unit -> Table.t -> unit Stmt.t
+
+  val create_index :
+    ?schema:string -> ?if_not_exists:unit -> Index.t -> unit Stmt.t
+
+  val drop_table :
+    ?schema:string -> ?if_exists:unit -> Table.t -> unit Stmt.t
+
+  val drop_index :
+    ?schema:string -> ?if_exists:unit -> Index.t -> unit Stmt.t
+end
+
+type dialect = (module DIALECT)
+
 
 module Schema = struct
   (* Low level representation of SQL schemas. In particular we want
      it to be easy to compare them. *)
-
-  module Col = struct
-    type default =
-    | Expr : string -> default
-    | Value : 'a Rel.Type.t * 'a -> default
-
-    type name = string
-    type t =
-      { name : string;
-        type' : Rel.Type.v;
-        default : default option }
-
-    let v ~name ~type' ~default = { name; type'; default}
-    let name c = c.name
-    let type' c = c.type'
-    let default c = c.default
-  end
-
-  module Index = struct
-    module Col = struct
-      type sort_order = [`Asc | `Desc]
-      let sort_order_to_kwd = function `Asc -> "ASC" | `Desc -> "DESC"
-      type t = { name : string; sort_order : sort_order option }
-      let v ~name ~sort_order = { name; sort_order }
-      let name c = c.name
-      let sort_order c = c.sort_order
-      let of_col (Rel.Col.V c) = { name = Rel.Col.name c; sort_order = None }
-    end
-
-    type t =
-      { name : string;
-        table_name : string;
-        cols : Col.t list;
-        unique : bool }
-
-    let v ~name ~table_name ~cols ~unique = { name; table_name; cols; unique }
-    let name i = i.name
-    let table_name i = i.table_name
-    let cols i = i.cols
-    let unique i = i.unique
-
-    let auto_name ~table_name:t cs =
-      String.concat "_" (t :: List.map Col.name cs)
-
-    let of_index ~table_name i =
-      let cols = List.map Col.of_col (Rel.Index.cols i) in
-      let name = match Rel.Index.name i with
-      | Some name -> name | None -> auto_name ~table_name cols
-      in
-      v ~name ~table_name ~cols ~unique:(Rel.Index.unique i)
-  end
-
-  module Table = struct
-    type name = string
-    module Foreign_key = struct
-      type action = [`Set_null | `Set_default | `Cascade | `Restrict]
-      let action_to_kwds = function
-      | `Set_null -> "SET NULL" | `Set_default -> "SET DEFAULT"
-      | `Cascade -> "CASCADE" | `Restrict -> "RESTRICT"
-
-      type t =
-        { cols : Col.name list;
-          ref : name * Col.name list;
-          on_delete : action option;
-          on_update : action option; }
-
-      let v ?on_delete ?on_update ~cols ~ref () =
-        { cols; ref; on_delete; on_update }
-
-      let cols fk = fk.cols
-      let ref fk = fk.ref
-      let on_delete fk = fk.on_delete
-      let on_update fk = fk.on_update
-    end
-
-    type unique = Col.name list
-    type primary_key = Col.name list
-    type check = string * string
-    type t =
-      { name : string;
-        cols : Col.t list;
-        primary_key : primary_key option;
-        uniques : unique list;
-        foreign_keys : Foreign_key.t list;
-        checks : check list }
-
-    let v ~name ~cols ~primary_key ~uniques ~foreign_keys ~checks =
-      { name; cols; primary_key; uniques; foreign_keys; checks }
-
-    let name t = t.name
-    let cols t = t.cols
-    let primary_key t = t.primary_key
-    let uniques t = t.uniques
-    let foreign_keys t = t.foreign_keys
-    let checks t = t.checks
-
-    let rel_col_name (Rel.Col.V c) = Rel.Col.name c
-
-    let primary_key_param = function
-    | Rel.Table.Primary_key cs -> Some (List.map rel_col_name cs) | _ -> None
-
-    let unique_param = function
-    | Rel.Table.Unique cs -> Some (List.map rel_col_name cs) | _ -> None
-
-    let foreign_key_param = function
-    | Rel.Table.Foreign_key fk ->
-        let cols = List.map rel_col_name (Rel.Table.foreign_key_cols fk) in
-        let rt = Rel.Table.name (fst (Rel.Table.foreign_key_reference fk)) in
-        let rcs =
-          List.map rel_col_name (snd (Rel.Table.foreign_key_reference fk))
-        in
-        let ref = rt, rcs in
-        let on_delete = fk.on_delete and on_update = fk.on_update in
-        Some (Foreign_key.v ?on_delete ?on_update ~cols ~ref ())
-    | _ -> None
-
-    let col (Rel.Col.V c) =
-      let name = Rel.Col.name c in
-      let type' = Rel.Col.type' c in
-      let default = match Rel.Col.default c with
-      | None -> None
-      | Some (`Expr sql) -> Some (Col.Expr sql)
-      | Some (`Value v) -> Some (Col.Value (Rel.Col.type' c, v))
-      in
-      Col.v ~name ~type':(Rel.Type.V type') ~default
-
-    let of_table (Rel.Table.V t) =
-      let name = Rel.Table.name t in
-      let cols = List.map col (Rel.Table.cols t) in
-      let primary_key = match List.filter_map primary_key_param t.params with
-      | pk :: _ -> Some pk | [] -> None
-      in
-      let uniques = List.filter_map unique_param t.params in
-      let foreign_keys = List.filter_map foreign_key_param t.params in
-      let checks = [] in
-      v ~name ~cols ~primary_key ~uniques ~foreign_keys ~checks
-
-    let indices_of_table (Rel.Table.V t) =
-      let table_name = Rel.Table.name t in
-      List.map (Index.of_index ~table_name) (Rel.Table.indices t)
-  end
 
   type t =
     { schema : string option;
@@ -274,25 +273,11 @@ module Schema = struct
     let indices = List.concat_map Table.indices_of_table ts in
     { schema; tables; indices }
 
-  module type STMT = sig
-    val create_table :
-      ?schema:string -> ?if_not_exists:unit -> Table.t -> unit Stmt.t
-
-    val create_index :
-      ?schema:string -> ?if_not_exists:unit -> Index.t -> unit Stmt.t
-
-    val drop_table :
-      ?schema:string -> ?if_exists:unit -> Table.t -> unit Stmt.t
-
-    val drop_index :
-      ?schema:string -> ?if_exists:unit -> Index.t -> unit Stmt.t
-  end
-
   let extract_table_indices ~table_name:n is =
     let has_table_name i = String.equal (Index.table_name i) n in
     List.partition has_table_name is
 
-  let create_stmts (module Sql : STMT) ~drop_if_exists s =
+  let create_stmts (module Sql : DIALECT) ~drop_if_exists s =
     let schema = schema s and src = Stmt.src in
     let drops = match drop_if_exists with
     | false -> []
@@ -325,7 +310,7 @@ module Schema = struct
     Stmt.(func sql unit)
 
   let change_stmts
-      (module Sql : STMT) ?(table_renames = []) ?(col_renames = [])
+      (module Sql : DIALECT) ?(table_renames = []) ?(col_renames = [])
       ~from ~to' =
     failwith "TODO"
 
@@ -333,24 +318,23 @@ module Schema = struct
   let of_string s = Ok (Marshal.from_string s 0 : t)
 end
 
-let create_table (module Sql : Schema.STMT) ?schema ?if_not_exists t =
-  let t = Schema.Table.of_table (Rel.Table.V t) in
+let create_table (module Sql : DIALECT) ?schema ?if_not_exists t =
+  let t = Table.of_table (Rel.Table.V t) in
   Sql.create_table ?schema ?if_not_exists t
 
-let create_index (module Sql : Schema.STMT) ?schema ?if_not_exists t i =
+let create_index (module Sql : DIALECT) ?schema ?if_not_exists t i =
   let table_name = Rel.Table.name t in
-  let i = Schema.Index.of_index ~table_name i in
+  let i = Index.of_index ~table_name i in
   Sql.create_index ?schema ?if_not_exists i
 
-let drop_table (module Sql : Schema.STMT) ?schema ?if_exists t =
-  let t = Schema.Table.of_table (Rel.Table.V t) in
+let drop_table (module Sql : DIALECT) ?schema ?if_exists t =
+  let t = Table.of_table (Rel.Table.V t) in
   Sql.drop_table ?schema ?if_exists t
 
-let drop_index (module Sql : Schema.STMT) ?schema ?if_exists t i =
+let drop_index (module Sql : DIALECT) ?schema ?if_exists t i =
   let table_name = Rel.Table.name t in
-  let i = Schema.Index.of_index ~table_name i in
+  let i = Index.of_index ~table_name i in
   Sql.drop_index ?schema ?if_exists i
-
 
 type insert_or_action = [`Abort | `Fail | `Ignore | `Replace | `Rollback ]
 
@@ -358,8 +342,9 @@ let insert_or_action = function
 | `Abort -> " OR ABORT" | `Fail -> " OR FAIL" | `Ignore -> " OR IGNORE"
 | `Replace -> " OR REPLACE" | `Rollback -> " OR ROLLBACK"
 
-let pp_col_id ppf (Rel.Col.V c) = Fmt.string ppf (Syntax.id (Rel.Col.name c))
-let pp_col_ids ppf cs = Fmt.hbox Fmt.(list ~sep:comma pp_col_id) ppf cs
+let pp_col_id ppf (Rel.Col.V c) = pp_string ppf (Syntax.id (Rel.Col.name c))
+let pp_col_ids ppf cs =
+  pp_hbox (Format.pp_print_list ~pp_sep:pp_comma pp_col_id) ppf cs
 
 let insert_into ?or_action ?schema ?(ignore = []) t =
   let ignore c =
@@ -381,9 +366,9 @@ let insert_into ?or_action ?schema ?(ignore = []) t =
   let vars = List.mapi (fun i _ -> "?" ^ string_of_int (i + 1)) cs in
   let or_action = Option.fold ~none:"" ~some:insert_or_action or_action in
   let sql =
-    let pp_vars = Fmt.(hbox @@ list ~sep:comma string) in
+    let pp_vars = pp_hbox (Format.pp_print_list ~pp_sep:pp_comma pp_string) in
     let name = Rel.Table.name t in
-    Fmt.str "@[<v>INSERT%s INTO %s (%a)@,VALUES (%a)@]"
+    strf "@[<v>INSERT%s INTO %s (%a)@,VALUES (%a)@]"
       or_action (Syntax.id_in_schema ?schema name) pp_col_ids cs pp_vars vars
   in
   Stmt.func sql f
