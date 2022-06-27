@@ -128,8 +128,11 @@ module Col : sig
   (** The type for column defaults. {b FIXME} Expr case. *)
 
   type ('r, 'a) t =
-    { name : string; params : 'a param list;
-      type' : 'a Type.t; default : 'a default option; proj : ('r -> 'a) }
+    { name : string;
+      type' : 'a Type.t;
+      default : 'a default option;
+      params : 'a param list;
+      proj : ('r -> 'a) }
   (** The type for a column of type ['a] which is part of a row stored
       in an OCaml value of type ['r]. Unless you get into recursive
       trouble use constructor {!val-v}. *)
@@ -149,14 +152,14 @@ module Col : sig
   val name : ('r, 'a) t -> string
   (** [name c] is the name of [c]. *)
 
-  val params : ('r, 'a) t -> 'a param list
-  (** [params c] are the parameters of [c]. *)
-
   val type' : ('r, 'a) t -> 'a Type.t
   (** [type'] is the type of [c]. *)
 
   val default : ('r, 'a) t -> 'a default option
   (** [default] is the default value of [c] (if any). *)
+
+  val params : ('r, 'a) t -> 'a param list
+  (** [params c] are the parameters of [c]. *)
 
   val proj : ('r, 'a) t -> ('r -> 'a)
   (** [proj c] is the projection function of [c]. *)
@@ -366,23 +369,43 @@ module Table : sig
   (** {1:tables Tables} *)
 
   type 'r param = ..
-  (** The type for exensible table parameters. See {!section-params}. *)
+  (** The type for extensible table parameters. *)
 
-  type 'r t = { name : string; params : 'r param list; row : 'r Row.t Lazy.t}
+  type 'r primary_key = 'r Col.v list
+  (** The type for primary keys. The columns that make up the primary key. *)
+
+  type 'r unique_key = 'r Col.v list
+  (** The type for unique key. The columns that make up the unique key. *)
+
+  type 'r foreign_key
+  (** The type for foreign keys for a table with rows of type ['r].
+      See {!Foreign_keys}. *)
+
+  type 'r t =
+    { name : string;
+      row : 'r Row.t Lazy.t;
+      primary_key : 'r primary_key option;
+      unique_keys : 'r unique_key list;
+      foreign_keys : 'r foreign_key list;
+      params : 'r param list;
+      indices : 'r Index.t list; }
   (** The type for tables with rows represented by type ['r]. Unless
       you get into recursive trouble, use the constructor {!val-v}. *)
 
   type v = V : 'r t -> v
   (** The type for existential tables. *)
 
-  val v : ?params:'r param list -> string -> 'r Row.t -> 'r t
+  val v :
+    ?indices:'r Index.t list ->
+    ?params:'r param list ->
+    ?foreign_keys:'r foreign_key list ->
+    ?unique_keys:'r unique_key list ->
+    ?primary_key:'r primary_key ->
+    string -> 'r Row.t -> 'r t
   (** [v name ~params r] is a table with corresponding attributes. *)
 
   val name : 'r t -> string
   (** [name t] is the name of [t]. *)
-
-  val params : 'r t -> 'r param list
-  (** [name t] are the parameters of [t]. *)
 
   val row : 'r t -> 'r Row.t
   (** [row t] is the description of [t]'s rows. *)
@@ -391,52 +414,53 @@ module Table : sig
   (** [cols t] is {!Row.val-cols}[ (row t)] with columns in [ignore] ommited
       from the result. *)
 
-  (** {1:params Parameters} *)
+  val primary_key : 'r t -> 'r primary_key option
+  (** [primary_key t] is the primary key of [t]. *)
 
-  (** {2:foreign_keys Foreign keys} *)
+  val unique_keys : 'r t -> 'r unique_key list
+  (** [unique_keys t] are the unique keys of [t]. *)
 
-  type foreign_key_action = [ `Set_null | `Set_default | `Cascade | `Restrict ]
-  (** The type for foreign key actions. *)
+  val foreign_keys : 'r t -> 'r foreign_key list
+  (** [foreign_keys t] are the foreign keys of [t]. *)
 
-  type ('r, 's) foreign_key =
-      { cols : 'r Col.v list;
-        reference : 's t * 's Col.v list;
-        on_delete : foreign_key_action option;
-        on_update : foreign_key_action option; }
-  (** The type for representing foreign keys from table ['r] to ['s].
-      This is exposed for recursive defs reasons, use {!val-foreign_key}
-      unless you get into trouble. {b FIXME.} At least provide
-      a default empty value so that [with] can be used. *)
-
-  val foreign_key :
-    ?on_delete:foreign_key_action ->
-    ?on_update:foreign_key_action ->
-    cols:'r Col.v list -> reference:('s t * 's Col.v list) -> unit ->
-    ('r, 's) foreign_key
-  (** [foreign_key] is a foreign key with given paramers *)
-
-  val foreign_key_cols : ('r, 's) foreign_key -> 'r Col.v list
-  val foreign_key_reference : ('r, 's) foreign_key -> 's t * 's Col.v list
-
-  (** {1:ps Parameters} *)
-
-  type 'r param +=
-  | Primary_key : 'r Col.v list -> 'r param
-  | Unique : 'r Col.v list -> 'r param
-  | Foreign_key : ('r, 's) foreign_key -> 'r param
-  | Index : 'r Index.t -> 'r param (** *)
-  (** Common table parameters.
-      {ul
-      {- [Primary_key cols], declares a table primary key constraint
-         on columns [cols].}
-      {- [Unique cols], declares a uniqueness constraint on [cols]}
-      {- [Foreign_key (cols, (t, cols'))] declares a foreign key
-         between [cols] and the columns cols' of [t]. Can be repeated.}
-      {- [Index] is an index specification for the table.}} *)
+  val params : 'r t -> 'r param list
+  (** [name t] are the parameters of [t]. *)
 
   val indices : 'r t -> 'r Index.t list
-  (** [indices t] are the indices of table [t] found in the table's
-      {{!val-params}parameters}. *)
+  (** [indices t] are the indices of table [t]. *)
+
+  (** {1:foreign_keys Foreign keys} *)
+
+  (** Foreign keys. *)
+  module Foreign_key : sig
+    type action = [`Set_null | `Set_default | `Cascade | `Restrict]
+    (** The type for foreign key actions. *)
+
+    type parent = Parent : 's t * 's Col.v list -> parent
+    (** This is the parent table and the columns that are referenced
+        within. *)
+
+    type 'r t = 'r foreign_key
+    (** The type for foreign keys. *)
+
+    val v :
+      ?on_delete:action -> ?on_update:action -> cols:'r Col.v list ->
+      parent:parent -> unit -> 'r foreign_key
+    (** [v ?on_delete ?on_update ~cols ~parent ()] is a foreign key
+        with given arguments. *)
+
+    val cols : 'r t -> 'r Col.v list
+    (** [cols fk] are the columns of [fk]. *)
+
+    val parent : 'r t -> parent
+    (** [ref fk] is the parent table of [fk]. *)
+
+    val on_delete : 'r t -> action option
+    (** [on_delete fk] is the action taken whenever [fk] is deleted. *)
+
+    val on_update : 'r t -> action option
+    (** [on_update fk] is the action taken whenever [fk] is updated. *)
+  end
 end
 
 (*---------------------------------------------------------------------------

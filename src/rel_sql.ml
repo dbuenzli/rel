@@ -145,87 +145,75 @@ end
 module Table = struct
   type name = string
   module Foreign_key = struct
-    type action = [`Set_null | `Set_default | `Cascade | `Restrict]
+    type action = Rel.Table.Foreign_key.action
     let action_to_kwds = function
     | `Set_null -> "SET NULL" | `Set_default -> "SET DEFAULT"
     | `Cascade -> "CASCADE" | `Restrict -> "RESTRICT"
 
     type t =
       { cols : Col.name list;
-        ref : name * Col.name list;
+        parent : name * Col.name list;
         on_delete : action option;
         on_update : action option; }
 
-    let v ?on_delete ?on_update ~cols ~ref () =
-      { cols; ref; on_delete; on_update }
+    let v ?on_delete ?on_update ~cols ~parent () =
+      { cols; parent; on_delete; on_update }
 
     let cols fk = fk.cols
-    let ref fk = fk.ref
+    let ref fk = fk.parent
     let on_delete fk = fk.on_delete
     let on_update fk = fk.on_update
   end
 
-  type unique = Col.name list
   type primary_key = Col.name list
+  type unique_key = Col.name list
   type check = string * string
   type t =
     { name : string;
       cols : Col.t list;
       primary_key : primary_key option;
-      uniques : unique list;
+      unique_keys : unique_key list;
       foreign_keys : Foreign_key.t list;
       checks : check list }
 
-  let v ~name ~cols ~primary_key ~uniques ~foreign_keys ~checks =
-    { name; cols; primary_key; uniques; foreign_keys; checks }
+  let v ~name ~cols ~primary_key ~unique_keys ~foreign_keys ~checks =
+    { name; cols; primary_key; unique_keys; foreign_keys; checks }
 
   let name t = t.name
   let cols t = t.cols
   let primary_key t = t.primary_key
-  let uniques t = t.uniques
+  let unique_keys t = t.unique_keys
   let foreign_keys t = t.foreign_keys
   let checks t = t.checks
 
-  let rel_col_name (Rel.Col.V c) = Rel.Col.name c
-
-  let primary_key_param = function
-  | Rel.Table.Primary_key cs -> Some (List.map rel_col_name cs) | _ -> None
-
-  let unique_param = function
-  | Rel.Table.Unique cs -> Some (List.map rel_col_name cs) | _ -> None
-
-  let foreign_key_param = function
-  | Rel.Table.Foreign_key fk ->
-      let cols = List.map rel_col_name (Rel.Table.foreign_key_cols fk) in
-      let rt = Rel.Table.name (fst (Rel.Table.foreign_key_reference fk)) in
-      let rcs =
-        List.map rel_col_name (snd (Rel.Table.foreign_key_reference fk))
-      in
-      let ref = rt, rcs in
-      let on_delete = fk.on_delete and on_update = fk.on_update in
-      Some (Foreign_key.v ?on_delete ?on_update ~cols ~ref ())
-  | _ -> None
-
-  let col (Rel.Col.V c) =
-    let name = Rel.Col.name c in
-    let type' = Rel.Col.type' c in
-    let default = match Rel.Col.default c with
-    | None -> None
-    | Some (`Expr sql) -> Some (Col.Expr sql)
-    | Some (`Value v) -> Some (Col.Value (Rel.Col.type' c, v))
-    in
-    Col.v ~name ~type':(Rel.Type.V type') ~default
-
   let of_table (Rel.Table.V t) =
+    let col_names cs = List.map (fun (Rel.Col.V c) -> Rel.Col.name c) cs in
+    let col (Rel.Col.V c) =
+      let name = Rel.Col.name c in
+      let type' = Rel.Col.type' c in
+      let default = match Rel.Col.default c with
+      | None -> None
+      | Some (`Expr sql) -> Some (Col.Expr sql)
+      | Some (`Value v) -> Some (Col.Value (Rel.Col.type' c, v))
+      in
+      Col.v ~name ~type':(Rel.Type.V type') ~default
+    in
+    let foreign_key fk =
+      let open Rel in
+      let cols = col_names (Table.Foreign_key.cols fk) in
+      let Table.Foreign_key.Parent (p, cs) = Table.Foreign_key.parent fk in
+      let parent = Table.name p, col_names cs in
+      let on_delete = Table.Foreign_key.on_delete fk in
+      let on_update = Table.Foreign_key.on_update fk in
+      Foreign_key.v ?on_delete ?on_update ~cols ~parent ()
+    in
     let name = Rel.Table.name t in
     let cols = List.map col (Rel.Table.cols t) in
-    let primary_key = match List.filter_map primary_key_param t.params with
-    | pk :: _ -> Some pk | [] -> None
-    in
-    let uniques = List.filter_map unique_param t.params in
-    let foreign_keys = List.filter_map foreign_key_param t.params in
+    let primary_key = Option.map col_names (Rel.Table.primary_key t) in
+    let unique_keys = List.map col_names (Rel.Table.unique_keys t) in
+    let foreign_keys = List.map foreign_key (Rel.Table.foreign_keys t) in
     let checks = [] in
-    v ~name ~cols ~primary_key ~uniques ~foreign_keys ~checks
+    v ~name ~cols ~primary_key ~unique_keys ~foreign_keys ~checks
 
   let indices_of_table (Rel.Table.V t) =
     let table_name = Rel.Table.name t in

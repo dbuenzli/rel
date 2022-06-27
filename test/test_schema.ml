@@ -163,8 +163,10 @@ module Products_with_adts = struct
     let name' = Col.v "name" Type.Text name
     let price' = Col.v "price" Type.Int price
     let table =
-      let params = Table.[Primary_key [Col.V pid']; Unique [Col.V name']] in
-      Table.v "product" ~params Row.(unit v * pid' * name' * price')
+      let primary_key = [Col.V pid'] in
+      let unique_keys = [[Col.V name']] in
+      Table.v "product" Row.(unit v * pid' * name' * price')
+        ~primary_key ~unique_keys
   end
 
   module Order : sig
@@ -192,12 +194,13 @@ module Products_with_adts = struct
 
     let qty' = Col.v "qty" Type.Int qty
     let table =
-      let params = Table.[
-          Foreign_key (foreign_key
-                         ~cols:[Col.V pid']
-                         ~reference:(Product.table, [Col.V Product.pid']) ())]
+      let fk =
+        let parent =
+          Table.Foreign_key.Parent (Product.table, [Col.V Product.pid'])
+        in
+        Table.Foreign_key.v ~cols:[Col.V pid'] ~parent ()
       in
-      Table.v "order" ~params Row.(unit v * oid' * pid' * qty')
+      Table.v "order" ~foreign_keys:[fk] Row.(unit v * oid' * pid' * qty')
   end
 
   type sales = <pid:int; name:string; sale:int>
@@ -261,8 +264,8 @@ module Duos = struct
     let name' = Col.v "name" Type.Text name
     let age' = Col.v "age" Type.Int age
     let table =
-      let params = Table.[Primary_key [Col.V name']] in
-      Table.v "person" ~params Row.(unit v * name' * age')
+      let primary_key = [Col.V name'] in
+      Table.v "person" Row.(unit v * name' * age') ~primary_key
   end
 
   module Duo : sig
@@ -361,8 +364,8 @@ module Org = struct
     let name p = p.name
     let name' = Col.v "name" Type.Text name
     let table =
-      let params = Table.[Primary_key [Col.V name']] in
-      Table.v "department" ~params Row.(unit v * name')
+      let primary_key = [Col.V name'] in
+      Table.v "department" Row.(unit v * name') ~primary_key
   end
 
   module Person : sig
@@ -381,8 +384,8 @@ module Org = struct
     let name' = Col.v "name" Type.Text name
     let department' = Col.v "department" Type.Text department
     let table =
-      let params = Table.[Primary_key [Col.V name']] in
-      Table.v "person" ~params Row.(unit v * name' * department')
+      let primary_key = [Col.V name'] in
+      Table.v "person" Row.(unit v * name' * department') ~primary_key
   end
 
   module Task : sig

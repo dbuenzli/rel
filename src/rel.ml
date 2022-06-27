@@ -86,10 +86,11 @@ module Col = struct
   type 'a param = ..
   type 'a default = [ `Expr of string | `Value of 'a ]
   type ('r, 'a) t =
-    { name : string; params : 'a param list;
+    { name : string;
       type' : 'a Type.t;
       default : 'a default option;
-      proj : ('r -> 'a) }
+      params : 'a param list;
+      proj : ('r -> 'a); }
 
   type 'r v = V : ('r, 'a) t -> 'r v
   type 'r value = Value : ('r, 'a) t * 'a -> 'r value
@@ -98,9 +99,9 @@ module Col = struct
     { name; params; type'; default; proj }
 
   let name c = c.name
-  let params c = c.params
   let type' c = c.type'
   let default c = c.default
+  let params c = c.params
   let proj c = c.proj
   let with_proj proj c = { c with proj }
   let no_proj _ = invalid_arg "No projection defined"
@@ -224,32 +225,43 @@ end
 
 module Table = struct
   type 'r param = ..
-  type 'r t = { name : string; params : 'r param list; row : 'r Row.t Lazy.t }
+  type 'r primary_key = 'r Col.v list
+  type 'r unique_key = 'r Col.v list
+
+  type action = [ `Set_null | `Set_default | `Cascade | `Restrict ]
+  type parent' = Parent : 'a t * 'a Col.v list -> parent'
+  and 'r foreign_key =
+    { cols : 'r Col.v list;
+      parent : parent';
+      on_delete : action option;
+      on_update : action option; }
+
+  and 'r t =
+    { name : string;
+      row : 'r Row.t Lazy.t;
+      primary_key : 'r primary_key option;
+      unique_keys : 'r unique_key list;
+      foreign_keys : 'r foreign_key list;
+      params : 'r param list;
+      indices : 'r Index.t list; }
+
   type v = V : 'r t -> v
 
-  type foreign_key_action = [ `Set_null | `Set_default | `Cascade | `Restrict ]
-  type ('r, 's) foreign_key =
-    { cols : 'r Col.v list;
-      reference : 's t * 's Col.v list;
-      on_delete : foreign_key_action option;
-      on_update : foreign_key_action option; }
+  let v
+      ?(indices = []) ?(params = []) ?(foreign_keys = []) ?(unique_keys = [])
+      ?primary_key name row
+    =
+    { name; row = Lazy.from_val row; primary_key; unique_keys; foreign_keys;
+      params; indices }
 
-  let foreign_key ?on_delete ?on_update ~cols ~reference  () =
-    { cols; reference; on_delete; on_update }
-
-  let foreign_key_cols k = k.cols
-  let foreign_key_reference k = k.reference
-
-  type 'r param +=
-  | Primary_key : 'r Col.v list -> 'r param
-  | Unique : 'r Col.v list -> 'r param
-  | Foreign_key : ('r, 's) foreign_key -> 'r param
-  | Index : 'r Index.t -> 'r param
-
-  let v ?(params = []) name row = { name; params; row = Lazy.from_val row }
   let name t = t.name
-  let params t = t.params
   let row t = Lazy.force t.row
+  let primary_key t = t.primary_key
+  let unique_keys t = t.unique_keys
+  let foreign_keys t = t.foreign_keys
+  let params t = t.params
+  let indices t = t.indices
+
   let cols ?(ignore = []) t = match ignore with
   | [] -> Row.cols (Lazy.force t.row)
   | icols ->
@@ -258,9 +270,23 @@ module Table = struct
       in
       List.filter keep (Row.cols (Lazy.force t.row))
 
-  let indices t =
-    let find_index = function Index i -> Some i | _ -> None in
-    List.filter_map find_index t.params
+  module Foreign_key = struct
+    type nonrec action = action
+    type parent = parent' = Parent : 'r t * 'r Col.v list -> parent
+    type nonrec 'r t = 'r foreign_key
+    let v ?on_delete ?on_update ~cols ~parent () =
+      { cols; parent; on_delete; on_update }
+
+    let cols fk = fk.cols
+    let parent fk = fk.parent
+    let on_delete fk = fk.on_delete
+    let on_update fk = fk.on_update
+  end
+
+  let foreign_key_cols k = k.cols
+  type 'r param +=
+  | Primary_key : 'r Col.v list -> 'r param
+  | Unique : 'r Col.v list -> 'r param
 end
 
 (*---------------------------------------------------------------------------

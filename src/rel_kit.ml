@@ -14,25 +14,23 @@ module Schema_diagram = struct
   type ref =
   | R : 'r Table.t * ('r, 'a) Col.t * 's Table.t * ('s, 'b) Col.t -> ref
 
-  let table_references t =
+  let table_parents t =
     let rec add_foreign_keys acc = function
-    | Table.Foreign_key fk :: ps ->
-        let cs = Table.foreign_key_cols fk in
-        let t', cs' = Table.foreign_key_reference fk in
+    | fk :: fks ->
+        let cs = Table.Foreign_key.cols fk in
+        let (Table.Foreign_key.Parent (t', cs')) =
+          Table.Foreign_key.parent fk
+        in
         let add acc (Col.V c) (Col.V c') = R (t, c, t', c') :: acc in
-        add_foreign_keys (List.fold_left2 add acc cs cs') ps
-    | p :: ps -> add_foreign_keys acc ps
+        add_foreign_keys (List.fold_left2 add acc cs cs') fks
     | [] -> acc
     in
-    add_foreign_keys [] (Table.params t)
+    add_foreign_keys [] (Table.foreign_keys t)
 
   let table_primary_keys t =
     let add_col acc (Col.V c) = Sset.add (Col.name c) acc in
-    let add_table_pk acc = function
-    | Table.Primary_key cs -> List.fold_left add_col acc cs
-    | _ -> acc
-    in
-    List.fold_left add_table_pk Sset.empty (Table.params t)
+    match Table.primary_key t with
+    | None -> Sset.empty | Some cs -> List.fold_left add_col Sset.empty cs
 
   let pf = Format.fprintf
   let strf = Format.asprintf
@@ -100,7 +98,7 @@ module Schema_diagram = struct
       let t' = Table.name t' and c' = Col.name c' in
       pf ppf "%a:%a -> %a:%a" pp_id t pp_id c pp_id t' pp_id c'
     in
-    pp_list ref ppf (table_references t)
+    pp_list ref ppf (table_parents t)
 
   type rankdir = [ `TB | `LR | `BT | `RL ]
   let rankdir_to_string = function

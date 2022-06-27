@@ -9,7 +9,15 @@
     type raw SQL statements – see this
     {{!page-sql_stmt_howto}howto}.  It also provides high-level
     function to generate SQL while making good use of your {!Rel}
-    representations. *)
+    representations.
+
+    {b TODO.} Maybe we still have our deps wrong here. Rel should
+    depend on Rel_sql. Also at that point the SQL schema stuff
+    is almost one-to-one with {!Rel} except untyped. See if
+    we can't eschew it. The main problem is generating {!Rel}
+    values for an existing database, but we could likely do so with dummy
+    unit types (this would also allow to give the full typed view
+    to dialects. *)
 
 (** {1:stmt Statements} *)
 
@@ -240,7 +248,7 @@ module Table : sig
     (** The type for foreign keys. *)
     val v :
       ?on_delete:action -> ?on_update:action -> cols:Col.name list ->
-      ref:name * Col.name list -> unit -> t
+      parent:name * Col.name list -> unit -> t
     (** [v] is a foreign key with given parameters. See corresponding
             accessors for semantics. *)
 
@@ -261,7 +269,7 @@ module Table : sig
   type primary_key = Col.name list
   (** The type for primary keys. *)
 
-  type unique = Col.name list
+  type unique_key = Col.name list
   (** The type for unique constraints. *)
 
   type check = string * string
@@ -273,10 +281,10 @@ module Table : sig
 
   val v :
     name:string -> cols:Col.t list -> primary_key:primary_key option ->
-    uniques:unique list -> foreign_keys:Foreign_key.t list ->
+    unique_keys:unique_key list -> foreign_keys:Foreign_key.t list ->
     checks:check list -> t
-  (** [v] is a table with given parameters. See corresponding
-          accessors for semantics. *)
+  (** [v] is a table with given parameters. See corresponding accessors for
+      semantics. *)
 
   val name : t -> string
   (** [name t] is name of [t]. *)
@@ -287,8 +295,8 @@ module Table : sig
   val primary_key : t -> primary_key option
   (** [primary_key t] is the primary key of [t] (if any) *)
 
-  val uniques : t -> unique list
-  (** [uniques t] are the unique constraint of [t]. *)
+  val unique_keys : t -> unique_key list
+  (** [unique_keys t] are the unique keys of [t]. *)
 
   val foreign_keys : t -> Foreign_key.t list
   (** [foreign_keys t] are the foreign keys of [t]. *)

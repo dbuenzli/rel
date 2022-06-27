@@ -686,7 +686,7 @@ module Dialect = struct
     let name = Rel_sql.Table.name t in
     let name = Rel_sql.Syntax.id_in_schema ?schema name in
     let cols = List.map col_def (Rel_sql.Table.cols t) in
-    let uniques = List.map unique (Rel_sql.Table.uniques t) in
+    let uniques = List.map unique (Rel_sql.Table.unique_keys t) in
     let primary_key = match Rel_sql.Table.primary_key t with
     | None -> [] | Some pk -> [strf "PRIMARY KEY (%a)" pp_col_names pk]
     in
