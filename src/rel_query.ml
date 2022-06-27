@@ -3,30 +3,8 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-module Fmt = struct
-  type 'a t = Format.formatter -> 'a -> unit
-  let pf = Format.fprintf
-  let str = Format.asprintf
-  let cut ppf _ = Format.pp_print_cut ppf ()
-  let sp ppf _ = Format.pp_print_space ppf ()
-  let comma ppf _ = Format.pp_print_char ppf ','; sp ppf ()
-  let string = Format.pp_print_string
-  let list ?sep pp_v ppf v = Format.pp_print_list ?pp_sep:sep pp_v ppf v
-  let bool = Format.pp_print_bool
-  let int = Format.pp_print_int
-  let int64 ppf v = pf ppf "%Ld" v
-  let float ppf v = pf ppf "%g" v
-  let blob ppf v = pf ppf "<blob>"
-  let nullable pp_v ppf = function
-  | None -> string ppf "NULL" | Some v -> pp_v ppf v
-
-  let hbox pp_v ppf v =
-    Format.(pp_open_hbox ppf (); pp_v ppf v; pp_close_box ppf ())
-
-  let lines ppf s =
-    let ls = String.split_on_char '\n' s in
-    Format.pp_print_list ~pp_sep:Format.pp_force_newline string ppf ls
-end
+let strf = Format.asprintf
+let pf = Format.fprintf
 
 module Private = struct
   type ('a, 'b) unop = ..
@@ -80,7 +58,7 @@ module Private = struct
   | Get_some -> "get-some"
   | Is_not_null -> "IS NOT NULL"
   | Is_null -> "IS NULL"
-  | Cast { src; dst } -> Fmt.str "%a-of-%a" Rel.Type.pp dst Rel.Type.pp src
+  | Cast { src; dst } -> strf "%a-of-%a" Rel.Type.pp dst Rel.Type.pp src
   | _ -> "<unknown>"
 
   let cmp_to_string = function
@@ -100,40 +78,40 @@ module Private = struct
 
   let rec pp_value : type a. int -> Format.formatter -> a value -> unit =
   fun id ppf -> function
-  | Var v -> Fmt.string ppf v
+  | Var v -> Format.pp_print_string ppf v
   | Const (t, v)  -> Rel.Type.value_pp t ppf v
   | Unop (u, v) ->
-      Fmt.pf ppf "@[<1>(%s@ %a)@]" (unop_to_string u) (pp_value id) v
+      pf ppf "@[<1>(%s@ %a)@]" (unop_to_string u) (pp_value id) v
   | Binop (b, v0, v1) ->
-      Fmt.pf ppf "@[<1>(%a %s %a)@]"
+      pf ppf "@[<1>(%a %s %a)@]"
         (pp_value id) v0 (binop_to_string b) (pp_value id) v1
   | Proj (v, c) ->
       begin match v with
-      | Var v -> Fmt.pf ppf "%s.%s" v (Rel.Col.name c)
-      | v -> Fmt.pf ppf "(%a).%s" (pp_value id) v (Rel.Col.name c)
+      | Var v -> pf ppf "%s.%s" v (Rel.Col.name c)
+      | v -> pf ppf "(%a).%s" (pp_value id) v (Rel.Col.name c)
       end
   | Row _ -> ()
   | Tuple (f, v) ->
       begin match f with
-      | Row _ -> Fmt.pf ppf "%a" (pp_value id) v
-      | _ -> Fmt.pf ppf "%a,@ %a" (pp_value id) f (pp_value id) v
+      | Row _ -> pf ppf "%a" (pp_value id) v
+      | _ -> pf ppf "%a,@ %a" (pp_value id) f (pp_value id) v
       end
-  | Exists b -> Fmt.pf ppf "@[<1>(exists@ %a)@]" (pp_bag id) b
+  | Exists b -> pf ppf "@[<1>(exists@ %a)@]" (pp_bag id) b
 
   and pp_bag : type a e. int -> Format.formatter -> (a, e) bag -> unit =
   fun id ppf -> function
-  | Empty -> Fmt.string ppf "Empty"
-  | Yield v -> Fmt.pf ppf "@[<2>Yield@ @[<1>(%a)@]@]" (pp_value id) v
+  | Empty -> Format.pp_print_string ppf "Empty"
+  | Yield v -> pf ppf "@[<2>Yield@ @[<1>(%a)@]@]" (pp_value id) v
   | Union (a, b) ->
-      Fmt.pf ppf "@[<2>Union@ @[<1>(%a,@ %a)@]@]" (pp_bag id) a (pp_bag id) b
-  | Table t -> Fmt.pf ppf "Table %s" (Rel.Table.name t)
+      pf ppf "@[<2>Union@ @[<1>(%a,@ %a)@]@]" (pp_bag id) a (pp_bag id) b
+  | Table t -> pf ppf "Table %s" (Rel.Table.name t)
   | Foreach (b, y) ->
       let var = "r" ^ string_of_int id in
       let id = id + 1 in
-      Fmt.pf ppf "@[<2>Foreach@ @[<1>(@[%s <- %a@],@ %a)@]@]" var
+      pf ppf "@[<2>Foreach@ @[<1>(@[%s <- %a@],@ %a)@]@]" var
         (pp_bag (id + 1)) b (pp_bag (id + 1)) (y (Var var))
   | Where (c, b) ->
-      Fmt.pf ppf "@[<2>Where@ @[<1>(%a,@ %a)@]@]" (pp_value id) c (pp_bag id) b
+      pf ppf "@[<2>Where@ @[<1>(%a,@ %a)@]@]" (pp_value id) c (pp_bag id) b
 
   let pp_value ppf v = pp_value 0 ppf v
   let pp_bag ppf b = pp_bag 0 ppf b
@@ -216,7 +194,7 @@ module Bag_sql = struct   (* Target SQL fragment to compile bags *)
       | Ok v -> const_to_string (Rel.Type.Coded.repr c) v
       | Error e ->
           let name = Rel.Type.Coded.name c in
-          invalid_arg (Fmt.str "invalid %s constant %s" name e))
+          invalid_arg (strf "invalid %s constant %s" name e))
   | _ -> Rel.Type.invalid_unknown ()
 
   let rec sel_to_string = function
@@ -384,7 +362,7 @@ module Bag_to_sql = struct
       | Table t -> (Rel.Table.name t)
       | b ->
           invalid_arg
-            (Fmt.str "@[<v>Foreach normalization: not a table:@, %a@]" pp_bag b)
+            (strf "@[<v>Foreach normalization: not a table:@, %a@]" pp_bag b)
       in
       let var = g.table_sym () in
       let cols, ts, where = match bag_to_sql g (y (Var var)) with

@@ -3,30 +3,8 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-module Fmt = struct
-  type 'a t = Format.formatter -> 'a -> unit
-  let pf = Format.fprintf
-  let str = Format.asprintf
-  let cut ppf _ = Format.pp_print_cut ppf ()
-  let sp ppf _ = Format.pp_print_space ppf ()
-  let comma ppf _ = Format.pp_print_char ppf ','; sp ppf ()
-  let string = Format.pp_print_string
-  let list ?sep pp_v ppf v = Format.pp_print_list ?pp_sep:sep pp_v ppf v
-  let bool = Format.pp_print_bool
-  let int = Format.pp_print_int
-  let int64 ppf v = pf ppf "%Ld" v
-  let float ppf v = pf ppf "%g" v
-  let blob ppf v = pf ppf "<blob>"
-  let nullable pp_v ppf = function
-  | None -> string ppf "NULL" | Some v -> pp_v ppf v
-
-  let hbox pp_v ppf v =
-    Format.(pp_open_hbox ppf (); pp_v ppf v; pp_close_box ppf ())
-
-  let lines ppf s =
-    let ls = String.split_on_char '\n' s in
-    Format.pp_print_list ~pp_sep:Format.pp_force_newline string ppf ls
-end
+let pp_string = Format.pp_print_string
+let pf = Format.fprintf
 
 module Type = struct
   type 'a t = ..
@@ -44,7 +22,7 @@ module Type = struct
         enc : ('a, 'b) map;
         dec : ('b, 'a) map;
         repr : 'b repr;
-        pp : 'a Fmt.t option; }
+        pp : (Format.formatter -> 'a -> unit) option; }
 
     let v ?pp ~name enc dec repr = { name; enc; dec; repr; pp }
     let name c = c.name
@@ -60,25 +38,32 @@ module Type = struct
   let invalid_nested_option () =
     invalid_arg "Nested option in 'a Rel.Type.t are unsupported."
 
-  let rec pp : type a. a t Fmt.t = fun ppf t -> match t with
-  | Bool -> Fmt.string ppf "bool" | Int -> Fmt.string ppf "int"
-  | Int64 -> Fmt.string ppf "int64" | Float -> Fmt.string ppf "float"
-  | Text -> Fmt.string ppf "text" | Blob -> Fmt.string ppf "blob"
-  | Option v -> pp ppf v; Fmt.string ppf " option"
-  | Coded { name; _ } -> Fmt.string ppf name
+  let rec pp : type a. Format.formatter -> a t -> unit =
+  fun ppf t -> match t with
+  | Bool -> pp_string ppf "bool" | Int -> pp_string ppf "int"
+  | Int64 -> pp_string ppf "int64" | Float -> pp_string ppf "float"
+  | Text -> pp_string ppf "text" | Blob -> pp_string ppf "blob"
+  | Option v -> pp ppf v; pp_string ppf " option"
+  | Coded { name; _ } -> pp_string ppf name
   | _ -> invalid_unknown ()
 
-  let rec value_pp : type a. a t -> a Fmt.t = function
-  | Bool -> Fmt.bool | Int -> Fmt.int | Int64 -> Fmt.int64
-  | Float -> Fmt.float | Text -> Fmt.string | Blob -> Fmt.blob
-  | Option t -> Fmt.nullable (value_pp t)
+  let rec value_pp : type a. a t -> (Format.formatter -> a -> unit) = function
+  | Bool -> Format.pp_print_bool
+  | Int -> Format.pp_print_int
+  | Int64 -> fun ppf v -> pf ppf "%Ld" v
+  | Float -> fun ppf v -> pf ppf "%g" v
+  | Text -> pp_string
+  | Blob -> fun ppf v -> pf ppf "<blob>"
+  | Option t ->
+      let pp_null ppf () = Format.pp_print_string ppf "NULL" in
+      Format.pp_print_option ~none:pp_null (value_pp t)
   | Coded c ->
       (fun ppf v -> match Coded.pp c with
       | Some pp -> pp ppf v
       | None ->
           match Coded.enc c v with
           | Ok v -> (value_pp (Coded.repr c)) ppf v
-          | Error e -> Fmt.pf ppf "<error: %s>" e)
+          | Error e -> pf ppf "<error: %s>" e)
   | _ -> invalid_unknown ()
 end
 
@@ -106,8 +91,8 @@ module Col = struct
   let with_proj proj c = { c with proj }
   let no_proj _ = invalid_arg "No projection defined"
   let equal_name c0 c1 = String.equal (name c0) (name c1)
-  let pp ppf c = Fmt.pf ppf "@[%a : %a@]" Fmt.string c.name Type.pp c.type'
-  let pp_name ppf c = Fmt.string ppf c.name
+  let pp ppf c = pf ppf "@[%a : %a@]" pp_string c.name Type.pp c.type'
+  let pp_name ppf c = pp_string ppf c.name
   let value_pp c ppf r = Type.value_pp c.type' ppf (c.proj r)
   let pp_value ppf (Value (c, v)) = Type.value_pp c.type' ppf v
   let pp_sep ppf () = Format.pp_print_char ppf '|'
@@ -189,21 +174,24 @@ module Row = struct
     in
     loop 0 row
 
-  let rec pp_header : type r a. (r, a) prod Fmt.t = fun ppf r -> match r with
+  let rec pp_header : type r a. Format.formatter -> (r, a) prod -> unit =
+  fun ppf r -> match r with
   | Unit _ -> Col.pp_sep ppf ()
   | Prod (r, c) -> pp_header ppf r; Col.pp_name ppf c; Col.pp_sep ppf ()
   | Cat (r, _, row) -> pp_header ppf r; pp_header ppf row
 
-  let rec value_pp : type r a. (r, a) prod -> r Fmt.t = fun r ppf v ->
-    match r with
-    | Unit _ -> Col.pp_sep ppf ()
-    | Prod (r, c) -> value_pp r ppf v; Col.value_pp c ppf v; Col.pp_sep ppf ()
-    | Cat (r, proj, row) -> value_pp r ppf v; value_pp row ppf (proj v)
+  let rec value_pp : type r a. (r, a) prod -> (Format.formatter -> r -> unit) =
+  fun r ppf v ->
+  match r with
+  | Unit _ -> Col.pp_sep ppf ()
+  | Prod (r, c) -> value_pp r ppf v; Col.value_pp c ppf v; Col.pp_sep ppf ()
+  | Cat (r, proj, row) -> value_pp r ppf v; value_pp row ppf (proj v)
 
   let list_pp ?(header = false) r ppf rs =
+    let pp_vs = Format.pp_print_list (value_pp r) in
     if header
-    then Fmt.pf ppf "@[<v>%a@,%a@]" pp_header r (Fmt.list (value_pp r)) rs
-    else Fmt.pf ppf "@[<v>%a@]" (Fmt.list (value_pp r)) rs
+    then pf ppf "@[<v>%a@,%a@]" pp_header r pp_vs rs
+    else pf ppf "@[<v>%a@]" pp_vs rs
 
   module Private = struct
     type ('r, 'a) prod' = ('r, 'a) prod =
