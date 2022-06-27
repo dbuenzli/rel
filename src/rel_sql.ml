@@ -220,6 +220,7 @@ module Table = struct
     List.map (Index.of_index ~table_name) (Rel.Table.indices t)
 end
 
+type insert_or_action = [`Abort | `Fail | `Ignore | `Replace | `Rollback ]
 module type DIALECT = sig
   val kind : string
 
@@ -234,6 +235,23 @@ module type DIALECT = sig
 
   val drop_index :
     ?schema:string -> ?if_exists:unit -> Index.t -> unit Stmt.t
+
+  val insert_into :
+    ?or_action:insert_or_action ->
+    ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
+    ('r -> unit Stmt.t)
+
+  val insert_into_cols :
+    ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
+    ('r Rel.Col.value list -> unit Stmt.t)
+
+  val update :
+    ?schema:string -> 'r Rel.Table.t -> set:'r Rel.Col.value list ->
+    where:'r Rel.Col.value list -> unit Stmt.t
+
+  val delete_from :
+    ?schema:string -> 'r Rel.Table.t ->
+    where:'r Rel.Col.value list -> unit Stmt.t
 end
 
 type dialect = (module DIALECT)
@@ -320,8 +338,6 @@ let drop_index (module Sql : DIALECT) ?schema ?if_exists t i =
   let i = Index.of_index ~table_name i in
   Sql.drop_index ?schema ?if_exists i
 
-type insert_or_action = [`Abort | `Fail | `Ignore | `Replace | `Rollback ]
-
 let insert_or_action = function
 | `Abort -> " OR ABORT" | `Fail -> " OR FAIL" | `Ignore -> " OR IGNORE"
 | `Replace -> " OR REPLACE" | `Rollback -> " OR ROLLBACK"
@@ -330,76 +346,17 @@ let pp_col_id ppf (Rel.Col.V c) = pp_string ppf (Syntax.id (Rel.Col.name c))
 let pp_col_ids ppf cs =
   pp_hbox (Format.pp_print_list ~pp_sep:pp_comma pp_col_id) ppf cs
 
-let insert_into ?or_action ?schema ?(ignore = []) t =
-  let ignore c =
-    List.exists (fun (Rel.Col.V i) -> Rel.Col.equal_name i c) ignore
-  in
-  let rec loop :
-    type r a.
-    (r, a) Rel.Row.Private.prod' ->
-    r Rel.Col.v list * (r -> unit Stmt.t) Stmt.func
-    = function
-    | Unit _ -> [], Stmt.nop (Stmt.ret_rev Rel.Row.empty)
-    | Prod (r, c) ->
-        let ns, f = loop r in
-        if ignore c then ns, f else (Rel.Col.V c :: ns, Stmt.col c f)
-    | Cat (r, proj', row) -> failwith "TODO"
-  in
-  let cs, f = loop (Rel.Row.Private.prod_of_prod (Rel.Table.row t)) in
-  let cs = List.rev cs in
-  let vars = List.mapi (fun i _ -> "?" ^ string_of_int (i + 1)) cs in
-  let or_action = Option.fold ~none:"" ~some:insert_or_action or_action in
-  let sql =
-    let pp_vars = pp_hbox (Format.pp_print_list ~pp_sep:pp_comma pp_string) in
-    let name = Rel.Table.name t in
-    strf "@[<v>INSERT%s INTO %s (%a)@,VALUES (%a)@]"
-      or_action (Syntax.id_in_schema ?schema name) pp_col_ids cs pp_vars vars
-  in
-  Stmt.func sql f
+let insert_into (module Sql : DIALECT) ?or_action ?schema ?ignore t =
+  Sql.insert_into ?or_action ?schema ?ignore t
 
-let rec insert_columns ~ignore:ign i rev_cols rev_vars rev_args cols =
-  let ignore c =
-    List.exists (fun (Rel.Col.V i) -> Rel.Col.equal_name i c) ign
-  in
-  match cols with
-  | [] ->
-      let cols = List.rev rev_cols and vars = List.rev rev_vars in
-      i, String.concat ", " cols, String.concat ", " vars, rev_args
-  | Rel.Col.Value (col, _) :: cols when ignore col ->
-      insert_columns ~ignore:ign i rev_cols rev_vars rev_args cols
-  | Rel.Col.Value (col, v) :: cols ->
-      let c = Syntax.id (Rel.Col.name col) in
-      let var = "?" ^ string_of_int i in
-      let arg = Stmt.Arg (col.type', v) in
-      insert_columns ~ignore:ign (i + 1)
-        (c :: rev_cols) (var :: rev_vars)  (arg :: rev_args) cols
+let insert_into_cols (module Sql : DIALECT) ?schema ?ignore t cols =
+  Sql.insert_into_cols ?schema ?ignore t cols
 
-let insert_into_cols ?schema ?(ignore = []) t cols =
-  let table = Syntax.id_in_schema ?schema (Rel.Table.name t) in
-  let i, cols, vars, rev_args = insert_columns ~ignore 1 [] [] [] cols in
-  let sql = ["INSERT INTO "; table; " ("; cols; ")\nVALUES ("; vars; ")"] in
-  { Stmt.src = String.concat "" sql; rev_args; result = Rel.Row.empty }
+let update (module Sql : DIALECT) ?schema t ~set ~where =
+  Sql.update ?schema t ~set ~where
 
-let rec bind_columns ~sep i rev_cols rev_args = function
-| [] -> i, String.concat sep (List.rev rev_cols), rev_args
-| Rel.Col.Value (col, v) :: cols ->
-    let col_name c = Syntax.id (Rel.Col.name col)in
-    let set_col = String.concat "" [col_name col; " = ?"; string_of_int i] in
-    let arg = Stmt.Arg (col.type', v) in
-    bind_columns ~sep (i + 1) (set_col :: rev_cols) (arg :: rev_args) cols
-
-let update ?schema t ~set:cols ~where =
-  let table = Syntax.id_in_schema ?schema (Rel.Table.name t) in
-  let i, columns, rev_args = bind_columns ~sep:", " 1 [] [] cols in
-  let _, where, rev_args = bind_columns ~sep:" AND " i [] rev_args where in
-  let sql = ["UPDATE "; table; " SET "; columns; " WHERE "; where ] in
-  { Stmt.src = String.concat "" sql; rev_args; result = Rel.Row.empty }
-
-let delete_from ?schema t ~where =
-  let table = Syntax.id_in_schema ?schema (Rel.Table.name t) in
-  let _, where, rev_args = bind_columns ~sep:" AND " 1 [] [] where in
-  let sql = ["DELETE FROM "; table; " WHERE "; where ] in
-  { Stmt.src = String.concat "" sql; rev_args; result = Rel.Row.empty }
+let delete_from (module Sql : DIALECT) ?schema t ~where =
+  Sql.delete_from ?schema t ~where
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The rel programmers

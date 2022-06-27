@@ -95,6 +95,8 @@ module Stmt : sig
   (** [ret st row] is an open SQL statement [st] returning values of
         type [row]. *)
 
+  val ret_rev : 'r Rel.Row.t -> 'r t func
+
   val arg : 'a Rel.Type.t -> 'b func -> ('a -> 'b) func
   (** [arg t f] binds a new variable of type [t] to [f]. *)
 
@@ -308,6 +310,8 @@ module Table : sig
   (** [of_table t] is a table from [t]. *)
 end
 
+type insert_or_action = [`Abort | `Fail | `Ignore | `Replace | `Rollback ]
+
 (** SQL satements in a given dialect. *)
 module type DIALECT = sig
 
@@ -344,6 +348,25 @@ module type DIALECT = sig
           of table [t]. The index and table are in [schema] if specified. The
           statement is DROP INDEX IF EXISTS when [~if_exists:()] is
           given. *)
+
+  (** {1:insert Insert} *)
+
+  val insert_into :
+    ?or_action:insert_or_action ->
+    ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
+    ('r -> unit Stmt.t)
+
+  val insert_into_cols :
+    ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
+    ('r Rel.Col.value list -> unit Stmt.t)
+
+  val update :
+    ?schema:string -> 'r Rel.Table.t -> set:'r Rel.Col.value list ->
+    where:'r Rel.Col.value list -> unit Stmt.t
+
+  val delete_from :
+    ?schema:string -> 'r Rel.Table.t ->
+    where:'r Rel.Col.value list -> unit Stmt.t
 end
 
 type dialect = (module DIALECT)
@@ -409,10 +432,8 @@ end
 
 (** {1:insupd Inserting, updating and deleting} *)
 
-type insert_or_action = [`Abort | `Fail | `Ignore | `Replace | `Rollback ]
-
 val insert_into :
-  ?or_action:insert_or_action ->
+  dialect -> ?or_action:insert_or_action ->
   ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
   ('r -> unit Stmt.t)
 (** [insert_into ~ignore t] is an SQL INSERT INTO statement
@@ -422,12 +443,13 @@ val insert_into :
     a corresponding [INSERT OR]. *)
 
 val insert_into_cols :
-  ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
+  dialect -> ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
   ('r Rel.Col.value list -> unit Stmt.t)
 (** [insert_into_cols] is like {!insert_into} but uses the
       given column values for the insertion. *)
 
 val update :
+  dialect ->
   ?schema:string -> 'r Rel.Table.t -> set:'r Rel.Col.value list ->
   where:'r Rel.Col.value list -> unit Stmt.t
 (** [update_cols t ~set:cols ~where] is an SQL UPDATE statement
@@ -436,7 +458,8 @@ val update :
       [where] should become (['r Bag.t -> bool value]). *)
 
 val delete_from :
-  ?schema:string -> 'r Rel.Table.t -> where:'r Rel.Col.value list -> unit Stmt.t
+  dialect -> ?schema:string -> 'r Rel.Table.t -> where:'r Rel.Col.value list ->
+  unit Stmt.t
 (** [delete_from t ~where] is an SQL DELETE FROM statement which deletes
     rows where columns have all the values in [where] (AND).
     {b FIXME.} The [where] should become (['r Bag.t -> bool value]). *)

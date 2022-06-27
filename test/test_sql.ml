@@ -68,16 +68,17 @@ module Test_products = struct
 
   (* SQL *)
 
+  let dialect = Rel_sqlite3.dialect
+
   let schema =
     let schema = [Table.V Product.table; Table.V Order.table] in
     let schema = Rel_sql.Schema.of_tables schema in
-    let dialect = Rel_sqlite3.dialect in
     Rel_sql.Schema.create_stmts dialect ~drop_if_exists:false  schema
 
-  let insert_orders = Rel_sql.insert_into Order.table
+  let insert_orders = Rel_sql.insert_into dialect Order.table
   let insert_product =
     let ignore = [(* Col.V Product.pid' *)] in
-    Rel_sql.insert_into ~ignore Product.table
+    Rel_sql.insert_into dialect ~ignore Product.table
 
   (* TODO streamline *)
 
@@ -123,14 +124,14 @@ end
 module Test_duos = struct
   open Test_schema.Duos
 
+  let dialect = Rel_sqlite3.dialect
   let schema =
     let schema = [Table.V Person.table; Table.V Duo.table] in
     let schema = Rel_sql.Schema.of_tables schema in
-    let dialect = Rel_sqlite3.dialect in
     Rel_sql.Schema.create_stmts dialect ~drop_if_exists:false  schema
 
-  let insert_person = Rel_sql.insert_into Person.table
-  let insert_duo = Rel_sql.insert_into Duo.table
+  let insert_person = Rel_sql.insert_into dialect Person.table
+  let insert_duo = Rel_sql.insert_into dialect Duo.table
 
   let diff = Q.diff
 
@@ -206,16 +207,16 @@ end
 
 module Test_org = struct
   open Test_schema.Org
+  let dialect = Rel_sqlite3.dialect
 
   let tables = Table.[V Department.table; V Person.table; V Task.table]
   let schema =
     let schema = Rel_sql.Schema.of_tables tables in
-    let dialect = Rel_sqlite3.dialect in
     Rel_sql.Schema.create_stmts dialect ~drop_if_exists:false  schema
 
-  let insert_department = Rel_sql.insert_into Department.table
-  let insert_person = Rel_sql.insert_into Person.table
-  let insert_task = Rel_sql.insert_into Task.table
+  let insert_department = Rel_sql.insert_into dialect Department.table
+  let insert_person = Rel_sql.insert_into dialect Person.table
+  let insert_task = Rel_sql.insert_into dialect Task.table
 
   let abstract_expertise =
     let open Rel_query.Syntax in
