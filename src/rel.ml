@@ -83,10 +83,10 @@ module Type = struct
 end
 
 module Col = struct
-  type param = ..
+  type 'a param = ..
   type 'a default = [ `Expr of string | `Value of 'a ]
   type ('r, 'a) t =
-    { name : string; params : param list;
+    { name : string; params : 'a param list;
       type' : 'a Type.t;
       default : 'a default option;
       proj : ('r -> 'a) }

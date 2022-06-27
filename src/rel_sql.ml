@@ -81,17 +81,13 @@ end
 
 (* Schema definition. *)
 
-type 'a src = string * 'a
-
 type 'r Rel.Table.param +=
-  | Table of string
-  | Table_constraint of string
+| Table of string
+| Table_constraint of string
 
-type Rel.Col.param +=
-  | Col of string
-  | Col_constraint of string
-
-
+type 'a Rel.Col.param +=
+| Col of string
+| Col_constraint of string
 
 (* SQL schema descriptions. *)
 

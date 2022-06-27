@@ -116,27 +116,19 @@ end
 
     Columns are tupled into {{!Row}rows}. A column is defined by its
     name, its type and how to project it from an OCaml value
-    representing a row.
-
-    {b TODO.}
-    {ul
-    {- Add default value.}
-    {- Remove explicit ('r, 't) definition ?}} *)
+    representing a row. *)
 module Col : sig
 
   (** {1:cols Columns} *)
 
-  type param = ..
-  (** The type for extensible column parameters.
-
-      {b FIXME.} Add columns parameters like we did for {!Table.param}.
-      For now it oddly breaks compilation. *)
+  type 'a param = ..
+  (** The type for extensible column parameters. *)
 
   type 'a default = [ `Expr of string | `Value of 'a ]
   (** The type for column defaults. {b FIXME} Expr case. *)
 
   type ('r, 'a) t =
-    { name : string; params : param list;
+    { name : string; params : 'a param list;
       type' : 'a Type.t; default : 'a default option; proj : ('r -> 'a) }
   (** The type for a column of type ['a] which is part of a row stored
       in an OCaml value of type ['r]. Unless you get into recursive
@@ -149,7 +141,7 @@ module Col : sig
   (** The type for a column value for a row of type ['r]. *)
 
   val v :
-    ?params:param list -> ?default:'a default -> string -> 'a Type.t ->
+    ?params:'a param list -> ?default:'a default -> string -> 'a Type.t ->
     ('r -> 'a) -> ('r, 'a) t
   (** [v name t proj ~params] is a column named [name] with type [t], row
       projection function [proj] and parameters [params] (defaults to [[]]). *)
@@ -157,7 +149,7 @@ module Col : sig
   val name : ('r, 'a) t -> string
   (** [name c] is the name of [c]. *)
 
-  val params : ('r, 'a) t -> param list
+  val params : ('r, 'a) t -> 'a param list
   (** [params c] are the parameters of [c]. *)
 
   val type' : ('r, 'a) t -> 'a Type.t

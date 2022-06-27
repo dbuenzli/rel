@@ -478,7 +478,7 @@ type 'a Rel.Table.param +=
          SQL table constraint} added at the end of the table definition.
          Can be repeated.}} *)
 
-type Rel.Col.param +=
+type 'r Rel.Col.param +=
 | Col of string
 | Col_constraint of string (** *)
   (** The type for column parameters. See also {!Rel.Col.param}.
