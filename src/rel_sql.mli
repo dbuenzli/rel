@@ -11,22 +11,34 @@
     function to generate SQL while making good use of your {!Rel}
     representations.
 
-    {b TODO.} Maybe we still have our deps wrong here. Rel should
-    depend on Rel_sql. Also at that point the SQL schema stuff
-    is almost one-to-one with {!Rel} except untyped. See if
-    we can't eschew it. The main problem is generating {!Rel}
-    values for an existing database, but we could likely do so with dummy
-    unit types (this would also allow to give the full typed view
-    to dialects. *)
+    {b TODO.}
+
+    - Maybe we still have our deps wrong here. Rel should
+      depend on Rel_sql. Also at that point the SQL schema stuff
+      is almost one-to-one with {!Rel} except untyped. See if
+      we can't eschew it. The main problem is generating {!Rel}
+      values for an existing database, but we could likely do so with dummy
+      unit types (this would also allow to give the full typed view
+      to dialects.
+    - Having `Sql_rel.dialect` at the level of statements creation
+      is annoying. Go back to the idea of having an AST in
+      {!Stmt.src}.
+*)
 
 (** {1:stmt Statements} *)
 
 (** Standard SQL syntax fragments. *)
 module Syntax : sig
 
-  val string : string -> string
-  (** [string s] is [s] between single quotes (['\'']) with single quotes
-      in [s] properly escaped. *)
+  val string_to_literal : string -> string
+  (** [string_to_literal s] is [s] between single quotes (['\'']) with
+      single quotes in [s] properly escaped. *)
+
+  val string_of_literal : string -> (string, string) result
+  (** [string_of_literal s] parses a string literal from [s]. This
+      removes enclosing single quotes (['\'']) and collapses sequences
+      of two quotes to a single one (it leaves lone internal single
+      quotes untouched). *)
 
   val id : string -> string
   (** [id id] is [id] between double quotes (['\"']) with double quotes
@@ -397,11 +409,12 @@ module Schema : sig
 
   (** {1:sql SQL} *)
 
-  val create_stmts : dialect -> drop_if_exists:bool -> t -> unit Stmt.t
-  (** [create_stmts stmt ~drop_if_exists s] is the sequence of [stmt]
-        statements to create schema [s]. If [drop_if_exists] is [true], the
-        sequence starts by dropping the tables and indexes in [s] if they
-        exist, {b this erases any pre-existing data in the database}. *)
+  val create_stmts : dialect -> ?drop_if_exists:bool -> t -> unit Stmt.t
+  (** [create_stmts stmt ?drop_if_exists s] is the sequence of [stmt]
+      statements to create schema [s]. If [drop_if_exists] is [true]
+      (defaults to [false]), the sequence starts by dropping the
+      tables and indexes in [s] if they exist, {b this erases any
+      pre-existing data in the database}. *)
 
   val change_stmts : dialect ->
     ?table_renames:(Table.name * Table.name) list ->

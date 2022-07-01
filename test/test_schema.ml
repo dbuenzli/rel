@@ -11,6 +11,7 @@ open Rel_query.Syntax
 
 (* Example from Suzuki et al *)
 
+(*
 module Products_flat_with_objects = struct
   module S : sig
     type product = <name:string; pid:int; price:int>
@@ -56,29 +57,24 @@ module Products_flat_with_objects = struct
       object method pid = pid method name = name; method sale = sale end
 
 
-    let name' =
-      { Col.name = "name"; params = []; type' = Type.Text; default = None;
-        proj = fun o -> o # name }
+    let proj o = o # name
+    let name' = Col.v "name" Type.Text proj
 
-    let price' =
-      { Col.name = "price"; params = []; type' = Type.Int; default = None;
-        proj = fun o -> o # price }
+    let proj o = o # price
+    let price' = Col.v "price" Type.Int proj
 
-    let pid' =
-      { Col.name = "pid"; params =  []; type' = Type.Int; default = None;
-        proj = fun o -> o # pid }
+    let proj o = o # pid
+    let pid' = Col.v "pid" Type.Int proj
 
-    let oid' =
-      { Col.name = "oid"; params = []; type' = Type.Int; default = None;
-        proj = fun o -> o # oid }
+    let proj o = o # oid
+    let oid' = Col.v "oid" Type.Int proj
 
-    let qty' =
-      { Col.name = "qty"; params =  []; type' =  Type.Int; default = None;
-        proj = fun o -> o # qty }
+    let proj o = o # qty
+    let qty' = Col.v "qty" Type.Int proj
 
-    let sale' =
-      { Col.name = "sale"; params = []; type' = Type.Int; default = None;
-        proj = fun o -> o # sale }
+    let proj o = o # sale
+    let sale' = Col.v "sale" Type.Int proj
+
 
     let name r = Bag.proj r name'
     let price r = Bag.proj r price'
@@ -139,6 +135,7 @@ module Products_flat_with_objects = struct
         S.order' 3 2 50; ]
   end
 end
+*)
 
 module Products_with_adts = struct
   module Product : sig

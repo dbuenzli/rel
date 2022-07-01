@@ -179,19 +179,20 @@ module Bag_sql = struct   (* Target SQL fragment to compile bags *)
   | Rel.Type.Coded c -> type_of_type (Rel.Type.Coded.repr c)
   | _ -> Rel.Type.invalid_unknown ()
 
-  let rec const_to_string : type a. a Rel.Type.t -> a -> string =
+  (* FIXME this should be part of dialect. *)
+  let rec const_to_literal : type a. a Rel.Type.t -> a -> string =
   fun t v -> match t with
   | Rel.Type.Bool -> (match v with true -> "1" | false -> "0")
   | Rel.Type.Int -> string_of_int v
   | Rel.Type.Int64 -> Int64.to_string v
   | Rel.Type.Float -> Float.to_string v
-  | Rel.Type.Text -> Rel_sql.Syntax.string v
-  | Rel.Type.Blob (* FIXME nonsense *) -> Rel_sql.Syntax.string v
+  | Rel.Type.Text -> Rel_sql.Syntax.string_to_literal v
+  | Rel.Type.Blob (* FIXME nonsense *) -> Rel_sql.Syntax.string_to_literal v
   | Rel.Type.Option t ->
-      (match v with None -> "NULL" | Some v -> const_to_string t v)
+      (match v with None -> "NULL" | Some v -> const_to_literal t v)
   | Rel.Type.Coded c ->
       (match Rel.Type.Coded.enc c v with
-      | Ok v -> const_to_string (Rel.Type.Coded.repr c) v
+      | Ok v -> const_to_literal (Rel.Type.Coded.repr c) v
       | Error e ->
           let name = Rel.Type.Coded.name c in
           invalid_arg (strf "invalid %s constant %s" name e))
@@ -204,7 +205,7 @@ module Bag_sql = struct   (* Target SQL fragment to compile bags *)
 
   and exp_to_string = function
   | Var v -> v
-  | Const (t, v) -> const_to_string t v
+  | Const (t, v) -> const_to_literal t v
   | Unop ((prefixed, op), e) ->
       let e = exp_to_string e in
       if op = "" (* Id *) then e else

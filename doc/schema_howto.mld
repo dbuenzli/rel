@@ -41,7 +41,7 @@ To support schema changes, Rel provides {!Rel_sql.Schema.t} values
 which are low-level SQL schema representations. This representation
 can be derived from {!Rel.Table.t} values and be computed on a live
 database by connecting to it – see for example
-{!Rel_sqlite3.sql_schema_of_db}.
+{!Rel_sqlite3.schema_of_db}.
 
 Given a manually provided list of table and column renames (if any),
 any two of these {!Rel_sql.Schema.t} values can be compared to

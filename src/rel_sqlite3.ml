@@ -386,7 +386,8 @@ module Stmt' = struct
         let f = cols s (idx - 1) cs in
         f (unpack_col s idx c)
     | Cat (cs, _, row) ->
-        let f = cols s
+        let f =
+          cols s
             (idx - Row.col_count (Rel.Row.Private.prod_to_prod row)) cs
         in
         let v = cols s idx row in
@@ -616,6 +617,76 @@ module Dialect = struct
     (Format.pp_print_list ~pp_sep:pp_comma pp_col_name) ppf cs;
     Format.pp_close_box ppf ()
 
+  let err_kind s ~kind = strf "%S: not a %s literal" s kind
+
+  let bool_to_literal = function true -> "TRUE" | false -> "FALSE"
+  let bool_of_literal = function
+  | "0" | "TRUE" -> Ok true | "1" | "FALSE" -> Ok false
+  | s -> Error (err_kind s ~kind:"bool")
+
+  let int_to_literal = Int.to_string
+  let int_of_literal s = match int_of_string_opt s with
+  | Some i -> Ok i | None -> Error (err_kind s ~kind:"int")
+
+  let int64_to_literal = Int64.to_string
+  let int64_of_literal s = match Int64.of_string_opt s with
+  | Some i -> Ok i | None -> Error (err_kind s ~kind:"int64")
+
+  let float_to_literal = Float.to_string
+  let float_of_literal s = match Float.of_string_opt s with
+  | Some i -> Ok i | None -> Error (err_kind s ~kind:"float")
+
+  let text_to_literal v = Rel_sql.Syntax.string_to_literal v
+  let text_of_literal s = Rel_sql.Syntax.string_of_literal s
+
+  let blob_to_literal s =
+    let lower_hex_digit n =
+      let n = n land 0xF in
+      Char.unsafe_chr (if n < 10 then 0x30 + n else 0x57 + n)
+    in
+    let rec loop max s i h k = match i > max with
+    | true -> Bytes.unsafe_to_string h
+    | false ->
+        let byte = Char.code s.[i] in
+        Bytes.set h k (lower_hex_digit (byte lsr 4));
+        Bytes.set h (k + 1) (lower_hex_digit byte);
+        loop max s (i + 1) h (k + 2)
+    in
+    let len = String.length s in
+    let h = Bytes.create (2 * len + 3) in
+    Bytes.set h 0 'x';
+    Bytes.set h 1 '\'';
+    Bytes.set h (Bytes.length h - 1) '\'';
+    loop (len - 1) s 0 h 2
+
+  let blob_of_literal s =
+    try
+      let hex_value s i = match s.[i] with
+      | '0' .. '9' as c -> Char.code c - 0x30
+      | 'A' .. 'F' as c -> 10 + (Char.code c - 0x41)
+      | 'a' .. 'f' as c -> 10 + (Char.code c - 0x61)
+      | _ -> failwith (strf "%S:%d: Not an ASCII hexadecimal digit" s i)
+      in
+      let len = String.length s in
+      let hex_len = len - 3 in
+      if len < 3 || not (s.[0] = 'x' || s.[0] = 'X') || s.[1] <> '\'' ||
+         s.[len - 1] <> '\''
+      then failwith (strf "%S: Not a blob literal (missing x or ')" s)
+      else if (hex_len mod 2) <> 0
+      then failwith (strf "%S:%d: Missing final hex digit" s (len - 2))
+      else
+      let rec loop max b i h k = match i > max with
+      | true -> Ok (Bytes.unsafe_to_string b)
+      | false ->
+          let hi = hex_value h k and lo = hex_value h (k + 1) in
+          Bytes.set b i (Char.chr @@ (hi lsl 4) lor lo);
+          loop max b (i + 1) h (k + 2)
+      in
+      let b_len = hex_len / 2 in
+      let b = Bytes.create b_len in
+      loop (b_len - 1) b 0 s 2
+    with Failure e -> Error e
+
   let rec type_of_type : type a. a Type.t -> string * bool = function
   | Type.Bool -> "BOOL", true (* not null *)
   | Type.Int -> "INTEGER", true
@@ -627,20 +698,39 @@ module Dialect = struct
   | Type.Coded c -> type_of_type (Type.Coded.repr c)
   | _ -> Type.invalid_unknown ()
 
-  (* FIXME streamline with Rel_query, this should be part of dialect. *)
-  let rec const_to_string : type a. a Rel.Type.t -> a -> string =
-  fun t v -> match t with
-  | Type.Bool -> (match v with true -> "1" | false -> "0")
-  | Type.Int -> string_of_int v
-  | Type.Int64 -> Int64.to_string v
-  | Type.Float -> Float.to_string v
-  | Type.Text -> Rel_sql.Syntax.string v
-  | Type.Blob (* FIXME nonsense *) -> Rel_sql.Syntax.string v
+  let rec const_of_literal : type a. a Type.t -> string -> (a, string) result =
+  fun t s -> match t with
+  | Type.Bool -> bool_of_literal s
+  | Type.Int -> int_of_literal s
+  | Type.Int64 -> int64_of_literal s
+  | Type.Float -> float_of_literal s
+  | Type.Text -> text_of_literal s
+  | Type.Blob -> blob_of_literal s
   | Type.Option t ->
-      (match v with None -> "NULL" | Some v -> const_to_string t v)
+      if String.uppercase_ascii s = "NULL"
+      then Ok None
+      else Result.map Option.some (const_of_literal t s)
+  | Type.Coded c ->
+      begin match const_of_literal (Type.Coded.repr c) s with
+      | Ok v -> Rel.Type.Coded.dec c v
+      | Error e -> Error (strf "%s literal: %s" (Type.Coded.name c) e)
+      end
+  | _ -> Rel.Type.invalid_unknown ()
+
+  (* FIXME streamline with Rel_query, this should be part of dialect. *)
+  let rec const_to_literal : type a. a Rel.Type.t -> a -> string =
+  fun t v -> match t with
+  | Type.Bool -> bool_to_literal v
+  | Type.Int -> int_to_literal v
+  | Type.Int64 -> int64_to_literal v
+  | Type.Float -> float_to_literal v
+  | Type.Text -> text_to_literal v
+  | Type.Blob -> blob_to_literal v
+  | Type.Option t ->
+      (match v with None -> "NULL" | Some v -> const_to_literal t v)
   | Rel.Type.Coded c ->
       (match Rel.Type.Coded.enc c v with
-      | Ok v -> const_to_string (Rel.Type.Coded.repr c) v
+      | Ok v -> const_to_literal (Rel.Type.Coded.repr c) v
       | Error e ->
           let name = Rel.Type.Coded.name c in
           invalid_arg (strf "invalid %s constant %s" name e))
@@ -654,7 +744,7 @@ module Dialect = struct
     let default = match Rel_sql.Col.default col with
     | None -> ""
     | Some (Expr expr) -> strf " DEFAULT (%s)" expr
-    | Some (Value (t, v)) -> strf " DEFAULT %s" (const_to_string t v)
+    | Some (Value (t, v)) -> strf " DEFAULT %s" (const_to_literal t v)
     in
     strf "%s %s%s%s" name type' not_null default
 
@@ -679,9 +769,7 @@ module Dialect = struct
 
   let create_table ?schema ?if_not_exists t =
     let unique cs = strf "UNIQUE (%a)" pp_col_names cs in
-    let check (n, s) =
-      strf "CONSTRAINT %s CHECK (%s)" (Rel_sql.Syntax.id n) s
-    in
+    let check (n,s) = strf "CONSTRAINT %s CHECK (%s)" (Rel_sql.Syntax.id n) s in
     let if_not_exists = if_not_exists_ext if_not_exists  in
     let name = Rel_sql.Table.name t in
     let name = Rel_sql.Syntax.id_in_schema ?schema name in
@@ -787,7 +875,7 @@ module Dialect = struct
     | Rel.Col.Value (col, v) :: cols ->
         let c = Rel_sql.Syntax.id (Rel.Col.name col) in
         let var = "?" ^ string_of_int i in
-        let arg = Rel_sql.Stmt.Arg (col.type', v) in
+        let arg = Rel_sql.Stmt.Arg (Col.type' col, v) in
         insert_columns ~ignore:ign (i + 1)
           (c :: rev_cols) (var :: rev_vars)  (arg :: rev_args) cols
 
@@ -798,13 +886,12 @@ module Dialect = struct
     let sql = String.concat "" sql in
     Rel_sql.Stmt.v sql ~rev_args ~result:Rel.Row.empty
 
-
   let rec bind_columns ~sep i rev_cols rev_args = function
   | [] -> i, String.concat sep (List.rev rev_cols), rev_args
   | Rel.Col.Value (col, v) :: cols ->
       let col_name c = Rel_sql.Syntax.id (Rel.Col.name col)in
       let set_col = String.concat "" [col_name col; " = ?"; string_of_int i] in
-      let arg = Rel_sql.Stmt.Arg (col.type', v) in
+      let arg = Rel_sql.Stmt.Arg (Col.type' col, v) in
       bind_columns ~sep (i + 1) (set_col :: rev_cols) (arg :: rev_args) cols
 
   let update ?schema t ~set:cols ~where =
@@ -825,40 +912,209 @@ end
 
 let dialect = (module Dialect : Rel_sql.DIALECT)
 
+(* Schema derivation *)
 
-let sql_schema_of_db db = failwith "TODO"
+let string_subrange ?(first = 0) ?last s =
+  let max = String.length s - 1 in
+  let last = match last with
+  | None -> max
+  | Some l when l > max -> max
+  | Some l -> l
+  in
+  let first = if first < 0 then 0 else first in
+  if first > last then "" else String.sub s first (last - first + 1)
 
-(* System tables *)
-(*
-module Table = struct
-  module Schema = struct
-    type t =
-      { type' : string;
-        name : string;
-        tbl_name : string;
-        rootpage : int;
-        sql : string }
+let ( let* ) = Result.bind
 
-    let v type' name tbl_name rootpage sql =
-      { type'; name; tbl_name; rootpage; sql }
+let never _ = assert false
+let dummy_col name = Col.V (Col.v name Type.Int never)
 
-    let type' s = s.type'
-    let name s = s.name
-    let tbl_name s = s.tbl_name
-    let rootpage s = s.rootpage
-    let sql s = s.sql
+let err_col tname cname fmt = strf ("Column %s.%s: " ^^ fmt) tname cname
 
-    let type' = Col.v "type" Type.Text type'
-    let name' = Col.v "name" Type.Text name
-    let tbl_name' = Col.v "name" Type.Text tbl_name
-    let rootpage' = Col.v "rootpage" Type.Int rootpage
-    let sql' = Col.v "sql" Type.Text sql
-    let table =
-      Table.v "sqlite_schema"
-        Row.(unit v * type'' * name' * tbl_name' * rootpage' * sql')
-  end
-end
-*)
+let err_ignoring_default tname cname fmt =
+  err_col tname cname ("ignoring default: " ^^ fmt)
+
+let err_null_not_null tname cname =
+  err_ignoring_default tname cname "NULL default on NOT NULL column"
+
+let col_type tname cname not_null default type' =
+  let some c = Some (Col.V c) in
+  let parse_default type' s =
+    if s = "" then None else
+    match Dialect.const_of_literal type' s with
+    | Error _ -> Some (`Expr s) | Ok v -> Some (`Value v)
+  in
+  match not_null with
+  | true ->
+      let default = parse_default type' default in
+      some (Col.v ?default cname type' never)
+  | false ->
+      let type' = Type.(Option type') in
+      let default = parse_default type' default in
+      some (Col.v ?default cname type' never)
+
+let col_spec tname cname type' not_null default issues =
+  match String.uppercase_ascii type' with
+  | "BOOL" | "BOOLEAN" ->
+      col_type tname cname not_null default Type.Bool, issues
+  | "INT" | "INTEGER" | "TINYINT" | "SMALLINT" | "MEDIUMINT" |"INT2" | "INT8" ->
+      col_type tname cname not_null default Type.Int, issues
+  |  "BIGINT" |  "UNSIGNED BIG INT" ->
+      col_type tname cname not_null default Type.Int64, issues
+  | "REAL" | "DOUBLE" | "DOUBLE PRECISION" | "FLOAT" | "NUMERIC" ->
+      col_type tname cname not_null default Type.Float, issues
+  | "TEXT" | "CLOB" ->
+      col_type tname cname not_null default Type.Text, issues
+  | "BLOB" | "" ->
+      col_type tname cname not_null default Type.Blob, issues
+  | "DATETIME" | "DATE" ->
+      col_type tname cname not_null default Type.Float, issues
+  | s ->
+      let err_drop s =
+        err_col tname cname "dropping : cannot parse type '%s'"  type'
+      in
+      match String.index s '(' with
+      | exception Not_found -> None, (err_drop s :: issues)
+      | i ->
+          match string_subrange ~last:(i - 1) s with
+          | "CHARACTER" | "VARCHAR" | "VARYING CHARACTER"
+          | "NCHAR" | "NATIVE CHARACTER" |"NVARCHAR" ->
+              col_type tname cname not_null default Type.Text, issues
+          | "DECIMAL" ->
+              col_type tname cname not_null default Type.Float, issues
+          | _ -> None, (err_drop s :: issues)
+
+let table_cols db name issues =
+  let rec cols pk cs issues = function
+  | [] ->
+      let pk = match List.map snd (List.sort compare pk) with
+      | [] -> None | cols -> Some cols
+      in
+      Ok (cs, pk, issues)
+  | (_order, cname, type', not_null, default, pk_index) :: specs ->
+      let c, issues = col_spec name cname type' not_null default issues in
+      match c with
+      | None -> cols pk cs issues specs
+      | Some c ->
+          let pk = if Int.equal pk_index 0 then pk else (pk_index, c) :: pk in
+          cols pk (c :: cs) issues specs
+  in
+  let stmt =
+    let sql = "SELECT * FROM pragma_table_info (?)" in
+    let spec = Rel.Row.Quick.(t6 (int "cid")
+                                (text "name") (text "type") (bool "notnull")
+                                (text "dflt_value") (int "pk")) in
+    Rel_sql.Stmt.(func sql (text @-> (ret spec)))
+  in
+  let* specs = fold db (stmt name) List.cons [] in
+  cols [] [] issues specs
+
+let table_foreign_keys db name issues =
+  let fk_action tname id when' issues s = match String.uppercase_ascii s with
+  | "" | "NO ACTION" -> None, issues
+  | "CASCADE" -> Some (`Cascade), issues
+  | "SET DEFAULT" -> Some (`Set_default), issues
+  | "SET NULL" -> Some (`Set_null), issues
+  | "RESTRICT" -> Some (`Restrict), issues
+  | act ->
+      let e =
+        strf "Table %s: foreign key %d: %s: dropping unkown action %S"
+          tname id when' act
+      in
+      None, (e :: issues)
+  in
+  let rec fks acc issues = function
+  | [] -> Ok (List.rev acc, issues)
+  | (id, _seq, table, from, to', on_update, on_delete, _match') :: l ->
+      let rec get_cols child parent = function
+      | (id', _, _, from, to', _, _, _) :: l when Int.equal id id' ->
+          get_cols (dummy_col from :: child) (dummy_col to' :: parent) l
+      | l -> List.rev child, List.rev parent, l
+      in
+      let child, parent, l = get_cols [dummy_col from] [dummy_col to'] l in
+      let on_update, issues = fk_action name id "ON UPDATE" issues on_update in
+      let on_delete, issues = fk_action name id "ON DELETE" issues on_delete in
+      let fk =
+        let parent =
+          Table.Foreign_key.Parent (Table.v table Row.empty, parent)
+        in
+        Table.Foreign_key.v ?on_delete ?on_update ~cols:child ~parent:parent ()
+      in
+      fks (fk :: acc) issues l
+  in
+  let stmt =
+    let sql = "SELECT * FROM pragma_foreign_key_list (?) ORDER BY id, seq;" in
+    let row id seq table from to' on_update on_delete match' =
+      (id, seq, table, from, to', on_update, on_delete, match')
+    in
+    let fk_part =
+      Rel.Row.Quick.(unit row * (int "id") * (int "seq") * (text "table") *
+                     (text "from") * (text "to") * (text "on_update") *
+                     (text "on_delete") * (text "match")) in
+    Rel_sql.Stmt.(func sql (text @-> (ret fk_part)))
+  in
+  let* fk_parts = fold db (stmt name) List.cons [] in
+  fks [] issues fk_parts (* No List.rev, seems ids are in rev source order. *)
+
+let index_cols db name =
+  let col (_, _, name) = dummy_col name in
+  let stmt =
+    let sql = "SELECT * FROM pragma_index_info (?) ORDER BY seqno" in
+    let icol = Rel.Row.Quick.(t3 (int "seqno") (int "cid") (text "name")) in
+    Rel_sql.Stmt.(func sql (text @-> (ret icol)))
+  in
+  let* cols = fold db (stmt name) List.cons [] in
+  Ok (List.rev_map col cols)
+
+let table_indices db name =
+  let rec indices is us = function
+  | [] -> Ok (List.rev is, List.rev us)
+  | (_seq, name, unique, origin, _partial) :: specs ->
+      let* cols = index_cols db name in
+      match origin with
+      | "c" -> indices (Rel.Index.v ~unique ~name cols :: is) us specs
+      | "u" -> indices is (cols :: us) specs
+      | _ -> indices is us specs
+  in
+  let stmt =
+    let sql = "SELECT * FROM pragma_index_list (?) ORDER BY seq" in
+    let spec =
+      Rel.Row.Quick.(t5 (int "seq") (text "name") (bool "unique")
+                       (text "origin") (bool "partial"))
+    in
+    Rel_sql.Stmt.(func sql (text @-> (ret spec)))
+  in
+  let* specs = fold db (stmt name) List.cons [] in
+  indices [] [] specs (* No List.rev, seems ids are in rev source order. *)
+
+let table db name issues =
+  let* cols, primary_key, issues = table_cols db name issues in
+  let row = Rel.Row.Private.row_of_cols cols in
+  let* indices, unique_keys = table_indices db name in
+  let* foreign_keys, issues = table_foreign_keys db name issues in
+  Ok (Rel.Table.v name row ?primary_key ~unique_keys ~foreign_keys ~indices,
+      issues)
+
+let rec tables db ts issues = function
+| [] -> Ok (List.rev ts, List.rev issues)
+| (name, _sql) :: names ->
+    let* t, issues = table db name issues in
+    tables db ((Table.V t) :: ts) issues names
+
+let table_names db =
+  let stmt =
+    let sql = "SELECT t.name, t.sql FROM sqlite_master AS t \
+               WHERE t.type = 'table' AND t.name NOT LIKE 'sqlite_%'" in
+    let cols = Rel.Row.Quick.(t2 (text "name") (text "sql")) in
+    Rel_sql.Stmt.(func sql (ret cols))
+  in
+  let* names = fold db stmt List.cons [] in
+  Ok (List.rev names)
+
+let schema_of_db ?schema:name db =
+  let* names = table_names db in
+  let* tables, issues = tables db [] [] names in
+  Ok (Rel.Schema.v ?name ~tables (), issues)
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The rel programmers

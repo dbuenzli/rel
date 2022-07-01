@@ -30,7 +30,35 @@ module Syntax = struct
         done;
         Bytes.unsafe_to_string b
 
-  let string s = sql_quote '\'' s
+  let sql_unquote kind qchar s =
+    try
+      (* N.B. this will accept strings with single internal qchar *)
+      let len = String.length s in
+      if len < 2 || s.[0] <> qchar || s.[len - 1] <> qchar
+      then failwith (strf "%S: not a %s (missing %c)" s kind qchar) else
+      let rec find_len last len max i =
+        if i > max then len else
+        if last = qchar && s.[i] = qchar
+        then find_len '\x00' len max (i + 1)
+        else find_len s.[i] (len + 1) max (i + 1)
+      in
+      let slen = find_len '\x00' 0 (len - 2) 1 in
+      if slen = len - 2 then Ok (String.sub s 1 (len - 2)) else
+      let b = Bytes.create slen in
+      let rec loop max b i s k last = match i > max with
+      | true -> Ok (Bytes.unsafe_to_string b)
+      | false ->
+          if last = qchar && s.[k] = qchar
+          then loop max b i s (k + 1) '\x00'
+          else (Bytes.set b i s.[k]; loop max b (i + 1) s (k + 1) s.[k])
+      in
+      loop (slen - 1) b 0 s 1 '\x00'
+    with
+    | Failure e -> Error e
+
+  let string_to_literal s = sql_quote '\'' s
+  let string_of_literal s = sql_unquote "string literal" '\'' s
+
   let id s = sql_quote '\"' s
   let id_in_schema ?schema i = match schema with
   | None -> id i | Some s -> strf "%s.%s" (id s) (id i)
@@ -279,7 +307,7 @@ module Schema = struct
     let has_table_name i = String.equal (Index.table_name i) n in
     List.partition has_table_name is
 
-  let create_stmts (module Sql : DIALECT) ~drop_if_exists s =
+  let create_stmts (module Sql : DIALECT) ?(drop_if_exists = false) s =
     let schema = schema s and src = Stmt.src in
     let drops = match drop_if_exists with
     | false -> []
@@ -292,10 +320,9 @@ module Schema = struct
     in
     let creates =
       (* A bit more complex than it could be but creates indices of a
-           table after its definition *)
-      let if_not_exists = () in
-      let create_index i = src (Sql.create_index ?schema ~if_not_exists i) in
-      let create_table t = src (Sql.create_table ?schema ~if_not_exists t) in
+         table after its definition *)
+      let create_index i = src (Sql.create_index ?schema i) in
+      let create_table t = src (Sql.create_table ?schema t) in
       let add_table (cs, is) t =
         let table_name = Table.name t in
         let indexes, is = extract_table_indices ~table_name is in

@@ -68,10 +68,11 @@ module Type = struct
 end
 
 module Col = struct
+  type name = string
   type 'a param = ..
   type 'a default = [ `Expr of string | `Value of 'a ]
   type ('r, 'a) t =
-    { name : string;
+    { name : name;
       type' : 'a Type.t;
       default : 'a default option;
       params : 'a param list;
@@ -149,6 +150,15 @@ module Row = struct
       let d = Col.with_proj (fun (_, _, _, d, _) -> d) d in
       let e = Col.with_proj (fun (_, _, _, _, e) -> e) e in
       unit (fun a b c d e -> a, b, c, d, e) * a * b * c * d * e
+
+    let t6 a b c d e f =
+      let a = Col.with_proj (fun (a, _, _, _, _, _) -> a) a in
+      let b = Col.with_proj (fun (_, b, _, _, _, _) -> b) b in
+      let c = Col.with_proj (fun (_, _, c, _, _, _) -> c) c in
+      let d = Col.with_proj (fun (_, _, _, d, _, _) -> d) d in
+      let e = Col.with_proj (fun (_, _, _, _, e, _) -> e) e in
+      let f = Col.with_proj (fun (_, _, _, _, _, f) -> f) f in
+      unit (fun a b c d e f -> a, b, c, d, e, f) * a * b * c * d * e * f
   end
 
   let rec fold f acc r =
@@ -194,6 +204,17 @@ module Row = struct
     else pf ppf "@[<v>%a@]" pp_vs rs
 
   module Private = struct
+    let row_of_cols cs =
+      (* The resulting row is absurd we just need to be able to store the cs
+         columns in the row, so that Row.cols gives them back. *)
+      let rec loop = function
+      | [] -> Unit (fun _ -> assert false)
+      | (Col.V c) :: cs ->
+          let col = Prod ((Unit (fun _ _ -> assert false)), c) in
+          Cat (col, (fun _ -> assert false), (loop cs))
+      in
+      loop cs
+
     type ('r, 'a) prod' = ('r, 'a) prod =
     | Unit : 'a -> ('r, 'a) prod'
     | Prod : ('r, 'a -> 'b) prod' * ('r, 'a) Col.t -> ('r, 'b) prod'
@@ -204,7 +225,8 @@ module Row = struct
 end
 
 module Index = struct
-  type 'r t = { unique : bool; name : string option; cols : 'r Col.v list }
+  type name = string
+  type 'r t = { unique : bool; name : name option; cols : 'r Col.v list }
   let v ?(unique = false) ?name cols = { unique; name; cols }
   let unique i = i.unique
   let name i = i.name
@@ -212,6 +234,7 @@ module Index = struct
 end
 
 module Table = struct
+  type name = string
   type 'r param = ..
   type 'r primary_key = 'r Col.v list
   type 'r unique_key = 'r Col.v list
@@ -225,11 +248,11 @@ module Table = struct
       on_update : action option; }
 
   and 'r t =
-    { name : string;
-      row : 'r Row.t Lazy.t;
+    { name : name;
+      row : 'r Row.t;
       primary_key : 'r primary_key option;
       unique_keys : 'r unique_key list;
-      foreign_keys : 'r foreign_key list;
+      mutable foreign_keys : 'r foreign_key list;
       params : 'r param list;
       indices : 'r Index.t list; }
 
@@ -239,24 +262,24 @@ module Table = struct
       ?(indices = []) ?(params = []) ?(foreign_keys = []) ?(unique_keys = [])
       ?primary_key name row
     =
-    { name; row = Lazy.from_val row; primary_key; unique_keys; foreign_keys;
-      params; indices }
+    { name; row; primary_key; unique_keys; foreign_keys; params; indices }
 
   let name t = t.name
-  let row t = Lazy.force t.row
+  let row t = t.row
   let primary_key t = t.primary_key
   let unique_keys t = t.unique_keys
   let foreign_keys t = t.foreign_keys
+  let set_foreign_keys t fks = t.foreign_keys <- fks
   let params t = t.params
   let indices t = t.indices
 
   let cols ?(ignore = []) t = match ignore with
-  | [] -> Row.cols (Lazy.force t.row)
+  | [] -> Row.cols t.row
   | icols ->
       let keep (Col.V c) =
         not (List.exists (fun (Col.V i) -> Col.equal_name i c) icols)
       in
-      List.filter keep (Row.cols (Lazy.force t.row))
+      List.filter keep (Row.cols t.row)
 
   module Foreign_key = struct
     type nonrec action = action
@@ -275,6 +298,17 @@ module Table = struct
   type 'r param +=
   | Primary_key : 'r Col.v list -> 'r param
   | Unique : 'r Col.v list -> 'r param
+end
+
+module Schema = struct
+  type name = string
+  type t =
+    { name : name option;
+      tables : Table.v list; }
+
+  let v ?name ~tables () = { name; tables }
+  let name s = s.name
+  let tables s = s.tables
 end
 
 (*---------------------------------------------------------------------------

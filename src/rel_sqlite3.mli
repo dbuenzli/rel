@@ -501,55 +501,16 @@ module Dialect : Rel_sql.DIALECT
 val dialect : Rel_sql.dialect
 (** [dialect] is the sqlite3 dialect. *)
 
-val sql_schema_of_db : t -> (Rel_sql.Schema.t, error) result
-(** [sql_schema_of_db db] derives a [Rel] SQL schema value for [db]. *)
+val schema_of_db :
+  ?schema:Schema.name -> t -> (Rel.Schema.t * string list, error) result
+(** [schema_of_db db] derives a best-effort schema value for the
+    live database [db]. Note that the tables and rows and internal
+    structure is not functional. It is however sufficient to generate
+    SQL data definitions and for schema diffing.
 
-(*
-(** {1:system_tables System tables} *)
-
-(** SQLite system tables. *)
-module Table : sig
-
-  (** The {{:https://www.sqlite.org/schematab.html}schema table}. *)
-  module Schema : sig
-    type t
-    (** The type for a SQLite schema descriptions row. *)
-
-    val v : string -> string -> string -> int -> string -> t
-    (** [v type' name tbl_name rootpage sql ()] is a schema
-        description with given parameters. *)
-
-    val type' : t -> string
-    (** [type' s] is the {{:https://www.sqlite.org/schematab.html#interpretation_of_the_schema_table}[type] column}. *)
-
-    val name : t -> string
-    (** [name s] is the {{:https://www.sqlite.org/schematab.html#interpretation_of_the_schema_table}[name] column}. *)
-
-    val tbl_name : t -> string
-    (** [tbl_name s] is the {{:https://www.sqlite.org/schematab.html#interpretation_of_the_schema_table}[tbl_name] column}. *)
-
-    val rootpage : t -> int
-    (** [rootpage s] is the {{:https://www.sqlite.org/schematab.html#interpretation_of_the_schema_table}[rootpage] column}. *)
-
-    val sql : t -> string
-    (** [sql s] is the
-        {{:https://www.sqlite.org/schematab.html#interpretation_of_the_schema_table}[sql] column}. *)
-
-    (** Columns. *)
-    module C : sig
-      val type' : (t, string) Col.t
-      val name : (t, string) Col.t
-      val tbl_name : (t, string) Col.t
-      val rootpage : (t, int) Col.t
-      val sql : (t, string) Col.t
-    end
-
-    val table : t Table.t
-    (** [table] is the {{:https://www.sqlite.org/schematab.html}
-        schema table}. *)
-  end
-end
-*)
+    The returned list of strings is a list of issues to report to the
+    end-user that indicate that the resulting schema may not
+    faithfully represent [db]. If empty all is well. *)
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The rel programmers

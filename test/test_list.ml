@@ -3,9 +3,10 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+(*
 open Rel
 open Rel_query.Syntax
-open Test_schema.Products_flat_with_objects
+open Test_schema.Products_adt
 
 let env =
   Rel_list.Table_env.empty
@@ -60,6 +61,7 @@ let tests () =
   ()
 
 let () = tests ()
+*)
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The rel programmers

@@ -40,6 +40,7 @@ let select_rows db bag row =
   log "@[<v>%a@,---@]" (Row.list_pp ~header:true row) ops;
   Ok ()
 
+(*
 module Test_sql_src = struct
   open Test_schema.Products_flat_with_objects
   open Rel_query.Syntax
@@ -62,6 +63,7 @@ module Test_sql_src = struct
       Rel_sql.Stmt.pp_src (Rel_query.Sql.of_bag S.sales_row order2_sales);
     Ok ()
 end
+*)
 
 module Test_products = struct
   open Test_schema.Products_with_adts
@@ -246,7 +248,7 @@ end
 
 let tests () =
   log_if_error ~use:1 @@
-  let* () = Test_sql_src.run () in
+(*  let* () = Test_sql_src.run () in *)
   let* () = Test_products.run () in
   let* () = Test_duos.run () in
   let* () = Test_org.run () in

@@ -121,18 +121,16 @@ module Col : sig
 
   (** {1:cols Columns} *)
 
+  type name = string
+  (** The type for column names. *)
+
   type 'a param = ..
   (** The type for extensible column parameters. *)
 
   type 'a default = [ `Expr of string | `Value of 'a ]
   (** The type for column defaults. {b FIXME} Expr case. *)
 
-  type ('r, 'a) t =
-    { name : string;
-      type' : 'a Type.t;
-      default : 'a default option;
-      params : 'a param list;
-      proj : ('r -> 'a) }
+  type ('r, 'a) t
   (** The type for a column of type ['a] which is part of a row stored
       in an OCaml value of type ['r]. Unless you get into recursive
       trouble use constructor {!val-v}. *)
@@ -149,7 +147,7 @@ module Col : sig
   (** [v name t proj ~params] is a column named [name] with type [t], row
       projection function [proj] and parameters [params] (defaults to [[]]). *)
 
-  val name : ('r, 'a) t -> string
+  val name : ('r, 'a) t -> name
   (** [name c] is the name of [c]. *)
 
   val type' : ('r, 'a) t -> 'a Type.t
@@ -290,6 +288,12 @@ module Row : sig
       (_, 'e) Col.t -> ('a * 'b * 'c * 'd * 'e) t
     (** [t5] constructs and deconstructs quintuplets with the given column
         types. This redefine the projections of the columns. *)
+
+    val t6 :
+      (_, 'a) Col.t -> (_, 'b) Col.t -> (_, 'c) Col.t -> (_, 'd) Col.t ->
+      (_, 'e) Col.t -> (_, 'f) Col.t -> ('a * 'b * 'c * 'd * 'e * 'f) t
+    (** [t5] constructs and deconstructs sextuplets with the given column
+        types. This redefine the projections of the columns. *)
   end
 
   (** {1:traversal Traversal} *)
@@ -317,6 +321,7 @@ module Row : sig
   (** [list_pp] formats list of values of [r], one per line.
       If [header] is [true], starts by formatting the headers of [r]. *)
 
+  (** Private functions. *)
   module Private : sig
     type ('r, 'a) prod' =
     | Unit : 'a -> ('r, 'a) prod'
@@ -330,6 +335,10 @@ module Row : sig
 
     val prod_to_prod : ('r, 'a) prod' -> ('r, 'a) prod
     (** [prod_to_prod p] is the representee  of [p]. *)
+
+    val row_of_cols : ('a -> 'b) Col.v list -> ('a -> 'b) t
+    (** [row_of_cols cs] is a row that contains columns [cs]. The result
+        is unusable, except for {{!Row.section-cols}column functions}. *)
   end
 end
 
@@ -341,15 +350,17 @@ module Index : sig
 
   (** {1:indices Indices} *)
 
+  type name = string
+  (** The type for index names. *)
+
   type 'r t
   (** The type for indexes on a table with rows represented by ['r]. *)
 
-  val v : ?unique:bool -> ?name:string -> 'r Col.v list -> 'r t
+  val v : ?unique:bool -> ?name:name -> 'r Col.v list -> 'r t
   (** [index cols ~name ~unique] is an index named [name] on columns
-      [col].  If [name] is [None] a name is derived at index
-      creation time from the table and column names. If [unique] is
-      [true] (defaults to [false]) a [UNIQUE] constraint is
-      added. *)
+      [col]. If [name] is [None] a name is derived at index creation
+      time from the table and column names. If [unique] is [true]
+      (defaults to [false]) a [UNIQUE] constraint is added. *)
 
   val unique : 'r t -> bool
   (** [unique i] is [true] if the values in index [i] must be unique. *)
@@ -368,6 +379,9 @@ module Table : sig
 
   (** {1:tables Tables} *)
 
+  type name = string
+  (** The type for table names. *)
+
   type 'r param = ..
   (** The type for extensible table parameters. *)
 
@@ -379,16 +393,9 @@ module Table : sig
 
   type 'r foreign_key
   (** The type for foreign keys for a table with rows of type ['r].
-      See {!Foreign_keys}. *)
+      See {!Foreign_key}. *)
 
-  type 'r t =
-    { name : string;
-      row : 'r Row.t Lazy.t;
-      primary_key : 'r primary_key option;
-      unique_keys : 'r unique_key list;
-      foreign_keys : 'r foreign_key list;
-      params : 'r param list;
-      indices : 'r Index.t list; }
+  type 'r t
   (** The type for tables with rows represented by type ['r]. Unless
       you get into recursive trouble, use the constructor {!val-v}. *)
 
@@ -400,11 +407,10 @@ module Table : sig
     ?params:'r param list ->
     ?foreign_keys:'r foreign_key list ->
     ?unique_keys:'r unique_key list ->
-    ?primary_key:'r primary_key ->
-    string -> 'r Row.t -> 'r t
+    ?primary_key:'r primary_key -> name -> 'r Row.t -> 'r t
   (** [v name ~params r] is a table with corresponding attributes. *)
 
-  val name : 'r t -> string
+  val name : 'r t -> name
   (** [name t] is the name of [t]. *)
 
   val row : 'r t -> 'r Row.t
@@ -431,6 +437,11 @@ module Table : sig
 
   (** {1:foreign_keys Foreign keys} *)
 
+  val set_foreign_keys : 'r t -> 'r foreign_key list -> unit
+  (** [set_foreign_keys t fks] sets the foreign keys of [t] to fks.
+      Normally you specify in {!Table.val-v}. Only use to tie
+      recursive knots. *)
+
   (** Foreign keys. *)
   module Foreign_key : sig
     type action = [`Set_null | `Set_default | `Cascade | `Restrict]
@@ -438,7 +449,11 @@ module Table : sig
 
     type parent = Parent : 's t * 's Col.v list -> parent
     (** This is the parent table and the columns that are referenced
-        within. *)
+        within.
+
+        {b Note.} For now the module does not check that the list of
+        columns actually belong the table. Do not rely on this
+        [Invalid_argument] may be raised in the future on {!val-v}. *)
 
     type 'r t = 'r foreign_key
     (** The type for foreign keys. *)
@@ -453,7 +468,7 @@ module Table : sig
     (** [cols fk] are the columns of [fk]. *)
 
     val parent : 'r t -> parent
-    (** [ref fk] is the parent table of [fk]. *)
+    (** [parent fk] is the parent table of [fk]. *)
 
     val on_delete : 'r t -> action option
     (** [on_delete fk] is the action taken whenever [fk] is deleted. *)
@@ -462,6 +477,46 @@ module Table : sig
     (** [on_update fk] is the action taken whenever [fk] is updated. *)
   end
 end
+
+(** Database schemas. *)
+module Schema : sig
+
+  type name = string
+  (** The type for schema names. *)
+
+  type t
+  (** The type for schema values. *)
+
+  val v : ?name:name -> tables:Table.v list -> unit -> t
+  (** [v ~schema ~tables] is a schema with given paramaters. See
+      accessors for semantics. *)
+
+  val name : t -> name option
+  (** [name s] is the name of the schema (if any). *)
+
+  val tables : t -> Table.v list
+  (** [tables s] are the tables in [s]. *)
+end
+
+(** {1:unsupported Unsupported DBMS features}
+
+    A few DBMS features that would be nice to have but are not
+    supported at the moment.
+
+    From SQLite.
+
+    {ul
+    {- Tables. [CHECK] constraints on tables. First needs a story for SQL
+       expressions. Second in SQLite3 AFAIK it's not possible to get
+       it from the meta tables. This means we would have to parse
+       for {!Rel_sqlite3.schema_of_db} the tables SQL definitions which
+       we avoided so far. Table options.}
+    {- Indices. partial indexes.}
+    {- Views. Virtual tables. Triggers}
+    {- Column constraints. Some are supported at the table level (primary
+       key, unique, foreign keys) or the type level (not null). But we are
+       missing COLLATE, GENERATED, AUTOINCREMENT.}
+    {- Primary keys ASC/DESC.}} *)
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The rel programmers

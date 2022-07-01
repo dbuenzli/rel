@@ -23,8 +23,6 @@ These manuals are available:
    started to query an existing sqlite database.}
 {- The {{!page-schema_howto}schema howto} discusses how to manage
    your database schema with Rel.}
-{- The {{!page-conventions}[Rel] database modelling conventions} provides
-   conventions to model databases in OCaml with [Rel].}
 {- The {{!page-sql_stmt_howto}SQL statement typing howto} explains
    the low-level mecanism to type SQL statements.}}
 
