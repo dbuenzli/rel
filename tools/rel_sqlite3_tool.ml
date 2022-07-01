@@ -3,33 +3,16 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+let exec = "rel_sqlite"
 let ( let* ) = Result.bind
-let strf = Printf.sprintf
+let strf = Format.sprintf
+let pr = Format.printf
 let log_err fmt = Printf.kfprintf (fun oc -> flush oc) stderr fmt
 let log_warn fmt = log_err ("Warning: " ^^ fmt)
-let log fmt = Printf.kfprintf (fun oc -> flush oc) stdout fmt
 let log_if_error ~use = function
-| Ok v -> v | Error e -> log_err "rel-sqlite3: %s\n" e; use
-
-module Sset = Set.Make (String)
-module Smap = struct
-  include Map.Make (String)
-  let add_to_list k v m = match find_opt k m with
-  | None -> add k [v] m
-  | Some l -> add k (v :: l) m
-end
+| Ok v -> v | Error e -> log_err "%s: %s\n" exec e; use
 
 (* One day maybe... *)
-
-let string_subrange ?(first = 0) ?last s =
-  let max = String.length s - 1 in
-  let last = match last with
-  | None -> max
-  | Some l when l > max -> max
-  | Some l -> l
-  in
-  let first = if first < 0 then 0 else first in
-  if first > last then "" else String.sub s first (last - first + 1)
 
 let stdin_to_string () =
   let rec loop acc = match input_line stdin with
@@ -51,238 +34,6 @@ let string_of_file file =
     Ok (Bytes.unsafe_to_string buf)
   with Sys_error e -> Error e
 
-let string_to_file file s =
-  try
-    let oc = open_out_bin file in
-    let finally () = close_out_noerr oc in
-    Ok (Fun.protect ~finally @@ fun () -> output_string oc s)
-  with Sys_error e -> Error e
-
-(* SQL meta query *)
-
-module Sql_meta = struct
-  type col =
-    { table_name : string;
-      idx : int;
-      name : string;
-      type' : string;
-      not_null : bool;
-      default : string option;
-      primary_key_idx : int; (* FIXME maybe on 0 we should imply not_null
-                                even though that's not implied by sqlite *)  }
-
-  let col table_name idx name type' not_null default primary_key_idx =
-    { table_name; idx; name; type'; not_null; default; primary_key_idx }
-
-  let cols =
-    Rel.Row.Quick.(unit col * text "table_name" * int "idx" * text "name" *
-                   text "type" * bool "not_null" *
-                   option Rel.Type.Text "default" * int "primary_key_idx")
-
-  let cols_sql =
-    "SELECT t.name as table_name, i.* \
-     FROM sqlite_master AS t, pragma_table_info(t.name) AS i \
-     WHERE t.type = 'table' ORDER BY t.name, i.cid"
-
-  let get_tables db =
-    let st = Rel_sql.Stmt.(func cols_sql (ret cols)) in
-    let add_col c m = Smap.add_to_list c.table_name c m in
-    let* ts = Rel_sqlite3.fold db st add_col Smap.empty in
-    Ok (Smap.map List.rev ts)
-end
-
-(* OCaml representation of the schema *)
-
-type ocaml_col =
-  { col_id : string; (* OCaml identifier. *)
-    col_sql_name : string; (* SQL column name. *)
-    rel_type_value : string; (* OCaml Rel.Type.t case. *)
-    ocaml_type : string; (* OCaml type, this the alpha of Rel.Type.t *) }
-
-type ocaml_table  =
-  { table_id : string; (* ocaml identifier, to be capitalized for modules. *)
-    table_sql_name : string; (* SQL table name. *)
-    cols : ocaml_col list; (* columns *) }
-
-let ocaml_reserved = (* From the 4.12 manual *)
-  Sset.(empty
-        |> add "and" |> add "as" |> add "assert" |> add "asr" |> add "begin"
-        |> add "class" |> add "constraint" |> add "do" |> add "done"
-        |> add "downto" |> add "else" |> add "end" |> add "exception"
-        |> add "external" |> add "false" |> add "for" |> add "fun"
-        |> add "function" |> add "functor" |> add "if" |> add "in"
-        |> add "include" |> add "inherit" |> add "initializer" |> add "land"
-        |> add "lazy" |> add "let" |> add "lor" |> add "lsl" |> add "lsr"
-        |> add "lxor" |> add "match" |> add "method" |> add "mod"
-        |> add "module" |> add "mutable" |> add "new" |> add "nonrec"
-        |> add "object" |> add "of" |> add "open" |> add "or"
-        |> add "private" |> add "rec" |> add "sig" |> add "struct"
-        |> add "then" |> add "to" |> add "true" |> add "try" |> add "type"
-        |> add "val" |> add "virtual" |> add "when" |> add "while"
-        |> add "with")
-
-let row_module_ids =
-  Sset.(empty
-        |> add "unit" |> add "prod" |> add "cat" |> add "empty" |> add "fold"
-        |> add "cols" |> add "col_count" |> add "pp_header" |> add "list_pp")
-
-let idify = function ' ' -> '_' | c -> c (* There's likely more to it. *)
-let prime id = id ^ "'"
-
-let ocaml_table_id_of_sql id =
-  let id = String.map idify (String.uncapitalize_ascii id) in
-  if Sset.mem id ocaml_reserved then prime id else id
-
-let ocaml_col_id_of_sql id =
-  let id = String.map idify (String.uncapitalize_ascii id) in
-  if Sset.mem id ocaml_reserved || Sset.mem id row_module_ids
-  then prime id else id
-
-let ocaml_type_of_sql_col c =
-  let base = match String.uppercase_ascii c.Sql_meta.type' with
-  | "BOOL" ->
-      Some ("bool", "Bool")
-  | "INT" | "INTEGER" | "TINYINT" | "SMALLINT" | "MEDIUMINT" |"INT2" | "INT8" ->
-      Some ("int", "Int")
-  |  "BIGINT" |  "UNSIGNED BIG INT" ->
-      Some ("int64", "Int64")
-  | "BLOB" | "" ->
-      Some ("string", "Blob")
-  | "REAL" | "DOUBLE" | "DOUBLE PRECISION" | "FLOAT" ->
-      Some ("float", "Float")
-  | "TEXT" | "CLOB" ->
-      Some ("string", "Text")
-  | "DATETIME" | "DATE" ->
-      Some ("string", "Text")
-  | s ->
-      match String.index s '(' with
-      | exception Not_found -> None
-      | i ->
-          match string_subrange ~last:(i - 1) s with
-          | "CHARACTER" | "VARCHAR" | "VARYING CHARACTER"
-          | "NCHAR" | "NATIVE CHARACTER" |"NVARCHAR" ->
-              Some ("string", "Text")
-          | "NUMERIC" ->
-              Some ("float", "Float")
-          | _ -> None
-  in
-  match base with
-  | None -> None
-  | Some (t, at) ->
-      match c.Sql_meta.not_null with
-      | true -> Some (t, "Type." ^ at)
-      | false -> Some (t ^ " option", String.concat "" ["Type.(Option ";at;")"])
-
-let ocaml_col_of_sql_meta c = match ocaml_type_of_sql_col c with
-| None ->
-    log_warn "Don't know what to do with %s.%s's type %s: ignoring column"
-      c.Sql_meta.table_name c.name c.type';
-    None
-| Some (ocaml_type, rel_type_value) ->
-    let col_id = ocaml_col_id_of_sql c.Sql_meta.name in
-    let col_sql_name = c.Sql_meta.name in
-    Some { col_id; col_sql_name; rel_type_value; ocaml_type }
-
-let ocaml_table_of_sql_meta n cols =
-  let table_id = ocaml_table_id_of_sql n in
-  let table_sql_name = n in
-  let cols = List.filter_map ocaml_col_of_sql_meta cols in
-  { table_id; table_sql_name; cols }
-
-(* OCaml Schema generation *)
-
-module Gen = struct
-  let pf = Format.fprintf
-  let pp_list = Format.pp_print_list
-  let pp_str = Format.pp_print_string
-  let pp_sp = Format.pp_print_space
-  let pp_cut = Format.pp_print_cut
-  let pp_semi ppf () = pf ppf ";@ "
-  let pp_arr ppf () = pf ppf " ->@ "
-  let pp_star ppf () = pf ppf " *@ "
-
-  let pp_proj_intf ppf c = pf ppf "@[val %s : t -> %s@]" c.col_id c.ocaml_type
-  let pp_proj_impl ppf c = pf ppf "@[let %s t = t.%s@]" c.col_id c.col_id
-
-  let pp_col_name ppf c = pf ppf "%s'" c.col_id
-  let pp_col_intf ppf c =
-    pf ppf "@[val %a : (t, %s) Rel.Col.t@]" pp_col_name c c.ocaml_type
-
-  let pp_col_impl ppf c =
-    pf ppf "@[let %a = Col.v %S %s %s@]"
-      pp_col_name c c.col_sql_name c.rel_type_value c.col_id
-
-  let pp_record_field_name ppf c = pp_str ppf c.col_id
-  let pp_record_field ppf c =
-    pf ppf "%a : %s;" pp_record_field_name c c.ocaml_type
-
-  let pp_record_intf ppf t = pf ppf "@[type t@]"
-  let pp_record_impl ppf t =
-    pf ppf "@[<v2>type t =@,{ @[<v>%a@] }@,@]" (pp_list pp_record_field) t.cols
-
-  let pp_row_constructor_impl ppf t =
-    pf ppf "@[let row @[%a@] =@ @[{ @[%a@] }@]@]"
-      (pp_list ~pp_sep:pp_sp pp_record_field_name) t.cols
-      (pp_list ~pp_sep:pp_semi pp_record_field_name) t.cols
-
-  let pp_row_constructor_intf ppf t =
-    let pp_col_type ppf c = pp_str ppf c.ocaml_type in
-    pf ppf "@[val row : @[%a%at@]@]"
-      (pp_list ~pp_sep:pp_arr pp_col_type) t.cols pp_arr ()
-
-  let pp_table_intf ppf t = pf ppf "@[val table : t Rel.Table.t@]"
-  let pp_table_impl ppf t =
-    pf ppf "@[<v2>let table =@ @[<2>Table.v %S@ \
-            @[Row.@[<1>(unit row * %a)@]@]@]@]"
-      t.table_sql_name (pp_list ~pp_sep:pp_star pp_col_name) t.cols
-
-  let pp_module_name ppf t = pp_str ppf (String.capitalize_ascii t.table_id)
-
-  let pp_intf_of_table ~ml_only ppf t =
-    pf ppf "@[<v2>module %a : sig@," pp_module_name t;
-    pp_record_intf ppf t;
-    pf ppf "@,@,";
-    pp_row_constructor_intf ppf t;
-    pf ppf "@,@,";
-    (pp_list pp_proj_intf) ppf t.cols;
-    pf ppf "@,@,";
-    pf ppf "(** {1:table Table} *)";
-    pf ppf "@,@,";
-    (pp_list pp_col_intf) ppf t.cols;
-    pf ppf "@,@,";
-    pp_table_intf ppf t;
-    if ml_only
-    then pf ppf "@]@,@[<v2>end = struct@,"
-    else pf ppf "@]@,end"
-
-  let pp_impl_of_table ~ml_only ppf t =
-    if ml_only
-    then ()
-    else (pf ppf "@[<v2>module %a = struct@," pp_module_name t);
-    pp_record_impl ppf t;
-    pf ppf "@,";
-    pp_row_constructor_impl ppf t;
-    pf ppf "@,@,";
-    (pp_list pp_proj_impl) ppf t.cols;
-    pf ppf "@,@,";
-    pf ppf "open Rel@,@,";
-    (pp_list pp_col_impl) ppf t.cols;
-    pf ppf "@,@,";
-    pp_table_impl ppf t;
-    pf ppf "@]@,end"
-
-  let pp_schema ~ml_only ppf tables =
-    let pp_sep ppf () = pp_cut ppf (); pp_cut ppf () in
-    let pp_table ppf t =
-      pp_intf_of_table ~ml_only ppf t;
-      pp_impl_of_table ~ml_only ppf t;
-    in
-    pf ppf "@[<v>";
-    pf ppf "(* Generated by rel-sqlite3 %%VERSION%% *)@,@,";
-    (pp_list ~pp_sep pp_table) ppf tables;
-    pf ppf "@]"
-end
-
 let mem_db sql_file = (* Create an in-memory db for the sql file. *)
   let* sql = string_of_file sql_file in
   Rel_sqlite3.error_string @@ Result.join @@
@@ -291,41 +42,61 @@ let mem_db sql_file = (* Create an in-memory db for the sql file. *)
   let* () = Rel_sqlite3.exec_sql db sql in
   Ok db
 
-let sqlite3 file is_sql =
-  let open' file = Rel_sqlite3.(error_string @@ open' file) in
-  let close db = Rel_sqlite3.(error_string @@ close db) in
-  log_if_error ~use:2 @@
-  Result.map_error (strf "%s: %s" file) @@
+let sqlite3 file is_sql format =
+  log_if_error ~use:2 @@ Result.map_error (strf "%s: %s" file) @@
+  let open' file = Rel_sqlite3.(open' file |> error_string) in
+  let close db = Rel_sqlite3.(close db |> error_string) in
   let is_sql = is_sql || Filename.check_suffix file ".sql" in
   let* db = if is_sql then mem_db file else open' file in
   let finally () = log_if_error ~use:() (close db) in
-  Rel_sqlite3.error_string @@
   Fun.protect ~finally @@ fun () ->
-  let* tables = Sql_meta.get_tables db in
-  let add_table n cols acc = ocaml_table_of_sql_meta n cols :: acc in
-  let ocaml_tables = Smap.fold add_table tables [] in
-  Gen.pp_schema ~ml_only:true Format.std_formatter ocaml_tables;
+  let* (s, issues) = Rel_sqlite3.schema_of_db db |> Rel_sqlite3.error_string in
+  begin match format with
+  | `Dot -> pr "@[%a@]@." (Rel.Schema.pp_dot ~rankdir:`BT) s
+  | `Sql ->
+      let sql =
+        Rel_sql.Schema.(create_stmts Rel_sqlite3.dialect (of_schema s))
+      in
+      pr "@[%a@]@." Rel_sql.Stmt.pp_src sql
+  | `Ocaml -> pr "@[%a@]@." (Rel.Schema.pp_ocaml ~ml_only:false) s
+  end;
+  List.iter (log_warn "%s") issues;
   Ok 0
 
 open Cmdliner
 
 let db =
-  let doc = "The database $(docv). \
-             Either an SQLite3 database file or an SQL source file."
-  in
+  let doc = "The database $(docv). Either an SQLite3 database file or an \
+             SQL source file." in
   Arg.(required & pos 0 (some file) None & info [] ~doc ~docv:"FILE[.sql]")
 
 let is_sql =
   let doc = "Consider $(i,FILE) argument to be an SQL source file regardless \
-             of file extension."
+             of file extension." in
+  Arg.(value & flag & info ["sql-file"] ~doc)
+
+let format =
+  let dot =
+    let doc = "Output the schema as $(b,dot) graph. Pipe to \
+               $(b,dot -Tsvg [-Grandkir=\\$RANKDIR]) to generate an SVG file."
+    in
+    `Dot, Arg.info ["dot"] ~doc
   in
-  Arg.(value & flag & info ["sql"] ~doc)
+  let sql =
+    let doc = "Output the schema as SQL data definition statements." in
+    `Sql, Arg.info ["sql"] ~doc
+  in
+  let ocaml =
+    let doc = "Output the schema as Rel OCaml definitions (default)." in
+    `Ocaml, Arg.info ["ocaml"] ~doc
+  in
+  Arg.(value & vflag `Ocaml [dot; sql; ocaml])
 
 let cmd =
-  let doc = "Rel OCaml schema generation for SQLite3" in
+  let doc = "Rel schema tool for SQLite3" in
   let man = [
     `S Manpage.s_description;
-    `P "$(tname) generates an OCaml schema for SQLite3 databases.";
+    `P "$(tname) outputs SQLite3 databases in various formats.";
     `S Manpage.s_bugs;
     `P "This program is distributed with the Rel OCaml library.
         See https://erratique.ch/software/rel for contact information"; ]
@@ -334,8 +105,8 @@ let cmd =
     Cmd.Exit.info ~doc:"on indiscriminate error reported on stderr." 2 ::
     Cmd.Exit.defaults
   in
-  Cmd.v (Cmd.info "rel-sqlite3" ~version:"%%VERSION%%" ~doc ~man ~exits)
-    Term.(const sqlite3 $ db $ is_sql)
+  Cmd.v (Cmd.info exec ~version:"%%VERSION%%" ~doc ~man ~exits)
+    Term.(const sqlite3 $ db $ is_sql $ format)
 
 let main () = Cmd.eval' cmd
 let () = if !Sys.interactive then () else exit (main ())

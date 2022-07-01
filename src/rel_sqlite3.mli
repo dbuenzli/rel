@@ -501,12 +501,14 @@ module Dialect : Rel_sql.DIALECT
 val dialect : Rel_sql.dialect
 (** [dialect] is the sqlite3 dialect. *)
 
+(** {1:schema Schema} *)
+
 val schema_of_db :
   ?schema:Schema.name -> t -> (Rel.Schema.t * string list, error) result
 (** [schema_of_db db] derives a best-effort schema value for the
     live database [db]. Note that the tables and rows and internal
-    structure is not functional. It is however sufficient to generate
-    SQL data definitions and for schema diffing.
+    structure is not functional. It is however sufficient for schema
+    renderings and computing schema changes.
 
     The returned list of strings is a list of issues to report to the
     end-user that indicate that the resulting schema may not

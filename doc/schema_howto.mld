@@ -78,7 +78,7 @@ Before interacting with the database:
   version is reached.
 
 
-{1 [Rel] schema conventions}
+{1:conventions [Rel] schema conventions}
 
 There's more than one way to model your database in OCaml with [Rel].
 The following defines a simple conventions you can follow.

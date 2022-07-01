@@ -509,7 +509,7 @@ module Schema : sig
   val tables : t -> Table.v list
   (** [tables s] are the tables in [s]. *)
 
-  (** {1:diagram Diagram} *)
+  (** {1:render Renderings} *)
 
   type dot_rankdir = [ `TB | `LR | `BT | `RL ]
   (** The type for dot {{:https://graphviz.org/docs/attr-types/rankdir/}
@@ -525,6 +525,13 @@ module Schema : sig
       {{:https://graphviz.org/docs/outputs/}many formats}. For example
       SVG with [dot -Tsvg]. To change the rankdir after the generation
       use [dot -Tsvg -Grankdir=LR]. *)
+
+  val pp_ocaml : ml_only:bool -> Format.formatter -> t -> unit
+  (** [pp_ocaml ~ml_only  s] formats schema [s] as an OCaml source using the
+      {{!page-schema_howto.conventions}Rel schema conventions}.
+
+      {b FIXME.} This is currently broken on schema that have recursives
+      dependencies. *)
 end
 
 (** {1:unsupported Unsupported DBMS features}

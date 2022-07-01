@@ -387,8 +387,7 @@ module Stmt' = struct
         f (unpack_col s idx c)
     | Cat (cs, _, row) ->
         let f =
-          cols s
-            (idx - Row.col_count (Rel.Row.Private.prod_to_prod row)) cs
+          cols s (idx - Row.col_count (Rel.Row.Private.prod_to_prod row)) cs
         in
         let v = cols s idx row in
         f v
@@ -747,8 +746,6 @@ module Dialect = struct
     | Some (Value (t, v)) -> strf " DEFAULT %s" (const_to_literal t v)
     in
     strf "%s %s%s%s" name type' not_null default
-
-  let col_defs t = []
 
   let foreign_key ?schema fk =
     let ref fk =

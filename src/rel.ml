@@ -4,6 +4,7 @@
   ---------------------------------------------------------------------------*)
 
 let pp_string = Format.pp_print_string
+let pp_list = Format.pp_print_list
 let pf = Format.fprintf
 let strf = Format.asprintf
 
@@ -65,6 +66,19 @@ module Type = struct
           match Coded.enc c v with
           | Ok v -> (value_pp (Coded.repr c)) ppf v
           | Error e -> pf ppf "<error: %s>" e)
+  | _ -> invalid_unknown ()
+
+  let rec ocaml_spec : type a. a t -> string * string = function
+  | Bool -> "bool", "Bool"
+  | Int -> "int", "Int"
+  | Int64 -> "int64", "Int64"
+  | Float -> "float", "Float"
+  | Text -> "string", "Text"
+  | Blob -> "string", "Blob"
+  | Option t ->
+      let t, c = ocaml_spec t in
+      t ^ " option", String.concat "" ["(Option "; c; ")"]
+  | Coded c -> ocaml_spec (Coded.repr c)
   | _ -> invalid_unknown ()
 end
 
@@ -311,7 +325,7 @@ module Schema = struct
   let name s = s.name
   let tables s = s.tables
 
-  (* Diagram
+  (* Dot diagrams
 
      Quickly hacked we can likely do better. In particular show more
      data, indexes, unique keys (e.g. with colored dots). *)
@@ -338,7 +352,6 @@ module Schema = struct
     match Table.primary_key t with
     | None -> Sset.empty | Some cs -> List.fold_left add_col Sset.empty cs
 
-  let pp_list = Format.pp_print_list
   let pp_bold pp_v ppf v = pf ppf "<b>%a</b>" pp_v v
   let pp_italic pp_v ppf v = pf ppf "<i>%a</i>" pp_v v
   let pp_font_color c pp_v ppf v =
@@ -416,6 +429,237 @@ module Schema = struct
       (rankdir_to_string rankdir) node_atts edge_atts
       (pp_list pp_table_node) tables
       (pp_list pp_table_edges) tables
+
+   (* OCaml source
+
+      FIXME recursive deps and proper mli/ml separation. *)
+
+  let pp_sp = Format.pp_print_space
+  let pp_cut = Format.pp_print_cut
+  let pp_semi ppf () = pf ppf ";@ "
+  let pp_arr ppf () = pf ppf " ->@ "
+  let pp_star ppf () = pf ppf " *@ "
+
+  let ocaml_reserved = (* From the 4.12 manual *)
+    Sset.(empty
+          |> add "and" |> add "as" |> add "assert" |> add "asr" |> add "begin"
+          |> add "class" |> add "constraint" |> add "do" |> add "done"
+          |> add "downto" |> add "else" |> add "end" |> add "exception"
+          |> add "external" |> add "false" |> add "for" |> add "fun"
+          |> add "function" |> add "functor" |> add "if" |> add "in"
+          |> add "include" |> add "inherit" |> add "initializer" |> add "land"
+          |> add "lazy" |> add "let" |> add "lor" |> add "lsl" |> add "lsr"
+          |> add "lxor" |> add "match" |> add "method" |> add "mod"
+          |> add "module" |> add "mutable" |> add "new" |> add "nonrec"
+          |> add "object" |> add "of" |> add "open" |> add "or"
+          |> add "private" |> add "rec" |> add "sig" |> add "struct"
+          |> add "then" |> add "to" |> add "true" |> add "try" |> add "type"
+          |> add "val" |> add "virtual" |> add "when" |> add "while"
+          |> add "with")
+
+  let rel_row_module_ids =
+    Sset.(empty
+          |> add "unit" |> add "prod" |> add "cat" |> add "empty" |> add "fold"
+          |> add "cols" |> add "col_count" |> add "pp_header" |> add "list_pp")
+
+  let idify = function ' ' -> '_' | c -> c (* There's likely more to it. *)
+  let prime id = id ^ "'"
+
+  let ocaml_table_id id =
+    let id = String.map idify (String.uncapitalize_ascii id) in
+    if Sset.mem id ocaml_reserved then prime id else id
+
+  let ocaml_col_id id =
+    let id = String.map idify (String.uncapitalize_ascii id) in
+    if Sset.mem id ocaml_reserved || Sset.mem id rel_row_module_ids
+    then prime id else id
+
+  let pp_module_name ppf t =
+    pp_string ppf (String.capitalize_ascii (ocaml_table_id (Table.name t)))
+
+  let pp_col_id ppf (Col.V c) = pp_string ppf (ocaml_col_id (Col.name c))
+  let pp_col_constructor ppf (Col.V c) =
+    pf ppf "Type.%s" (snd (Type.ocaml_spec (Col.type' c)))
+
+  let pp_col_type ppf (Col.V c) =
+    pp_string ppf (fst (Type.ocaml_spec (Col.type' c)))
+
+  let pp_proj_intf ppf c =
+    pf ppf "@[val %a : t -> %a@]" pp_col_id c pp_col_type c
+
+  let pp_proj_impl ppf c =
+    pf ppf "@[let %a t = t.%a@]" pp_col_id c pp_col_id c
+
+  let pp_col_col_name ppf c = pf ppf "%a'" pp_col_id c
+  let pp_col_intf ppf c =
+    pf ppf "@[val %a : (t, %a) Rel.Col.t@]" pp_col_col_name c pp_col_type c
+
+  let pp_col_impl ppf (Col.V cc as c) =
+    pf ppf "@[<2>let %a =@ Col.v %S %a %a@]"
+      pp_col_col_name c (Col.name cc) pp_col_constructor c pp_col_id c
+
+  let pp_record_field_name ppf (Col.V c) =
+    pp_string ppf (ocaml_col_id (Col.name c))
+
+  let pp_record_field ppf c =
+    pf ppf "%a : %a;" pp_record_field_name c pp_col_type c
+
+  let pp_record_intf ppf t = pf ppf "@[type t@]"
+  let pp_record_impl ppf t =
+    pf ppf "@[<v2>type t =@,{ @[<v>%a@] }@,@]"
+      (pp_list pp_record_field) (Table.cols t)
+
+  let pp_row_constructor_impl ppf t =
+    pf ppf "@[<2>let row @[%a@] =@ @[{ @[%a@] }@]@]"
+      (pp_list ~pp_sep:pp_sp pp_record_field_name) (Table.cols t)
+      (pp_list ~pp_sep:pp_semi pp_record_field_name) (Table.cols t)
+
+  let pp_row_constructor_intf ppf t =
+    pf ppf "@[val row : @[%a%at@]@]"
+      (pp_list ~pp_sep:pp_arr pp_col_type) (Table.cols t) pp_arr ()
+
+  let pp_pre_cols ~pre ppf cs =
+    let pp_col ppf c = pf ppf "Col.V %s%a" pre pp_col_col_name c in
+    pf ppf "@[<2>[%a]@]" (pp_list ~pp_sep:pp_semi pp_col) cs
+
+  let pp_cols = pp_pre_cols ~pre:""
+
+  let pp_table_intf ppf t = pf ppf "@[val table : t Rel.Table.t@]"
+  let pp_table_impl ppf t =
+    let pp_cols ppf cs =
+      let pp_col ppf c = pf ppf "Col.V %a" pp_col_col_name c in
+      pf ppf "@[<2>[%a]@]" (pp_list ~pp_sep:pp_semi pp_col) cs
+    in
+    let pp_row ppf t =
+      pf ppf "@[<2>let row =@ @[Row.@[<1>(unit row * %a)@]@] in@]@,"
+        (pp_list ~pp_sep:pp_star pp_col_col_name) (Table.cols t)
+    in
+    let pp_primary_key ppf t = match Table.primary_key t with
+    | None -> () | Some pk ->
+        pf ppf "@[<2>let primary_key =@ %a in@]@," pp_cols pk
+    in
+    let pp_unique_keys ppf t = match Table.unique_keys t with
+    | [] -> () | us ->
+        pf ppf "@[<2>let unique_keys =@ [@[<v>%a@]] in@]@,"
+           (pp_list ~pp_sep:pp_semi pp_cols) us
+    in
+    let pp_foreign_keys ppf t = match Table.foreign_keys t with
+    | [] -> () | fks ->
+          let pp_foreign_key ppf fk =
+            let pp_action act ppf = function
+            | None -> () | Some a ->
+                let action_to_string = function
+                | `Set_null -> "`Set_null" | `Set_default -> "`Set_default"
+                | `Cascade -> "`Cascade" | `Restrict -> "`Restrict"
+                in
+                pf ppf "@ ~%s:%s" act (action_to_string a)
+            in
+            let pp_parent ppf (Table.Foreign_key.Parent (t, cols)) =
+              let pre = strf "%a." pp_module_name t in
+              pf ppf "Table.Foreign_key.Parent (%stable, %a)" pre
+                (pp_pre_cols ~pre) cols
+            in
+            pf ppf "@[<2>Table.Foreign_key.v@ ~cols:%a@ ~parent:(%a)%a%a ()@]"
+              pp_cols (Table.Foreign_key.cols fk)
+              pp_parent (Table.Foreign_key.parent fk)
+              (pp_action "on_update") (Table.Foreign_key.on_update fk)
+              (pp_action "on_delete") (Table.Foreign_key.on_delete fk)
+          in
+          pf ppf "@[<2>let foreign_keys =@ @[<2>[%a]@] in@]@,"
+            (pp_list ~pp_sep:pp_semi pp_foreign_key) fks
+    in
+    let pp_indices ppf t = match Table.indices t with
+    | [] -> () | is ->
+        let pp_index ppf i =
+          let pp_name ppf i = match Index.name i with
+          | None -> () | Some n -> pf ppf " ~name:%S" n
+          in
+          let pp_unique ppf i = match Index.unique i with
+          | false -> () | true -> pf ppf " ~unique:true"
+          in
+          pf ppf "@[<2>Index.v%a%a@ %a@]"
+            pp_name i pp_unique i pp_cols (Index.cols i)
+        in
+        pf ppf "@[<2>let indices =@ [@[<v>%a@]] in@]@,"
+          (pp_list ~pp_sep:pp_semi pp_index) is
+    in
+    pf ppf "@[<v2>let table =@,%a%a%a%a%aTable.v %S row%s%s%s%s@]"
+      pp_row t pp_primary_key t pp_unique_keys t pp_foreign_keys t
+      pp_indices t
+      (Table.name t)
+      (if Table.primary_key t = None then "" else " ~primary_key")
+      (if Table.unique_keys t = [] then "" else " ~unique_keys")
+      (if Table.foreign_keys t = [] then "" else " ~foreign_keys")
+      (if Table.indices t = [] then "" else " ~indices")
+
+  let pp_intf_of_table ~ml_only ppf (Table.V t) =
+    pf ppf "@[<v2>module %a : sig@," pp_module_name t;
+    pp_record_intf ppf t;
+    pf ppf "@,@,";
+    pp_row_constructor_intf ppf t;
+    pf ppf "@,@,";
+    (pp_list pp_proj_intf) ppf (Table.cols t);
+    pf ppf "@,@,";
+    pf ppf "(** {1:table Table} *)";
+    pf ppf "@,@,";
+    (pp_list pp_col_intf) ppf (Table.cols t);
+    pf ppf "@,@,";
+    pp_table_intf ppf t;
+    if ml_only
+    then pf ppf "@]@,end"
+    else pf ppf "@]@,@[<v2>end = struct@,"
+
+  let pp_impl_of_table ~ml_only ppf (Table.V t) =
+    if ml_only
+    then (pf ppf "@[<v2>module %a = struct@," pp_module_name t)
+    else ();
+    pp_record_impl ppf t;
+    pf ppf "@,";
+    pp_row_constructor_impl ppf t;
+    pf ppf "@,@,";
+    (pp_list pp_proj_impl) ppf (Table.cols t);
+    pf ppf "@,@,";
+    pf ppf "open Rel@,@,";
+    (pp_list pp_col_impl) ppf (Table.cols t);
+    pf ppf "@,@,";
+    pp_table_impl ppf t;
+    pf ppf "@]@,end"
+
+  let pp_schema_intf ~ml_only ppf s =
+    pf ppf "@[<v2>module Schema : sig@,";
+    pf ppf "val v : Rel.Schema.t";
+    if ml_only
+    then pf ppf "@]@,end"
+    else pf ppf "@]@,@[<v2>end = struct@,"
+
+  let pp_schema_impl ~ml_only ppf s =
+    let pp_table ppf (Table.V t) =
+      pf ppf "Rel.Table.V %a.table;" pp_module_name t
+    in
+    if ml_only
+    then (pf ppf "@[<v2>module Schema = struct@,")
+    else ();
+    pf ppf "@[<2>let tables =@ [ @[<v>%a@] ]@]@,@,"
+      (pp_list pp_table) (tables s);
+    pf ppf "@[let v = Rel.Schema.v ~tables ()@]";
+    pf ppf "@]@,end"
+
+  let pp_ocaml ~ml_only ppf s =
+    let pp_sep ppf () = pp_cut ppf (); pp_cut ppf () in
+    let pp_table ppf t =
+      pp_intf_of_table ~ml_only ppf t;
+      pp_impl_of_table ~ml_only ppf t;
+    in
+    let pp_schema ppf s =
+      pp_schema_intf ~ml_only ppf s;
+      pp_schema_impl ~ml_only ppf s
+    in
+    pf ppf "@[<v>";
+    pf ppf "(* Generated by Rel %%VERSION%% *)@,@,";
+    (pp_list ~pp_sep pp_table) ppf (tables s);
+    pp_sep ppf ();
+    pp_schema ppf s;
+    pf ppf "@]"
 end
 
 (*---------------------------------------------------------------------------
