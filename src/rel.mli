@@ -5,12 +5,13 @@
 
 (** Relational databases.
 
-    [Rel] has typed combiators to describe your relational database in OCaml.
+    [Rel] has typed combiators to describe your relational database
+    schema in OCaml.
 
-    Having your database as a first class value in OCaml kills a few
+    Having your schema as a first class value in OCaml kills a few
     unchecked stringly dependencies and allows to devise generic code
     to process them. For example to derive boilerpate queries or
-    generate {{!Rel_kit.Schema_diagram}diagrams}.
+    generate {{!Rel.Schema.pp_dot}diagrams}.
 
     OCaml values that represent approximations of existing database
     schemas can be output using the [rel-*] command tools.
@@ -20,7 +21,12 @@
 
     This module defines only module, open it to describe your database. *)
 
-(** Column base types. *)
+(** Column base types.
+
+    {b TODO}
+
+    - SQLite seems quite unique in not specifying a size for
+      text. Can we retain the simplicity we have here with [Type.Text] ? *)
 module Type : sig
 
   (** {1:types Base types} *)
@@ -372,9 +378,7 @@ module Index : sig
   (** [cols i] are the columns indexed by [i]. *)
 end
 
-(** Table descriptions.
-
-    Tables simply give a name to {{!Row}rows}. *)
+(** Table descriptions. *)
 module Table : sig
 
   (** {1:tables Tables} *)
@@ -408,7 +412,12 @@ module Table : sig
     ?foreign_keys:'r foreign_key list ->
     ?unique_keys:'r unique_key list ->
     ?primary_key:'r primary_key -> name -> 'r Row.t -> 'r t
-  (** [v name ~params r] is a table with corresponding attributes. *)
+  (** [v name row] is a table with given parameters. See accessors for
+      semantics.
+
+      {b Note.} For now the module does not check that the columns
+      mentioned in the parameters actually belong to [row]. Do not
+      rely on this, [Invalid_argument] may be raised in the future. *)
 
   val name : 'r t -> name
   (** [name t] is the name of [t]. *)
@@ -439,8 +448,9 @@ module Table : sig
 
   val set_foreign_keys : 'r t -> 'r foreign_key list -> unit
   (** [set_foreign_keys t fks] sets the foreign keys of [t] to fks.
-      Normally you specify in {!Table.val-v}. Only use to tie
-      recursive knots. *)
+      Normally they are specified in {!Table.val-v} but this may prove
+      impossible in case of recursive dependencies. This function
+      can be used to tie the knot. *)
 
   (** Foreign keys. *)
   module Foreign_key : sig
@@ -478,8 +488,10 @@ module Table : sig
   end
 end
 
-(** Database schemas. *)
+(** Schema descriptions. *)
 module Schema : sig
+
+  (** {1:schemas Schemas} *)
 
   type name = string
   (** The type for schema names. *)
@@ -496,6 +508,23 @@ module Schema : sig
 
   val tables : t -> Table.v list
   (** [tables s] are the tables in [s]. *)
+
+  (** {1:diagram Diagram} *)
+
+  type dot_rankdir = [ `TB | `LR | `BT | `RL ]
+  (** The type for dot {{:https://graphviz.org/docs/attr-types/rankdir/}
+      rankdir}. *)
+
+  val pp_dot : rankdir:dot_rankdir -> Format.formatter -> t -> unit
+  (** [pp_dit ~rankdir ppf ts] dumps writes a database diagram
+      in {{:https://graphviz.org/doc/info/lang.html}dot format} on [ppf]
+      using {{:https://graphviz.org/docs/attrs/rankdir/}direction}
+      [rankdir].
+
+      This can be rendered to
+      {{:https://graphviz.org/docs/outputs/}many formats}. For example
+      SVG with [dot -Tsvg]. To change the rankdir after the generation
+      use [dot -Tsvg -Grankdir=LR]. *)
 end
 
 (** {1:unsupported Unsupported DBMS features}
@@ -506,11 +535,11 @@ end
     From SQLite.
 
     {ul
-    {- Tables. [CHECK] constraints on tables. First needs a story for SQL
-       expressions. Second in SQLite3 AFAIK it's not possible to get
-       it from the meta tables. This means we would have to parse
-       for {!Rel_sqlite3.schema_of_db} the tables SQL definitions which
-       we avoided so far. Table options.}
+    {- Tables. Table options. [CHECK] constraints on tables. First needs a
+       story for SQL expressions. Second in SQLite3 AFAIK it's not possible
+       to get it from the meta tables. This means we would have to parse
+       the SQL CREATE statements for {!Rel_sqlite3.schema_of_db} which
+       we avoided so far. }
     {- Indices. partial indexes.}
     {- Views. Virtual tables. Triggers}
     {- Column constraints. Some are supported at the table level (primary

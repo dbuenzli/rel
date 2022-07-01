@@ -407,6 +407,8 @@ module Schema : sig
   val of_tables : ?schema:string -> Rel.Table.v list -> t
   (** [of_tables ~schema ts] is a schema for the given [Rel] tables. *)
 
+  val of_schema : Rel.Schema.t -> t
+
   (** {1:sql SQL} *)
 
   val create_stmts : dialect -> ?drop_if_exists:bool -> t -> unit Stmt.t

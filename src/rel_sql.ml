@@ -303,6 +303,11 @@ module Schema = struct
     let indices = List.concat_map Table.indices_of_table ts in
     { schema; tables; indices }
 
+  let of_schema s =
+    let tables = Rel.Schema.tables s in
+    let schema = Rel.Schema.name s in
+    of_tables ?schema tables
+
   let extract_table_indices ~table_name:n is =
     let has_table_name i = String.equal (Index.table_name i) n in
     List.partition has_table_name is
