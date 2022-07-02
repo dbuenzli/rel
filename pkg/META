@@ -1,4 +1,4 @@
-description = "Relational queries for OCaml"
+description = "Relational database programming for OCaml"
 version = "%%VERSION_NUM%%"
 
 requires = ""
@@ -41,4 +41,15 @@ package "kit" (
   plugin(byte) = "rel_kit.cma"
   plugin(native) = "rel_kit.cmxs"
   exists_if = "rel_kit.cma"
+)
+
+package "cli" (
+  description = "Rel cmdliner library"
+  version = "%%VERSION_NUM%%"
+  directory = "cli"
+  archive(byte) = "rel_cli.cma"
+  archive(native) = "rel_cli.cmxa"
+  plugin(byte) = "rel_cli.cma"
+  plugin(native) = "rel_cli.cmxs"
+  exists_if = "rel_cli.cma"
 )

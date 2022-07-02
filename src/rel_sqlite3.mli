@@ -17,6 +17,11 @@
     {b Warning.} Functions of this module may raise [Invalid_argument]
     if any string given to C contains null bytes.
 
+    {b References.}
+
+    - SQLite {{:https://sqlite.org/lang.html}SQL reference}.
+    - SQLite {{:https://sqlite.org/capi3ref.html}C API reference}.
+
     {b TODO.}
     {ul
     {- Provide support for the {{:https://sqlite.org/errlog.html}
@@ -504,11 +509,11 @@ val dialect : Rel_sql.dialect
 (** {1:schema Schema} *)
 
 val schema_of_db :
-  ?schema:Schema.name -> t -> (Rel.Schema.t * string list, error) result
+  ?schema:Schema.name -> t -> (Schema.t * string list, error) result
 (** [schema_of_db db] derives a best-effort schema value for the
     live database [db]. Note that the tables and rows and internal
     structure is not functional. It is however sufficient for schema
-    renderings and computing schema changes.
+    renderings and computing {{!Rel.Schema.changes}schema changes}.
 
     The returned list of strings is a list of issues to report to the
     end-user that indicate that the resulting schema may not

@@ -1,3 +1,14 @@
 {0:tutorial Tutorial}
 
 {1:basics Basics}
+
+
+{1:old Old stuff}
+
+Having your database schema as a first class value in OCaml kills a
+few unchecked stringly dependencies and allows to devise generic code
+to process them. For example to derive boilerpate queries or generate
+{{!Rel.Schema.pp_dot}diagrams}.
+
+OCaml values that represent approximations of existing database
+schemas can be output using the [rel] command line tool.

@@ -8,8 +8,9 @@ let cmdliner = B0_ocaml.libname "cmdliner"
 
 let rel = B0_ocaml.libname "rel"
 let rel_kit = B0_ocaml.libname "rel.kit"
-let rel_sqlite3 = B0_ocaml.libname "rel.sqlite3"
 let rel_pool = B0_ocaml.libname "rel.pool"
+let rel_cli = B0_ocaml.libname "rel.cli"
+let rel_sqlite3 = B0_ocaml.libname "rel.sqlite3"
 
 (* Libraries *)
 
@@ -27,14 +28,19 @@ let rel_kit_lib =
   let requires = [rel] in
   B0_ocaml.lib rel_kit ~doc:"Rel toolkit library" ~srcs ~requires
 
+let rel_cli_lib =
+  let srcs = mod_srcs "rel_cli" in
+  let requires = [rel; cmdliner] in
+  B0_ocaml.lib rel_cli ~doc:"Rel cmdliner library" ~srcs ~requires
+
 let rel_sqlite3_lib =
   let stubs =`File (Fpath.v "src/rel_sqlite3_stubs.c") in
   let srcs = stubs :: mod_srcs "rel_sqlite3" in
   let c_requires = Cmd.atom "-lsqlite3" in
   let requires = [rel] in
   let name = "rel_sqlite3_lib" (* FIXME b0 map . to _ for name *) in
-  B0_ocaml.lib ~name rel_sqlite3 ~doc:"Rel sqlite3 library" ~srcs
-    ~requires ~c_requires
+  B0_ocaml.lib
+    ~name rel_sqlite3 ~doc:"Rel sqlite3 library" ~srcs ~requires ~c_requires
 
 let rel_pool_lib =
   let srcs = mod_srcs "rel_pool" in
@@ -43,10 +49,10 @@ let rel_pool_lib =
 
 (* Tools *)
 
-let rel_sqlite3_tool =
-  let srcs = Fpath.[`File (v "tools/rel_sqlite3_tool.ml")] in
-  let requires = [cmdliner; rel; rel_sqlite3 ] in
-  B0_ocaml.exe "rel-sqlite3" ~doc:"Rel sqlite3 tool" ~srcs ~requires
+let rel_tool =
+  let srcs = Fpath.[`File (v "tool/rel_tool.ml")] in
+  let requires = [cmdliner; rel; rel_cli; rel_kit; rel_sqlite3] in
+  B0_ocaml.exe "rel-tool" ~doc:"Rel tool" ~srcs ~requires
 
 (* Tests *)
 
@@ -85,7 +91,7 @@ let default =
       {|[["ocaml" "pkg/pkg.ml" "build" "--dev-pkg" "%{dev}%"
           "--with-conf-sqlite3" "%{conf-sqlite3:installed}%" ]]|}
     |> add B0_opam.Meta.depends
-      [ "ocaml", {|>= "4.08.0"|};
+      [ "ocaml", {|>= "4.14.0"|};
         "ocamlfind", {|build|};
         "ocamlbuild", {|build|};
         "topkg", {|build & >= "1.0.3"|};

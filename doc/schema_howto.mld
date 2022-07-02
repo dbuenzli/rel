@@ -5,31 +5,31 @@ A few tips on how to manage your database schema with Rel.
 {1:def Definition strategy}
 
 Rel lets you decide where you want to define your database schema.
-You can define it either {e internally}, with OCaml {!Rel.Table.t}
-values or {e externally} using any other tool you may see fit.
+You can define it either {e internally}, with an OCaml {!Rel.Schema.t}
+value or {e externally} using any other tool you may see fit.
 
 An internal OCaml definition can always be switched to an external one
-by generating legible SQL data definition statements for the
-{!Rel.Table.t} values.
+by generating legible SQL data definition statements the dialect of
+your database management system for the {!Rel.Schema.t} values.
 
-Moving from an external definition to an internal one is also possible if
-your external definition uses only features that are can be expressed
-into {!Rel.Table.t} values.
+Moving from an external definition to an internal one is also possible
+if your external definition uses only features that are expressible
+into a {!Rel.Schema.t} value.
 
 More precisely:
 
-- If your schema is defined internally with {!Rel.Table.t} values,
-  a {!Rel_sql.Schema.t} value can be derived with the
-  {!Rel_sql.Schema.of_tables} function. This value can be translated
-  to a sequence of legible SQL data definition statements with the
+- If your schema is defined internally with a {!Rel.Schema.t} value,
+  it can be transleted to legible SQL data definition statements with the
   {!Rel_sql.Schema.create_stmts} function. Would you need to move
   away from Rel this direction {e always} works.
-- If your schema is defined externally, the [rel-$(dbms)] command line
-  tools connects to your database to generate legible {!Rel.Table.t}
-  definitions. However if the external schema definition uses features
-  that cannot be expressed into {!Rel.Table.t} values, it is not
-  posssible to recreate the external schema from these values – they
-  are nevertheless useful to access the external schema using Rel.
+- If your schema is defined externally, the [rel] command line tools
+  connects to your database to generate the OCaml source for a
+  {!Rel.Schema.t} value (or use e.g. {!Rel_sqlite3.schema_of_db} and
+  {!Rel.Schema.pp_ocaml}). However if the external schema definition
+  uses features that cannot be expressed into a {!Rel.Schema.t} value,
+  it is not posssible to recreate the external schema from these
+  values – they are nevertheless useful to {e access} the external
+  schema using Rel.
 
 {1:changes Schema change}
 
@@ -37,7 +37,7 @@ The goal of a schema change is to make the {e live schema} of a
 database instance to coincide with the {e application's schema}, that
 is the schema that your software is assuming to hold.
 
-To support schema changes, Rel provides {!Rel_sql.Schema.t} values
+To support schema changes, Re provides {!Rel_sql.Schema.t} values
 which are low-level SQL schema representations. This representation
 can be derived from {!Rel.Table.t} values and be computed on a live
 database by connecting to it – see for example
@@ -77,13 +77,12 @@ Before interacting with the database:
 - Apply the steps to go the next version until the application database
   version is reached.
 
-
 {1:conventions [Rel] schema conventions}
 
 There's more than one way to model your database in OCaml with [Rel].
 The following defines a simple conventions you can follow.
 
-These conventions are followed by the [rel-*] tools when it outputs
+These conventions is followed by the [rel] tool when it outputs
 the OCaml code needed to support interaction with a pre-existing
 database schema, except for the naming conventions which respect those
 found in the schema.
@@ -196,3 +195,31 @@ module Person = struct
    Table.v "person" Row.(unit row * id' * first_name' * last_name')
 end
 ]}
+
+{2:alt Alernate direction}
+
+An alternate direction could be to simply define abstract types for
+tables but simply have them as generic column map (i.e. heterogenous
+dictionary). Could have less boiler plate and less gc pressure since
+we do pack {!Rel.Col.value}s at the IO boundary anyways.
+
+
+{1:unsupported Unsupported DBMS features}
+
+A few DBMS features that would be nice to have but are not
+supported at the moment.
+
+From SQLite.
+
+{ul
+{- Tables. Table options. [CHECK] constraints on tables. First needs a
+   story for SQL expressions. Second in SQLite3 AFAIK it's not possible
+   to get it from the meta tables. This means we would have to parse
+   the SQL CREATE statements for {!Rel_sqlite3.schema_of_db} which
+   we avoided so far. }
+{- Indices. partial indexes.}
+{- Views. Virtual tables. Triggers}
+{- Column constraints. Some are supported at the table level (primary
+   key, unique, foreign keys) or the type level (not null). But we are
+   missing COLLATE, GENERATED, AUTOINCREMENT.}
+{- Primary keys ASC/DESC.}}

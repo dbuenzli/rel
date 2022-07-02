@@ -17,8 +17,8 @@ It provides:
   composable and compile to a single, flat, SQL query (experimental).
 - Support for using SQLite3 databases.
 
-Rel is distributed under the ISC license. The basic library has no
-dependencies. 
+Rel is distributed under the ISC license. The base library has no
+dependencies. The `Rel_cli` library depends on `cmdliner`. 
 
 The SQLite support depends on the C SQLite3 library (at least
 v3.26.2).

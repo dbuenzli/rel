@@ -161,7 +161,7 @@ module Products_with_adts = struct
     let price' = Col.v "price" Type.Int price
     let table =
       let primary_key = [Col.V pid'] in
-      let unique_keys = [[Col.V name']] in
+      let unique_keys = [Table.unique_key [Col.V name']] in
       Table.v "product" Row.(unit v * pid' * name' * price')
         ~primary_key ~unique_keys
   end
@@ -192,10 +192,8 @@ module Products_with_adts = struct
     let qty' = Col.v "qty" Type.Int qty
     let table =
       let fk =
-        let parent =
-          Table.Foreign_key.Parent (Product.table, [Col.V Product.pid'])
-        in
-        Table.Foreign_key.v ~cols:[Col.V pid'] ~parent ()
+        let parent = Product.(table, [Col.V pid']) in
+        Table.foreign_key ~cols:[Col.V pid'] ~parent ()
       in
       Table.v "order" ~foreign_keys:[fk] Row.(unit v * oid' * pid' * qty')
   end

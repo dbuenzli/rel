@@ -163,11 +163,11 @@ module Index = struct
   let cols i = i.cols
   let unique i = i.unique
   let of_index ~table_name i =
-    let cols = List.map Col.of_col (Rel.Index.cols i) in
-    let name = match Rel.Index.name i with
+    let cols = List.map Col.of_col (Rel.Table.Index.cols i) in
+    let name = match Rel.Table.Index.name i with
     | Some name -> name | None -> auto_name ~table_name cols
     in
-    v ~name ~table_name ~cols ~unique:(Rel.Index.unique i)
+    v ~name ~table_name ~cols ~unique:(Rel.Table.Index.unique i)
 end
 
 module Table = struct
@@ -230,7 +230,10 @@ module Table = struct
       let open Rel in
       let cols = col_names (Table.Foreign_key.cols fk) in
       let Table.Foreign_key.Parent (p, cs) = Table.Foreign_key.parent fk in
-      let parent = Table.name p, col_names cs in
+      let parent = match Table.Foreign_key.parent fk with
+      | Table.Foreign_key.Parent (`Self, cs) -> Table.name t, col_names cs
+      | Table.Foreign_key.Parent (`Table t, cs) -> Table.name t, col_names cs
+      in
       let on_delete = Table.Foreign_key.on_delete fk in
       let on_update = Table.Foreign_key.on_update fk in
       Foreign_key.v ?on_delete ?on_update ~cols ~parent ()
@@ -238,7 +241,10 @@ module Table = struct
     let name = Rel.Table.name t in
     let cols = List.map col (Rel.Table.cols t) in
     let primary_key = Option.map col_names (Rel.Table.primary_key t) in
-    let unique_keys = List.map col_names (Rel.Table.unique_keys t) in
+    let unique_keys =
+      let key u = col_names (Rel.Table.Unique_key.cols u) in
+      List.map key (Rel.Table.unique_keys t)
+    in
     let foreign_keys = List.map foreign_key (Rel.Table.foreign_keys t) in
     let checks = [] in
     v ~name ~cols ~primary_key ~unique_keys ~foreign_keys ~checks

@@ -977,7 +977,7 @@ let col_spec tname cname type' not_null default issues =
           | "CHARACTER" | "VARCHAR" | "VARYING CHARACTER"
           | "NCHAR" | "NATIVE CHARACTER" |"NVARCHAR" ->
               col_type tname cname not_null default Type.Text, issues
-          | "DECIMAL" ->
+          | "DECIMAL" | "NUMERIC" ->
               col_type tname cname not_null default Type.Float, issues
           | _ -> None, (err_drop s :: issues)
 
@@ -1032,8 +1032,10 @@ let table_foreign_keys db name issues =
       let on_update, issues = fk_action name id "ON UPDATE" issues on_update in
       let on_delete, issues = fk_action name id "ON DELETE" issues on_delete in
       let fk =
-        let parent =
-          Table.Foreign_key.Parent (Table.v table Row.empty, parent)
+        let parent = match table = name with
+        | true -> Table.Foreign_key.Parent (`Self, parent)
+        | false ->
+            Table.Foreign_key.Parent (`Table (Table.v table Row.empty), parent)
         in
         Table.Foreign_key.v ?on_delete ?on_update ~cols:child ~parent:parent ()
       in
@@ -1063,14 +1065,19 @@ let index_cols db name =
   let* cols = fold db (stmt name) List.cons [] in
   Ok (List.rev_map col cols)
 
-let table_indices db name =
+let table_indices db tname =
   let rec indices is us = function
   | [] -> Ok (List.rev is, List.rev us)
   | (_seq, name, unique, origin, _partial) :: specs ->
       let* cols = index_cols db name in
+      let name =
+        if name = Rel.Table.Index.auto_name ~table_name:tname cols
+        then None
+        else Some name
+      in
       match origin with
-      | "c" -> indices (Rel.Index.v ~unique ~name cols :: is) us specs
-      | "u" -> indices is (cols :: us) specs
+      | "c" -> indices (Rel.Table.index ?name ~unique cols :: is) us specs
+      | "u" -> indices is (Rel.Table.unique_key cols :: us) specs
       | _ -> indices is us specs
   in
   let stmt =
@@ -1081,7 +1088,7 @@ let table_indices db name =
     in
     Rel_sql.Stmt.(func sql (text @-> (ret spec)))
   in
-  let* specs = fold db (stmt name) List.cons [] in
+  let* specs = fold db (stmt tname) List.cons [] in
   indices [] [] specs (* No List.rev, seems ids are in rev source order. *)
 
 let table db name issues =

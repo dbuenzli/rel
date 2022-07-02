@@ -175,7 +175,7 @@ module Col : sig
 
   val v : name:name -> type':Rel.Type.v -> default:default option -> t
   (** [v ~name ~type' ~default] is a column with given
-        parameters. See corresponding accessors for semantics. *)
+      parameters. See corresponding accessors for semantics. *)
 
   val name : t -> name
   (** [name c] is the column name of [c] *)
@@ -239,7 +239,7 @@ module Index : sig
   val unique : t -> bool
   (** [unique i] indicates that index entries have to be unique. *)
 
-  val of_index : table_name:string -> 'r Rel.Index.t -> t
+  val of_index : table_name:string -> 'r Rel.Table.index -> t
   (** [of_index t i] is an index from [i] on table named [table_name]. *)
 end
 
@@ -489,19 +489,18 @@ val create_table :
 
 val create_index :
   dialect -> ?schema:string -> ?if_not_exists:unit ->
-  'a Rel.Table.t -> 'a Rel.Index.t -> unit Stmt.t
+  'a Rel.Table.t -> 'a Rel.Table.Index.t -> unit Stmt.t
 (** [create_table stmt t] create index [i] on table [t] using [stmt]. See
       {!DIALECT.create_index}. *)
 
 val drop_table :
-  dialect -> ?schema:string -> ?if_exists:unit ->
-  'a Rel.Table.t -> unit Stmt.t
+  dialect -> ?schema:string -> ?if_exists:unit -> 'a Rel.Table.t -> unit Stmt.t
 (** [drop_table stmt t] drops table [t] using [stmt]. See
       {!DIALECT.drop_table}. *)
 
 val drop_index :
   dialect -> ?schema:string -> ?if_exists:unit ->
-  'a Rel.Table.t -> 'a Rel.Index.t -> unit Stmt.t
+  'a Rel.Table.t -> 'a Rel.Table.index -> unit Stmt.t
   (** [drop_index stmt t i] drops index [i] of table [t], see
       {!DIALECT.drop_index}. *)
 

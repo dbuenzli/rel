@@ -18,13 +18,12 @@ It provides:
 
 These manuals are available:
 
-{ul
-{- The {{!page-sqlite3_howto}Sqlite3 howto} explains how to get
-   started to query an existing sqlite database.}
-{- The {{!page-schema_howto}schema howto} discusses how to manage
-   your database schema with Rel.}
-{- The {{!page-sql_stmt_howto}SQL statement typing howto} explains
-   the low-level mecanism to type SQL statements.}}
+- The {{!page-sqlite3_howto}Sqlite3 howto} explains how to get
+  started to query an existing sqlite database.
+- The {{!page-schema_howto}schema howto} discusses how to manage
+  your database schema with Rel.
+- The {{!page-sql_stmt_howto}SQL statement typing howto} explains
+  the low-level mecanism to type SQL statements.
 
 {1:rel The [rel] library}
 
@@ -35,21 +34,20 @@ Rel_query
 Rel_list
 }
 
-{1:rel_kit The [rel.kit] library}
+{1:dbms_support Database management systems}
 
-{!modules:
-Rel_kit
-}
-
-{1:rel_sqlite3 The [rel.sqlite3] library}
+Each of these modules live in its own [rel.*] library.
 
 {!modules:
 Rel_sqlite3
 }
 
+{1:convenience Convenience libraries}
 
-{1:rel_pool The [rel.pool] library}
+Each of these modules live in its own [rel.*] library.
 
 {!modules:
+Rel_kit
+Rel_cli
 Rel_pool
 }
