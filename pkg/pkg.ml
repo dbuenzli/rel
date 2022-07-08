@@ -15,7 +15,7 @@ let () =
     Pkg.mllib ~cond:sqlite3 "src/rel_sqlite3.mllib" ~dst_dir:"sqlite3";
     Pkg.clib
       ~cond:sqlite3 "src/librel_sqlite3_stubs.clib" ~lib_dst_dir:"sqlite3";
-    Pkg.bin ~cond:sqlite3 "tools/rel_tool" ~dst:"rel";
+    Pkg.bin ~cond:sqlite3 "tool/rel_tool" ~dst:"rel";
     Pkg.doc "doc/index.mld" ~dst:"odoc-pages/index.mld";
     Pkg.doc "doc/sqlite3_howto.mld" ~dst:"odoc-pages/sqlite3_howto.mld";
     Pkg.doc "doc/tutorial.mld" ~dst:"odoc-pages/tutorial.mld";
