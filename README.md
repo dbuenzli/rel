@@ -7,9 +7,9 @@ It provides:
 
 - Typed combinators to describe database rows and their representation
   as custom OCaml values.
-- Typed combinators to describe tables and indices. These descriptions
-  can be translated to SQL data definitions or, conversly, generated for
-  existing databases (external schema definition).
+- Typed combinators to describe database schemas. Schemas can be translated 
+  to SQL data definitions or, conversly, generated for existing databases 
+  (external schema definition).
 - Automated schema changes via schema diffing.
 - Raw SQL statements typing and SQL generation helpers (parametric on SQL
   dialect).
@@ -18,9 +18,8 @@ It provides:
 - Support for using SQLite3 databases.
 
 Rel is distributed under the ISC license. The base library has no
-dependencies. The `Rel_cli` library depends on `cmdliner`. 
-
-The SQLite support depends on the C SQLite3 library (at least
+dependencies. The `Rel_cli` library depends on `cmdliner`. The
+`Rel_sqlite3` library depends on the C SQLite3 library (at least
 v3.26.2).
 
 Homepage: https://erratique.ch/software/rel

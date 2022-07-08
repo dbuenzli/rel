@@ -73,9 +73,9 @@ module Test_products = struct
   let dialect = Rel_sqlite3.dialect
 
   let schema =
-    let schema = [Table.V Product.table; Table.V Order.table] in
-    let schema = Rel_sql.Schema.of_tables schema in
-    Rel_sql.Schema.create_stmts dialect ~drop_if_exists:false  schema
+    let tables = [Table.V Product.table; Table.V Order.table] in
+    let schema = Rel.Schema.v ~tables () in
+    Rel_sql.create_schema_stmts dialect ~drop_if_exists:false schema
 
   let insert_orders = Rel_sql.insert_into dialect Order.table
   let insert_product =
@@ -128,9 +128,9 @@ module Test_duos = struct
 
   let dialect = Rel_sqlite3.dialect
   let schema =
-    let schema = [Table.V Person.table; Table.V Duo.table] in
-    let schema = Rel_sql.Schema.of_tables schema in
-    Rel_sql.Schema.create_stmts dialect ~drop_if_exists:false  schema
+    let tables = [Table.V Person.table; Table.V Duo.table] in
+    let schema = Schema.v ~tables () in
+    Rel_sql.create_schema_stmts dialect ~drop_if_exists:false schema
 
   let insert_person = Rel_sql.insert_into dialect Person.table
   let insert_duo = Rel_sql.insert_into dialect Duo.table
@@ -213,8 +213,8 @@ module Test_org = struct
 
   let tables = Table.[V Department.table; V Person.table; V Task.table]
   let schema =
-    let schema = Rel_sql.Schema.of_tables tables in
-    Rel_sql.Schema.create_stmts dialect ~drop_if_exists:false  schema
+    let schema = Schema.v ~tables () in
+    Rel_sql.create_schema_stmts dialect ~drop_if_exists:false schema
 
   let insert_department = Rel_sql.insert_into dialect Department.table
   let insert_person = Rel_sql.insert_into dialect Person.table

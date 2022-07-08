@@ -1,13 +1,10 @@
-
 {0 SQL statement typing howto}
 
-Note that this is a rather low-level mecanism that uses raw SQL
-strings.
-
-Raw SQL will have unchecked dependencies with your {!Rel} descriptions
-and depend on your DBMS. If possible you should prefer the higher
-level functions of {!Rel_sql} or the embedded query language
-{!Rel_query}.
+The mecanism described here uses raw SQL strings. This means it is
+low-level: the SQL depends on the SQL dialect of your DBMS and will
+likely have unchecked dependencies with your {!Rel} descriptions. If
+possible you should prefer the higher level functions of {!Rel_sql} or
+the embedded query language {!Rel_query}.
 
 Nevertheless this provides a good escape hatch would you find yourself
 stuck with the expressiveness of the higher-level support.
@@ -38,11 +35,9 @@ let names_with_age_or_surname : int -> string -> string Rel_sql.Stmt.t =
 ]}
 
 Note that the binding function is only positional in nature it always
-binds arguments from left to right. You then get the arguments in that
-order {{!Rel_sql.Stmt.rev_args}but reversed}, which your database
-driver should bind sequentially according to its scheme. This also
-means you need to be careful if you later reorder parameters either
-in your binding function description or in your SQL.
+binds arguments from left to right. This means you need to be careful
+if you later reorder parameters either in your binding function
+description or in your SQL.
 
 {1:binding_projection Binding projections}
 

@@ -66,9 +66,7 @@ let schema db_spec format =
   let* () = match format with
   | `Dot rankdir -> pr "@[%a@]@." (Schema.pp_dot ~rankdir) s; Ok ()
   | `Sqlite3 ->
-      let sql =
-        Rel_sql.Schema.(create_stmts Rel_sqlite3.dialect (of_schema s))
-      in
+      let sql = Rel_sql.create_schema_stmts Rel_sqlite3.dialect s in
       pr "@[%a@]@." Rel_sql.Stmt.pp_src sql; Ok ()
   | `Ocaml kind ->
       let* () = Schema.must_be_dag s in

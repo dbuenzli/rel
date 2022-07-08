@@ -513,7 +513,7 @@ val schema_of_db :
 (** [schema_of_db db] derives a best-effort schema value for the
     live database [db]. Note that the tables and rows and internal
     structure is not functional. It is however sufficient for schema
-    renderings and computing {{!Rel.Schema.changes}schema changes}.
+    renderings and computing {{!Rel.Schema.val-changes}schema changes}.
 
     The returned list of strings is a list of issues to report to the
     end-user that indicate that the resulting schema may not
