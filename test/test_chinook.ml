@@ -18,7 +18,7 @@ let select_track_all =
   Bag.yield t
 
 let select_track_cols =
-  let _r = Row.Quick.(Track.(t4 trackId' name' composer' unitPrice')) in
+  let _r = Row.(Track.(t4 trackId' name' composer' unitPrice')) in
   let* t = Bag.table Track.table in
   Bag.yield (Bag.row (fun a b c d -> (a, b, c, d)) $
              t #. Track.trackId' $

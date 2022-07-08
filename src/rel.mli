@@ -11,21 +11,21 @@
 
     This module defines only modules, open it to describe your database. *)
 
-(** Column base types.
+(** Column types.
 
-    {b TODO}
-
-    - SQLite seems quite unique in not specifying a size for
-      text. We likely need to add an int to [`Text]. *)
+    This module defines a type whose values describes the type of columns
+    and how they are represented in OCaml. *)
 module Type : sig
 
-  (** {1:types Base types} *)
+  (** {1:types Types} *)
 
   type ('a, 'b) coded
-  (** The type for values of type ['a] coded as values of type ['b]. *)
+  (** The type for type ['a] encoded as type ['b], see {!module-Coded}. *)
 
   type 'a t = ..
-  (** The type for column types represented by value of type ['a] in OCaml. *)
+  (** The type for the type of columns. The type ['a] is the type used
+      to represent the column values in OCaml. {b Warning} the open
+      type may be closed in the future. *)
 
   type 'a t +=
   | Bool : bool t (** Stored as [0] and [1] *)
@@ -34,24 +34,30 @@ module Type : sig
   | Float : float t
   | Text : string t
   | Blob : string t
-  | Option : 'a t -> 'a option t (** Nullable type. *)
+  | Option : 'a t -> 'a option t
+    (** Column with NULLs or values of given type. *)
   | Coded : ('a, 'b) coded -> 'a t (** An OCaml fiction. *)
-  (** Base types supported by all database backends. {b Warning} the open
-      type may be closed in the future. *)
+  (** Type of columns supported by all database management systems. Note that
+      these are [NOT NULL] columns unless you use {!Option}. *)
 
-  type v = V : 'a t -> v (** *)
-  (** The type for existential type values. *)
+  val pp : Format.formatter -> 'a t -> unit
+  (** [pp ppf t] formats an unspecified representation of [t] on [ppf].
+      Raises [Invalid_argument] if [t] is unknown to the module. *)
 
-  (** {1:coded Coded types}
+  (** Coded types.
 
-      Types coded by other types. Provides arbitrary OCaml column
-      types. Don't be too fancy if you expect other, non OCaml-based,
-      systems to access the database – and you should.
+      Types coded by other types. This allows columns value to be represented
+      by arbitrary OCaml values. To let other, non OCaml-based, systems
+      access the database, be conservative in your encoding.
 
-      {b FIXME.} Without a good way to handle values and inject constants in
-      the DSL this is useless. *)
-
-  (** Coded types. *)
+      Here is a simple example encoding a binary enum to a boolean:
+      {[
+        type status = [ `Ok | `Failed ]
+        let (status : status Type.t) =
+          let enc = function `Ok -> Ok true | `Failed -> Ok false in
+          let dec = function true -> Ok `Ok | false -> Ok `Failed in
+          Type.Coded (Type.Coded.v ~name:"status" enc dec Type.Bool)
+      ]} *)
   module Coded : sig
 
     type 'a repr = 'a t
@@ -62,61 +68,53 @@ module Type : sig
         type ['b]. *)
 
     type ('a, 'b) t = ('a, 'b) coded
-    (** The type for coding values of type ['a] by values of type ['b]. *)
+    (** See {!Rel.Type.coded}. *)
 
     val v :
       ?pp:(Format.formatter -> 'a -> unit) -> name:string ->
       ('a, 'b) map -> ('b, 'a) map -> 'b repr -> ('a, 'b) coded
-    (** [v ~pp ~name enc dec] is a coding using [enc] to encode values
-        and [dec] to decode them. [name] is a name for the coded type.
-        [pp] is an optional formatter.  *)
+    (** [v ~pp ~name enc dec repr] is a coding using [enc] and [dec]
+        to codec values to representation [repr]. [name] is a name for
+        the coded type. [pp] is an optional formatter for the values
+        of the type. *)
 
     val name : ('a, 'b) coded -> string
-    (** [name c] is [c]'s name. *)
+    (** [name c] is the name of [c]. *)
 
     val enc : ('a, 'b) coded -> ('a, 'b) map
-    (** [enc c] is [c]'s encoder. *)
+    (** [enc c] is the encoder of [c]. *)
 
     val dec : ('a, 'b) coded -> ('b, 'a) map
-    (** [dec c] is [c]'s decoder. *)
+    (** [dec c] is the decoder of [c]. *)
 
     val repr : ('a, 'b) coded -> 'b repr
-    (** [repr c] is the coding target representation. *)
+    (** [repr c] is the type of the encoding of [c] *)
 
     val pp : ('a, 'b) coded -> (Format.formatter -> 'a -> unit) option
     (** [pp c] is [c]'s pretty printer (if any). *)
   end
 
-  val coded :
-    ?pp:(Format.formatter -> 'a -> unit) -> name:string ->
-    ('a, 'b) Coded.map -> ('b, 'a) Coded.map -> 'b t -> ('a, 'b) coded
-    (** [coded] is {!Coded.v}. *)
-
   (** {1:preds Predicates} *)
 
   val is_option : 'a t -> bool
-  (** [is_option t] is [true] iff [t] is an option type. *)
+  (** [is_option t] is [true] iff [t] is an option type, that is a column
+      that allows NULLs. *)
 
   val equal : 'a t -> 'b t -> bool
   (** [equal t0 t1] is [true] iff [t0] and [t1] have the underlying type.
       For {!extension-Coded} values this check equality of {!Coded.val-repr}.
       {b Warning} this returns [false] on unknown types. *)
 
-  (** {1:values Type values} *)
+  (** {1:values Values of types} *)
 
   val value_equal : 'a t -> 'a -> 'a -> bool
   (** [value_equal t v0 v1] is [true] iff [v0] and [v1] of type [t]
-      are equal. {b Note.} For now this is simply [( = )].*)
+      are equal. {b Note} that for now this is simply [( = )] but we may add
+      a notion of equality to {!coded} at some point. *)
 
   val value_pp : 'a t -> (Format.formatter -> 'a -> unit)
   (** [value_pp t] is a formatter for values of type [t]. Raises
       [Invalid_argument] if [t] is unknown to the module. *)
-
-  (** {1:fmt Formatters} *)
-
-  val pp : Format.formatter -> 'a t -> unit
-  (** [pp ppf t] formats an unspecified representation of [t] on [ppf].
-      Raises [Invalid_argument] if [t] is unknown to the module. *)
 
   (** {1:invalid Invalid types}
 
@@ -135,11 +133,9 @@ end
 
 (** Column descriptions.
 
-    Columns are tupled into {{!Row}rows}. A column is defined by its
-    name, its type and how to project it from an OCaml value
-    representing a row.
-
-    {b TODO.} We should add a parameter for collation. *)
+    This module defines a type to describe columns. A column is
+    defined by its name, its type, an optional default value and how
+    to project it from the row representation it belongs to. *)
 module Col : sig
 
   (** {1:cols Columns} *)
@@ -152,11 +148,11 @@ module Col : sig
       be removed in the future. *)
 
   type 'a default = [ `Expr of string | `Value of 'a ]
-  (** The type for column defaults. {b FIXME} Expr case. *)
+  (** The type for column defaults. *)
 
   type ('r, 'a) t
-  (** The type for a column of type ['a] which is part of a row stored
-      in an OCaml value of type ['r]. *)
+  (** The type for a column with values represented by type ['a] and
+      which are part of a row represented by type ['r]. *)
 
   type 'r v = V : ('r, 'a) t -> 'r v (** *)
   (** The type for existential columns for a row of type ['r]. *)
@@ -167,8 +163,9 @@ module Col : sig
   val v :
     ?params:'a param list -> ?default:'a default -> string -> 'a Type.t ->
     ('r -> 'a) -> ('r, 'a) t
-  (** [v name t proj ~params] is a column named [name] with type [t], row
-      projection function [proj] and parameters [params] (defaults to [[]]). *)
+  (** [v ?default name t proj] is a column named [name] with type [t], row
+      projection function [proj] and default [default] (defaults to
+      [None]). *)
 
   val name : ('r, 'a) t -> name
   (** [name c] is the name of [c]. *)
@@ -179,14 +176,14 @@ module Col : sig
   val type' : ('r, 'a) t -> 'a Type.t
   (** [type'] is the type of [c]. *)
 
+  val proj : ('r, 'a) t -> ('r -> 'a)
+  (** [proj c] is the projection function of [c]. *)
+
   val default : ('r, 'a) t -> 'a default option
   (** [default] is the default value of [c] (if any). *)
 
   val params : ('r, 'a) t -> 'a param list
   (** [params c] are the parameters of [c]. *)
-
-  val proj : ('r, 'a) t -> ('r -> 'a)
-  (** [proj c] is the projection function of [c]. *)
 
   val no_proj : 'r -> 'a
   (** [no_proj] raises [Invalid_argument]. *)
@@ -216,9 +213,10 @@ end
 
 (** Row descriptions.
 
-    A row describe rows of table or query results. It is a cartesian
-    product of {{!Col}columns} and an OCaml constructor for injecting
-    rows into OCaml values. *)
+    This module defines a type to describe rows for tables or query
+    results. A row is defined by a cartesian product of
+    {{!Col}columns} and a function for injecting them into the OCaml
+    type that represents them. *)
 module Row : sig
 
   (** {1:rows Rows} *)
@@ -243,84 +241,79 @@ module Row : sig
   val cat : ('r, 'a -> 'b) prod -> proj:('r -> 'a) -> 'a t -> ('r, 'b) prod
   (** [cat r ~proj row] is the product of columns [r] with the columns
       of [row], [proj] is used to project [row] values from the result of
-      [r]. *)
+      [r]. {b Warning} this may be removed in the future. *)
 
   val empty : unit t
-  (** [empty] is the empty product [unit ()]. A row specification for side
-      effecting SQL statements, (e.g. UPDATE). *)
+  (** [empty] is the empty product [unit ()]. This can be used as a
+      specification for the result of side effecting SQL statements like
+      UPDATE. *)
 
-  (** Quick row specification syntax for query results.
+  (** {1:quick Quick row specification}
 
       These functions contructs rows with columns that have no
-      parameters and a default projection {!Col.no_proj}. They can be
-      used to quickly type SQL statement results.
+      parameters and a default projection of {!Col.no_proj}. They can
+      be used to quickly devise rows for query results.
 
-      {b WARNING.} Since by default these column constructors lack
+      {b Warning.} Since by default these column constructors lack
       projection {!Row.value_pp} cannot be used on them. Those created with
-      {{!Quick.tuple}tuple constructors} do however (re)define projection. *)
-  module Quick : sig
+      {{!quick_tuple}tuple constructors} do however (re)define projection. *)
 
-    val unit : 'a -> ('r, 'a) prod
-    (** [unit] is {!val:Row.unit}. *)
+  (** {2:quick_cols Column constructors} *)
 
-    val ( * ) : ('r, 'a -> 'b) prod -> ('r, 'a) Col.t -> ('r, 'b) prod
-    (** ( * ) is {!val:Row.prod}. *)
+  val bool : ?proj:('r -> bool) -> string -> ('r, bool) Col.t
+  (** [bool n] is a boolean column named [n]. *)
 
-    val bool : ?proj:('r -> bool) -> string -> ('r, bool) Col.t
-    (** [bool n] is a boolean column named [n]. *)
+  val int : ?proj:('r -> int) -> string -> ('r, int) Col.t
+  (** [int n] is an integer column named [n].*)
 
-    val int : ?proj:('r -> int) -> string -> ('r, int) Col.t
-    (** [int n] is an integer column named [n].*)
+  val int64 : ?proj:('r -> int64) -> string -> ('r, int64) Col.t
+  (** [int64 n] is an 64-bit integer column named [n]. *)
 
-    val int64 : ?proj:('r -> int64) -> string -> ('r, int64) Col.t
-    (** [int64 n] is an 64-bit integer column named [n]. *)
+  val float : ?proj:('r -> float) -> string -> ('r, float) Col.t
+  (** [float n] is a float column named [n]. *)
 
-    val float : ?proj:('r -> float) -> string -> ('r, float) Col.t
-    (** [float n] is a float column named [n]. *)
+  val text : ?proj:('r -> string) -> string -> ('r, string) Col.t
+  (** [text] is a text column named [n]. *)
 
-    val text : ?proj:('r -> string) -> string -> ('r, string) Col.t
-    (** [text] is a text column named [n]. *)
+  val blob : ?proj:('r -> string) -> string -> ('r, string) Col.t
+  (** [blob] is a blob column named [n]. *)
 
-    val blob : ?proj:('r -> string) -> string -> ('r, string) Col.t
-    (** [blob] is a blob column named [n]. *)
+  val option :
+    ?proj:('r -> 'a option) -> 'a Type.t -> string -> ('r, 'a option) Col.t
+  (** [option t n] is a nullable [t] column named [n]. *)
 
-    val option :
-      ?proj:('r -> 'a option) -> 'a Type.t -> string -> ('r, 'a option) Col.t
-    (** [option t n] is a nullable [t] column named [n]. *)
+  (** {2:quick_tuple Tuple constructors} *)
 
-    (** {1:tuple Tuple constructors} *)
+  val t1 : (_, 'a) Col.t -> 'a t
+  (** [t1] construct and deconstructs values with the given column.
+      This redefines the projection to the identity. *)
 
-    val t1 : (_, 'a) Col.t -> 'a t
-    (** [t1] construct and deconstructs values with the given column.
-        This redefines the projection to the identity. *)
-
-    val t2 : (_, 'a) Col.t -> (_, 'b) Col.t -> ('a * 'b) t
-    (** [t2] constructs and deconstructs pairs with the given column
+  val t2 : (_, 'a) Col.t -> (_, 'b) Col.t -> ('a * 'b) t
+  (** [t2] constructs and deconstructs pairs with the given column
         types. This redefine the projections of the columns. *)
 
-    val t3 :
-      (_, 'a) Col.t -> (_, 'b) Col.t -> (_, 'c) Col.t -> ('a * 'b * 'c) t
-    (** [t3] constructs and deconstructs triplets with the given column
+  val t3 :
+    (_, 'a) Col.t -> (_, 'b) Col.t -> (_, 'c) Col.t -> ('a * 'b * 'c) t
+  (** [t3] constructs and deconstructs triplets with the given column
         types. This redefine the projections of the columns. *)
 
-    val t4 :
-      (_, 'a) Col.t -> (_, 'b) Col.t -> (_, 'c) Col.t -> (_, 'd) Col.t ->
-      ('a * 'b * 'c * 'd) t
-    (** [t4] constructs and deconstructs quadruplets with the given column
+  val t4 :
+    (_, 'a) Col.t -> (_, 'b) Col.t -> (_, 'c) Col.t -> (_, 'd) Col.t ->
+    ('a * 'b * 'c * 'd) t
+  (** [t4] constructs and deconstructs quadruplets with the given column
         types. This redefine the projections of the columns. *)
 
-    val t5 :
-      (_, 'a) Col.t -> (_, 'b) Col.t -> (_, 'c) Col.t -> (_, 'd) Col.t ->
-      (_, 'e) Col.t -> ('a * 'b * 'c * 'd * 'e) t
-    (** [t5] constructs and deconstructs quintuplets with the given column
+  val t5 :
+    (_, 'a) Col.t -> (_, 'b) Col.t -> (_, 'c) Col.t -> (_, 'd) Col.t ->
+    (_, 'e) Col.t -> ('a * 'b * 'c * 'd * 'e) t
+  (** [t5] constructs and deconstructs quintuplets with the given column
         types. This redefine the projections of the columns. *)
 
-    val t6 :
-      (_, 'a) Col.t -> (_, 'b) Col.t -> (_, 'c) Col.t -> (_, 'd) Col.t ->
-      (_, 'e) Col.t -> (_, 'f) Col.t -> ('a * 'b * 'c * 'd * 'e * 'f) t
-    (** [t5] constructs and deconstructs sextuplets with the given column
+  val t6 :
+    (_, 'a) Col.t -> (_, 'b) Col.t -> (_, 'c) Col.t -> (_, 'd) Col.t ->
+    (_, 'e) Col.t -> (_, 'f) Col.t -> ('a * 'b * 'c * 'd * 'e * 'f) t
+    (** [t6] constructs and deconstructs sextuplets with the given column
         types. This redefine the projections of the columns. *)
-  end
 
   (** {1:traversal Traversal} *)
 
@@ -343,9 +336,12 @@ module Row : sig
   val value_pp : 'r t -> Format.formatter -> 'r -> unit
   (** [value_pp r] formats values of [r]. *)
 
-  val list_pp : ?header:bool -> 'r t -> Format.formatter -> 'r list -> unit
-  (** [list_pp] formats list of values of [r], one per line.
-      If [header] is [true], starts by formatting the headers of [r]. *)
+  val value_pp_list :
+    ?header:bool -> 'r t -> Format.formatter -> 'r list -> unit
+  (** [value_pp_list] formats list of values of [r], one per line.  If
+      [header] is [true], starts by formatting the headers of [r]. *)
+
+  (** {1:private Private} *)
 
   (** Private functions. *)
   module Private : sig
@@ -368,7 +364,10 @@ module Row : sig
   end
 end
 
-(** Table descriptions. *)
+(** Table descriptions.
+
+    This module defines a type to describe tables, their indices and
+    constraints. *)
 module Table : sig
 
   (** {1:tables Tables} *)
@@ -377,24 +376,25 @@ module Table : sig
   (** The type for table names. *)
 
   type 'r primary_key = 'r Col.v list
-  (** The type for primary keys. The columns that make up the primary key. *)
+  (** The type for table primary keys. The columns that make up the
+      primary key. *)
 
   type 'r unique_key
-  (** The type for unique keys. *)
+  (** The type for table unique keys. See {!Unique_key}.*)
 
   type 'r foreign_key
-  (** The type for foreign keys for a table with rows of type ['r].
-      See {!Foreign_key}. *)
+  (** The type for table foreign keys. See {!Foreign_key}. *)
 
   type 'r index
-  (** The type for table indices. *)
+  (** The type for table indices. See {!Index}. *)
 
   type 'r param = ..
   (** The type for extensible table parameters. {b Warning} this
       may be removed in the future. *)
 
   type 'r t
-  (** The type for tables with rows represented by type ['r]. *)
+  (** The type for tables with rows represented by OCaml values of
+      type ['r]. *)
 
   type v = V : 'r t -> v (** *)
   (** The type for existential tables. *)
@@ -413,15 +413,18 @@ module Table : sig
   val name : 'r t -> name
   (** [name t] is the name of [t]. *)
 
+  val name' : v -> name
+  (** [name t] is the name of [t]. *)
+
   val row : 'r t -> 'r Row.t
-  (** [row t] is the description of [t]'s rows. *)
+  (** [row t] is the row of [t]. *)
 
   val cols : ?ignore:'r Col.v list -> 'r t -> 'r Col.v list
   (** [cols t] is {!Row.val-cols}[ (row t)] with columns in [ignore] ommited
       from the result. *)
 
   val primary_key : 'r t -> 'r primary_key option
-  (** [primary_key t] is the primary key of [t]. *)
+  (** [primary_key t] is the primary key of [t] (if any). *)
 
   val unique_keys : 'r t -> 'r unique_key list
   (** [unique_keys t] are the unique keys of [t]. *)
@@ -429,15 +432,17 @@ module Table : sig
   val foreign_keys : 'r t -> 'r foreign_key list
   (** [foreign_keys t] are the foreign keys of [t]. *)
 
-  val params : 'r t -> 'r param list
-  (** [name t] are the parameters of [t]. *)
-
   val indices : 'r t -> 'r index list
   (** [indices t] are the indices of table [t]. *)
 
+  val params : 'r t -> 'r param list
+  (** [name t] are the parameters of [t]. *)
+
   (** {1:unique_keys Unique keys} *)
 
-  (** Unique keys *)
+  (** Unique keys.
+
+      Unique keys represent SQL UNIQUE constraints on a table. *)
   module Unique_key : sig
     type 'r t = 'r unique_key
     (** The type for unique keys. *)
@@ -459,12 +464,24 @@ module Table : sig
 
   (** {1:foreign_keys Foreign keys} *)
 
-  (** Foreign keys. *)
-  module Foreign_key : sig
-    type action = [ `Set_null | `Set_default | `Cascade | `Restrict ]
-    (** The type for foreign key actions. *)
+(** Foreign keys.
 
-    type parent = Parent : [`Self | `Table of 's t ] * 's Col.v list -> parent
+    Foreign keys represent SQL FOREIGN KEY constraints on a table.
+
+    We use the {{:https://www.sqlite.org/foreignkeys.html#fk_basics}
+    parent-child terminology} of SQLite. The {e parent} table is the table
+    that the foreign key refers to. The {e child} table is the table making
+    the reference. *)
+  module Foreign_key : sig
+    type action =
+    [ `Set_null (** The child key becomes NULL. *)
+    | `Set_default (** The child key is set to the default. *)
+    | `Cascade (** The row with the child key gets deleted or updated. *)
+    | `Restrict (** The parent key cannot be deleted or updated. *) ]
+    (** The type for foreign key actions on parent delete or updates. *)
+
+    type parent = Parent : [`Self | `Table of 's t  ] * 's Col.v list -> parent
+    (** *)
     (** This is the parent table and the columns that are referenced
         within. Use [`Self] to refer to table being defined.
 
@@ -479,19 +496,21 @@ module Table : sig
       ?on_delete:action -> ?on_update:action -> cols:'r Col.v list ->
       parent:parent -> unit -> 'r foreign_key
     (** [v ?on_delete ?on_update ~cols ~parent ()] is a foreign key
-        with given arguments. *)
+        with given arguments. See accessors for semantics. *)
 
     val cols : 'r foreign_key -> 'r Col.v list
-    (** [cols fk] are the columns of [fk]. *)
+    (** [cols fk] are the child table columns of [fk]. *)
 
     val parent : 'r foreign_key -> parent
     (** [parent fk] is the parent table of [fk]. *)
 
     val on_delete : 'r foreign_key -> action option
-    (** [on_delete fk] is the action taken whenever [fk] is deleted. *)
+    (** [on_delete fk] is the action taken whenever the parent key of
+        [fk] is deleted. *)
 
     val on_update : 'r foreign_key -> action option
-    (** [on_update fk] is the action taken whenever [fk] is updated. *)
+    (** [on_update fk] is the action taken whenever the parent key of
+        [fk] is updated. *)
 
     (**/**)
     val name : 'r foreign_key -> string
@@ -528,8 +547,7 @@ module Table : sig
 
   (** Table index descriptions.
 
-      {b FIXME} This is not as expressive
-      as it {{:https://www.sqlite.org/syntax/indexed-column.html}could be}. *)
+      This module provides a type to describe table indices. *)
   module Index : sig
 
     (** {1:indices Indices} *)
@@ -538,13 +556,16 @@ module Table : sig
     (** The type for index names. *)
 
     type 'r t = 'r index
-    (** The type for indexes on a table with rows represented by ['r]. *)
+    (** The type for indices on a table with rows represented by ['r]. *)
 
     val v : ?unique:bool -> ?name:name -> 'r Col.v list -> 'r index
     (** [index cols ~name ~unique] is an index named [name] on columns
-        [col]. If [name] is [None] a name is derived at index creation
+        [cols]. If [name] is [None] a name is derived at index creation
         time from the table and column names. If [unique] is [true]
         (defaults to [false]) a [UNIQUE] constraint is added. *)
+
+    val cols : 'r index -> 'r Col.v list
+    (** [cols i] are the columns indexed by [i]. *)
 
     val unique : 'r index -> bool
     (** [unique i] is [true] if the values in index [i] must be unique. *)
@@ -555,9 +576,6 @@ module Table : sig
     val get_name : table_name:string -> 'r index -> string
     (** [get_name ~table_name i] is the name of [i] assuming it is
         in table [table_name], see {!auto_name}. *)
-
-    val cols : 'r index -> 'r Col.v list
-    (** [cols i] are the columns indexed by [i]. *)
 
     val auto_name : table_name:string -> 'r Col.v list -> name
     (** [auto_name ~table_name cs] is an index name derived from
@@ -574,8 +592,8 @@ module Table : sig
       depends on a table [s] if [t] refers to [s] via a foreign key.
 
       If table dependencies are cyclic, the function errors with a
-      cycle. {{!self_foreign_key}Self table dependencies} do not count
-      as cycles.
+      cycle. For this function {{!self_foreign_key}Self table dependencies}
+      do not count as cycles.
 
       Raises [Invalid_argument] if there are two tables with the same
       name in [ts] or if [ts] is not closed over dependencies. *)
@@ -612,7 +630,7 @@ module Schema : sig
 
   val must_be_dag : t -> (unit, string) result
   (** [must_be_dag s] checks that [s] is a directed acyclic graph. If
-      the tables of [s] have a cycle (outside of self-dependencies) returns
+      the tables of [s] have a cycle (excluding self-dependencies) returns
       an error mentioning it. See {!Table.sort}. *)
 
   (** {1:changes Changes} *)
@@ -653,33 +671,32 @@ module Schema : sig
   | `Rename_table of rename ]
   (** The type for schema changes. Table values that are as found in the
       destination schema, in particular [`Alter_table] changes assume all
-      renames have occured. *)
+      renames have already occured. *)
 
   val changes :
     ?col_renames:col_renames list -> ?table_renames:rename list ->
     src:t -> dst:t -> unit -> (change list, string) result
   (** [changes ~src ~dst] is the list of changes that need to be
-      performed to bring schema [~src] to [~dst].
+      performed to bring schema [~src] to [~dst]. The function errors
+      if [table_map] or [col_map] mention names that do not exist
+      in [src] and [dst].
 
       Before computing the changes, column names of tables in [src]
-      are first renamed according to [col_renames] and then tables are
+      are renamed according to [col_renames] and then tables are
       renamed according to [table_renames]. This results in a schema
       [src'] which is compared to [dst] in order to derive the
       changes.
 
       Changes are listed in the following order, column and table
-      renames, table creations, table alterations and finally, table
+      renames, table creations, table alterations and, finally, table
       drops.
-
-      The function errors if [table_map] or [col_map] mention names
-      that do not exist in [src] and [dst].
 
       {b Note.} Do not see the output as a silver bullet, review
       changes that are computed after they have gone through your SQL
-      DBMS dialect and suggest improvements if you see some or
-      non-sensical transforms. Also it's a bit unclear how DBMS react
-      to dependencies, you might get into trouble if your schema is
-      not a DAG (really ?).  *)
+      DBMS dialect via {!Rel_sql.schema_changes_stmts} and suggest
+      improvements if you see some or non-sensical transforms. Also
+      it's a bit unclear to the author how DBMS react if your schema
+      is not a directed acyclic graph.*)
 
   (** {1:dot Dot diagrams} *)
 
@@ -688,10 +705,8 @@ module Schema : sig
       rankdir}. *)
 
   val pp_dot : rankdir:dot_rankdir -> Format.formatter -> t -> unit
-  (** [pp_dit ~rankdir ppf ts] dumps writes a database diagram
-      in {{:https://graphviz.org/doc/info/lang.html}dot format} on [ppf]
-      using {{:https://graphviz.org/docs/attrs/rankdir/}direction}
-      [rankdir].
+  (** [pp_dot ~rankdir ppf s] formats the schema [s] as a dot diagram
+      with direction [rankdir].
 
       This can be rendered to
       {{:https://graphviz.org/docs/outputs/}many formats}. For example
@@ -700,14 +715,14 @@ module Schema : sig
 
   (** {1:ocaml_src OCaml sources} *)
 
-  val pp_ocaml : [`Intf | `Impl | `Both] -> Format.formatter -> t -> unit
-  (** [pp_ocaml kind ocaml] formats the prepared schema [ocaml] as an OCaml
-      source using the {{!page-schema_howto.conventions}Rel schema conventions}.
+  val pp_ocaml : [ `Intf | `Impl | `Both ] -> Format.formatter -> t -> unit
+  (** [pp_ocaml kind s] formats the schema [s] as an OCaml
+      source using the {{!page-schema_howto.conventions}Rel schema conventions}
       according to [kind]:
 
-      - [`Intf] formats definitions for a [.mli] file to be used with [`Impl].
-      - [`Impl] formats a [.ml] file t be used with [`Intf].
-      - [`Both] formats a self-contained [.ml] that has [Impl] constrained
+      - [`Intf] formats definitions for an [.mli] file to be used with [`Impl].
+      - [`Impl] formats an [.ml] file t be used with [`Intf].
+      - [`Both] formats a self-contained [.ml] that has [`Impl] constrained
         by [`Intf].
 
       {b Warning.} For now this function does not support schema with

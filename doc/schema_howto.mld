@@ -9,56 +9,64 @@ You can define it either {e internally}, with an OCaml {!Rel.Schema.t}
 value or {e externally} using any other tool you may see fit.
 
 An internal OCaml definition can always be switched to an external one
-by generating legible SQL data definition statements the dialect of
-your database management system for the {!Rel.Schema.t} values.
+by generating legible SQL data definition statements for you database
+management system (DBMS) from a {!Rel.Schema.t} with the
+{!Rel_sql.create_schema_stmts} function. Would you need to move away
+from Rel this direction {e always} works since it is needed to use Rel
+schemas with DBMS.
 
-Moving from an external definition to an internal one is also possible
-if your external definition uses only features that are expressible
-into a {!Rel.Schema.t} value.
+An external schema definition can be moved to an OCaml one if your
+external defiition uses only features that expressible by
+{!Rel.Schema.t} values. In this case the [rel] command line tool
+connects to your database to generate the OCaml code for a
+{!Rel.Schema.t} value (or use e.g. {!Rel_sqlite3.schema_of_db} and
+{!Rel.Schema.pp_ocaml}).
 
-More precisely:
+However if the external schema definition uses features that cannot be
+expressed into a {!Rel.Schema.t} value, it is not posssible to
+recreate the external schema from these generated OCaml values – they
+are nevertheless useful to interact with the external schema using
+Rel.
 
-- If your schema is defined internally with a {!Rel.Schema.t} value,
-  it can be transleted to legible SQL data definition statements with the
-  {!Rel_sql.Schema.create_stmts} function. Would you need to move
-  away from Rel this direction {e always} works.
-- If your schema is defined externally, the [rel] command line tools
-  connects to your database to generate the OCaml source for a
-  {!Rel.Schema.t} value (or use e.g. {!Rel_sqlite3.schema_of_db} and
-  {!Rel.Schema.pp_ocaml}). However if the external schema definition
-  uses features that cannot be expressed into a {!Rel.Schema.t} value,
-  it is not posssible to recreate the external schema from these
-  values – they are nevertheless useful to {e access} the external
-  schema using Rel.
+Ultimately which solution you choose depends on the degree of control
+you need over your DBMS. Since {!Rel.Schema.t} abstracts over DBMS and
+their differences, you may find yourself limited by sticking to an
+OCaml internal definition. Though using {{:page-sql_stmt_howto} raw
+SQL statements} can bring you a long way.
 
-{1:changes Schema change}
+{1:changes Schema changes}
 
 The goal of a schema change is to make the {e live schema} of a
 database instance to coincide with the {e application's schema}, that
 is the schema that your software is assuming to hold.
 
-To support schema changes, Re provides {!Rel_sql.Schema.t} values
-which are low-level SQL schema representations. This representation
-can be derived from {!Rel.Table.t} values and be computed on a live
-database by connecting to it – see for example
-{!Rel_sqlite3.schema_of_db}.
+Rel provides support to compute the change between a source and
+destination {!Rel.Schema.t} value (see the {!Rel.Schema.val-changes}
+function). Table and column renames need however to be provided
+manually.
 
-Given a manually provided list of table and column renames (if any),
-any two of these {!Rel_sql.Schema.t} values can be compared to
-automatically derive the SQL data definition statement needed to bring
-one schema to the other.
+This allow to compute changes between versions of your schema or
+between the schema of a live database (which can be derived e.g.  with
+{!Rel_sqlite3.schema_of_db}). The [rel changes] command also allows
+you to output and inspect these changes between live and SQL defined
+schemas.
 
-Note that this only handles structural changes to the database. You may
-need to provide additional statements to handle data migrations.
-
-You should always have a careful look at these steps and possibly
-tweak them, especially if you do this with externally defined schemas.
+These changes can be turned into SQL data definition statements with
+the {!Rel_sql.schema_changes_stmts} functions to apply on a source schema to
+bring it to the destination schema. Note that this only handles
+structural changes to the database. You may need to provide additional
+statements to handle data migrations. You should also always have a
+careful look at these steps and possibly tweak them, especially if you
+do this with externally defined schemas.
 
 {2:single Single live database instance or development mode}
 
-- Get the live database schema
-- Derive the steps to move from the live schema to the application schema.
-- Check and apply the steps statements to the live schema
+- Let [dst] be the application database's schema.
+- Let [src] be the the live database schema.
+- Derive the steps to move from [src] to [dst].
+- If the steps are empty, your live database is up-to-date. Otherwise
+  {b check} the steps, make a backup of your database and apply the
+  steps to the live schema.
 
 {2:released Released schemas}
 
@@ -77,29 +85,27 @@ Before interacting with the database:
 - Apply the steps to go the next version until the application database
   version is reached.
 
-{1:conventions [Rel] schema conventions}
+{1:conventions Schema conventions}
 
 There's more than one way to model your database in OCaml with [Rel].
 The following defines a simple conventions you can follow.
 
 These conventions is followed by the [rel] tool when it outputs
-the OCaml code needed to support interaction with a pre-existing
+the OCaml code needed to support interaction with an externally defined
 database schema, except for the naming conventions which respect those
-found in the schema.
+found in the existing schema.
 
-{2:names Table and column names}
-
-If you are not using a pre-existing schema:
+{2:names Names}
 
 {ul
 {- Table names, keep them singular, lower and snake cased.}
 {- Column names, keep them lower, snake cased. Have the primary key
    as the first column and then unless there are few of them
    sort them in alphabetical order.}
-{- Relations, use the table names seperated by a [_] to name them.}
+{- Relations, use the related table names seperated by a [_] to name them.}
 {- Indices, use the table name and the indexed columns separated by
-   a [_]. {!Rel.Index} does this for you automatically if you don't specify
-   a name for the index.}}
+   a [_]. {!Rel.Table.Index} does this for you automatically if you don't
+   specify a name for the index.}}
 
 {2:table Tables representation}
 
@@ -116,8 +122,8 @@ module [N] ({e n} capitalized) for it.  This module should have
    column {e c{_i}}.}
 {- A value [N.table] of type {!Rel.Table.t} that defines the table.}}
 
-Once you have modelled your tables you can use
-{!Rel_sql.Schema.of_tables} and {!Rel_sql.Schema.create_stmts} to
+Once you have modelled your tables and gathered them into a schema
+values with {!Rel.Schema.v} you can use {!Rel_sql.create_schema_stmts} to
 output the corresponding schema in SQL's data definition language.
 
 {2:example Example}
@@ -212,6 +218,9 @@ supported at the moment.
 From SQLite.
 
 {ul
+{- Generating SQLite {{:https://www.sqlite.org/stricttables.html}
+   strict table} would be nice. However if we do so we can no longer
+   distinguish between [bool], [int] and [int64] columns.
 {- Tables. Table options. [CHECK] constraints on tables. First needs a
    story for SQL expressions. Second in SQLite3 AFAIK it's not possible
    to get it from the meta tables. This means we would have to parse

@@ -28,7 +28,7 @@ let playlists db =
   let sql = "select * from playlists" in
   let st = Rel_sql.Stmt.(func sql @@ ret row) in
   let* ps = Rel_sqlite3.fold db st List.cons [] in
-  Format.printf "%a" (Row.list_pp ~header:true row) (List.rev ps);
+  Format.printf "%a" (Row.value_pp_list ~header:true row) (List.rev ps);
   Ok ()
 
 let playlist_id db id =

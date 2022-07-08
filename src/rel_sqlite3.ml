@@ -3,6 +3,8 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+open Rel
+
 (* Circular doubly linked list *)
 
 module Clist = struct
@@ -265,8 +267,6 @@ type error = Error.t
 let error_string r = Result.map_error Error.message r
 let db_error rc db = Error.v rc (Tsqlite3.errmsg db)
 
-open Rel
-
 let strf = Printf.sprintf
 
 (* Library configuration and information. *)
@@ -404,17 +404,13 @@ module Stmt' = struct
   let step s st = match Tsqlite3.step s.stmt with
   | 101 (* SQLITE_DONE *) -> stop s; None
   | 100 (* SQLITE_ROW *) -> Some (unpack_row s st)
-  | rc ->
-      let err = stmt_error rc s.stmt in
-      stop s; error err
+  | rc -> let err = stmt_error rc s.stmt in stop s; error err
 
   let fold s st f acc =
     let rec loop s st f acc = match Tsqlite3.step s.stmt with
     | 100 (* SQLITE_ROW *) -> loop s st f (f (unpack_row s st) acc)
     | 101 (* SQLITE_DONE *) -> stop s; acc
-    | rc ->
-        let err = stmt_error rc s.stmt in
-        stop s; error err
+    | rc -> let err = stmt_error rc s.stmt in stop s; error err
     in
     loop s st f acc
 
@@ -424,9 +420,7 @@ module Stmt' = struct
 
   let exec s = match Tsqlite3.step s.stmt with
   | 100 | 101 (* SQLITE_{ROW,DONE} *) -> stop s
-  | rc ->
-      let err = stmt_error rc s.stmt in
-      stop s; error err
+  | rc -> let err = stmt_error rc s.stmt in stop s; error err
 end
 
 (* Database connection *)
@@ -569,7 +563,7 @@ let explain ?(query_plan = false) db st =
     (* Maybe we should skip the cache. *)
     let src = explain ^ Rel_sql.Stmt.src st in
     let rev_args = Rel_sql.Stmt.rev_args st in
-    let result = Row.Quick.(t1 (text "explanation")) in
+    let result = Row.(t1 (text "explanation")) in
     let st = Rel_sql.Stmt.v src ~rev_args ~result in
     let s = Cache.stmt db src in (* XXX skip the cache ? *)
     Stmt'.bind s st;
@@ -603,8 +597,56 @@ end
 (* SQL *)
 
 module Dialect = struct
-  let kind = "sqlite2"
+  let kind = "sqlite3"
 
+  let rec insert_columns ~ignore:ign i rev_cols rev_vars rev_args cols =
+    let ignore c =
+      List.exists (fun (Rel.Col.V i) -> Rel.Col.equal_name i c) ign
+    in
+    match cols with
+    | [] ->
+        let cols = List.rev rev_cols and vars = List.rev rev_vars in
+        i, String.concat ", " cols, String.concat ", " vars, rev_args
+    | Rel.Col.Value (col, _) :: cols when ignore col ->
+        insert_columns ~ignore:ign i rev_cols rev_vars rev_args cols
+    | Rel.Col.Value (col, v) :: cols ->
+        let c = Rel_sql.Syntax.id (Rel.Col.name col) in
+        let var = "?" ^ string_of_int i in
+        let arg = Rel_sql.Stmt.Arg (Col.type' col, v) in
+        insert_columns ~ignore:ign (i + 1)
+          (c :: rev_cols) (var :: rev_vars)  (arg :: rev_args) cols
+
+  let insert_into_cols ?schema ?(ignore = []) t cols =
+    let table = Rel_sql.Syntax.id_in_schema ?schema (Rel.Table.name t) in
+    let i, cols, vars, rev_args = insert_columns ~ignore 1 [] [] [] cols in
+    let sql = ["INSERT INTO "; table; " ("; cols; ")\nVALUES ("; vars; ")"] in
+    let sql = String.concat "" sql in
+    Rel_sql.Stmt.v sql ~rev_args ~result:Rel.Row.empty
+
+  let rec bind_columns ~sep i rev_cols rev_args = function
+  | [] -> i, String.concat sep (List.rev rev_cols), rev_args
+  | Rel.Col.Value (col, v) :: cols ->
+      let col_name c = Rel_sql.Syntax.id (Rel.Col.name col)in
+      let set_col = String.concat "" [col_name col; " = ?"; string_of_int i] in
+      let arg = Rel_sql.Stmt.Arg (Col.type' col, v) in
+      bind_columns ~sep (i + 1) (set_col :: rev_cols) (arg :: rev_args) cols
+
+  let update ?schema t ~set:cols ~where =
+    let table = Rel_sql.Syntax.id_in_schema ?schema (Rel.Table.name t) in
+    let i, columns, rev_args = bind_columns ~sep:", " 1 [] [] cols in
+    let _, where, rev_args = bind_columns ~sep:" AND " i [] rev_args where in
+    let sql = ["UPDATE "; table; " SET "; columns; " WHERE "; where ] in
+    let sql = String.concat "" sql in
+    Rel_sql.Stmt.v sql ~rev_args ~result:Rel.Row.empty
+
+  let delete_from ?schema t ~where =
+    let table = Rel_sql.Syntax.id_in_schema ?schema (Rel.Table.name t) in
+    let _, where, rev_args = bind_columns ~sep:" AND " 1 [] [] where in
+    let sql = ["DELETE FROM "; table; " WHERE "; where ] in
+    let sql = String.concat "" sql in
+    Rel_sql.Stmt.v sql ~rev_args ~result:Rel.Row.empty
+
+  (* Data definition statements *)
 
   let ext c dir = match c with None -> "" | Some () -> dir
   let if_exists_ext c = ext c " IF EXISTS"
@@ -691,10 +733,12 @@ module Dialect = struct
     with Failure e -> Error e
 
   let rec type_of_type : type a. a Type.t -> string * bool = function
+  (* N.B. if we create databases in strict mode we can no longer
+     distinguish between the first three types. *)
   | Type.Bool -> "BOOL", true (* not null *)
   | Type.Int -> "INTEGER", true
   | Type.Int64 -> "BIGINT", true
-  | Type.Float -> "DOUBLE", true
+  | Type.Float -> "REAL", true
   | Type.Text -> "TEXT", true
   | Type.Blob -> "BLOB", true
   | Type.Option t -> fst (type_of_type t), false
@@ -731,7 +775,7 @@ module Dialect = struct
   | Type.Blob -> blob_to_literal v
   | Type.Option t ->
       (match v with None -> "NULL" | Some v -> const_to_literal t v)
-  | Rel.Type.Coded c ->
+  | Type.Coded c ->
       (match Rel.Type.Coded.enc c v with
       | Ok v -> const_to_literal (Rel.Type.Coded.repr c) v
       | Error e ->
@@ -785,6 +829,8 @@ module Dialect = struct
     let fks = List.map (foreign_key ?schema t) (Table.foreign_keys t) in
     let defs = cols @ primary_key @ uniques @ fks in
     let sql =
+      (* Would be nice to create tables in STRICT mode but then we can no
+         longer distinguish between bool, int and int64 *)
       pp_strf "@[<v2>CREATE TABLE%s %s (@,%a@]@,);"
         if_not_exists name
         (Format.pp_print_list ~pp_sep:pp_comma Format.pp_print_string) defs
@@ -829,8 +875,6 @@ module Dialect = struct
     let sql = strf "DROP INDEX%s %s;" if_exists name in
     Rel_sql.Stmt.(func sql @@ unit)
 
-  let change_stmts ?schema cs = failwith "TODO"
-
   let insert_or_action = function
   | `Abort -> " OR ABORT" | `Fail -> " OR FAIL" | `Ignore -> " OR IGNORE"
   | `Replace -> " OR REPLACE" | `Rollback -> " OR ROLLBACK"
@@ -866,52 +910,7 @@ module Dialect = struct
     in
     Rel_sql.Stmt.func sql f
 
-  let rec insert_columns ~ignore:ign i rev_cols rev_vars rev_args cols =
-    let ignore c =
-      List.exists (fun (Rel.Col.V i) -> Rel.Col.equal_name i c) ign
-    in
-    match cols with
-    | [] ->
-        let cols = List.rev rev_cols and vars = List.rev rev_vars in
-        i, String.concat ", " cols, String.concat ", " vars, rev_args
-    | Rel.Col.Value (col, _) :: cols when ignore col ->
-        insert_columns ~ignore:ign i rev_cols rev_vars rev_args cols
-    | Rel.Col.Value (col, v) :: cols ->
-        let c = Rel_sql.Syntax.id (Rel.Col.name col) in
-        let var = "?" ^ string_of_int i in
-        let arg = Rel_sql.Stmt.Arg (Col.type' col, v) in
-        insert_columns ~ignore:ign (i + 1)
-          (c :: rev_cols) (var :: rev_vars)  (arg :: rev_args) cols
-
-  let insert_into_cols ?schema ?(ignore = []) t cols =
-    let table = Rel_sql.Syntax.id_in_schema ?schema (Rel.Table.name t) in
-    let i, cols, vars, rev_args = insert_columns ~ignore 1 [] [] [] cols in
-    let sql = ["INSERT INTO "; table; " ("; cols; ")\nVALUES ("; vars; ")"] in
-    let sql = String.concat "" sql in
-    Rel_sql.Stmt.v sql ~rev_args ~result:Rel.Row.empty
-
-  let rec bind_columns ~sep i rev_cols rev_args = function
-  | [] -> i, String.concat sep (List.rev rev_cols), rev_args
-  | Rel.Col.Value (col, v) :: cols ->
-      let col_name c = Rel_sql.Syntax.id (Rel.Col.name col)in
-      let set_col = String.concat "" [col_name col; " = ?"; string_of_int i] in
-      let arg = Rel_sql.Stmt.Arg (Col.type' col, v) in
-      bind_columns ~sep (i + 1) (set_col :: rev_cols) (arg :: rev_args) cols
-
-  let update ?schema t ~set:cols ~where =
-    let table = Rel_sql.Syntax.id_in_schema ?schema (Rel.Table.name t) in
-    let i, columns, rev_args = bind_columns ~sep:", " 1 [] [] cols in
-    let _, where, rev_args = bind_columns ~sep:" AND " i [] rev_args where in
-    let sql = ["UPDATE "; table; " SET "; columns; " WHERE "; where ] in
-    let sql = String.concat "" sql in
-    Rel_sql.Stmt.v sql ~rev_args ~result:Rel.Row.empty
-
-  let delete_from ?schema t ~where =
-    let table = Rel_sql.Syntax.id_in_schema ?schema (Rel.Table.name t) in
-    let _, where, rev_args = bind_columns ~sep:" AND " 1 [] [] where in
-    let sql = ["DELETE FROM "; table; " WHERE "; where ] in
-    let sql = String.concat "" sql in
-    Rel_sql.Stmt.v sql ~rev_args ~result:Rel.Row.empty
+  let schema_changes_stmts ?schema cs = failwith "TODO"
 end
 
 let dialect = (module Dialect : Rel_sql.DIALECT)
@@ -929,7 +928,6 @@ let string_subrange ?(first = 0) ?last s =
   if first > last then "" else String.sub s first (last - first + 1)
 
 let ( let* ) = Result.bind
-
 let never _ = assert false
 let dummy_col name = Col.V (Col.v name Type.Int never)
 
@@ -963,7 +961,7 @@ let col_spec tname cname type' not_null default issues =
       col_type tname cname not_null default Type.Bool, issues
   | "INT" | "INTEGER" | "TINYINT" | "SMALLINT" | "MEDIUMINT" |"INT2" | "INT8" ->
       col_type tname cname not_null default Type.Int, issues
-  |  "BIGINT" |  "UNSIGNED BIG INT" ->
+  | "BIGINT" |  "UNSIGNED BIG INT" ->
       col_type tname cname not_null default Type.Int64, issues
   | "REAL" | "DOUBLE" | "DOUBLE PRECISION" | "FLOAT" | "NUMERIC" ->
       col_type tname cname not_null default Type.Float, issues
@@ -1005,9 +1003,8 @@ let table_cols db name issues =
   in
   let stmt =
     let sql = "SELECT * FROM pragma_table_info (?)" in
-    let spec = Rel.Row.Quick.(t6 (int "cid")
-                                (text "name") (text "type") (bool "notnull")
-                                (text "dflt_value") (int "pk")) in
+    let spec = Rel.Row.(t6 (int "cid") (text "name") (text "type")
+                          (bool "notnull") (text "dflt_value") (int "pk")) in
     Rel_sql.Stmt.(func sql (text @-> (ret spec)))
   in
   let* specs = fold db (stmt name) List.cons [] in
@@ -1054,9 +1051,9 @@ let table_foreign_keys db name issues =
       (id, seq, table, from, to', on_update, on_delete, match')
     in
     let fk_part =
-      Rel.Row.Quick.(unit row * (int "id") * (int "seq") * (text "table") *
-                     (text "from") * (text "to") * (text "on_update") *
-                     (text "on_delete") * (text "match")) in
+      Rel.Row.(unit row * (int "id") * (int "seq") * (text "table") *
+               (text "from") * (text "to") * (text "on_update") *
+               (text "on_delete") * (text "match")) in
     Rel_sql.Stmt.(func sql (text @-> (ret fk_part)))
   in
   let* fk_parts = fold db (stmt name) List.cons [] in
@@ -1066,7 +1063,7 @@ let index_cols db name =
   let col (_, _, name) = dummy_col name in
   let stmt =
     let sql = "SELECT * FROM pragma_index_info (?) ORDER BY seqno" in
-    let icol = Rel.Row.Quick.(t3 (int "seqno") (int "cid") (text "name")) in
+    let icol = Rel.Row.(t3 (int "seqno") (int "cid") (text "name")) in
     Rel_sql.Stmt.(func sql (text @-> (ret icol)))
   in
   let* cols = fold db (stmt name) List.cons [] in
@@ -1090,8 +1087,8 @@ let table_indices db tname =
   let stmt =
     let sql = "SELECT * FROM pragma_index_list (?) ORDER BY seq" in
     let spec =
-      Rel.Row.Quick.(t5 (int "seq") (text "name") (bool "unique")
-                       (text "origin") (bool "partial"))
+      Rel.Row.(t5 (int "seq") (text "name") (bool "unique")
+                 (text "origin") (bool "partial"))
     in
     Rel_sql.Stmt.(func sql (text @-> (ret spec)))
   in
@@ -1116,7 +1113,7 @@ let table_names db =
   let stmt =
     let sql = "SELECT t.name, t.sql FROM sqlite_master AS t \
                WHERE t.type = 'table' AND t.name NOT LIKE 'sqlite_%'" in
-    let cols = Rel.Row.Quick.(t2 (text "name") (text "sql")) in
+    let cols = Rel.Row.(t2 (text "name") (text "sql")) in
     Rel_sql.Stmt.(func sql (ret cols))
   in
   let* names = fold db stmt List.cons [] in

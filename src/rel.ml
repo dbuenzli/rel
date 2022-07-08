@@ -4,7 +4,6 @@
   ---------------------------------------------------------------------------*)
 
 let ( let* ) = Result.bind
-
 module Sset = Set.Make (String)
 module Smap = Map.Make (String)
 module Fmt = struct
@@ -22,11 +21,10 @@ end
 
 module Type = struct
   type 'a t = ..
-  type ('a, 'b) map = 'a -> ('b, string) result
   type ('a, 'b) coded =
     { name : string;
-      enc : ('a, 'b) map;
-      dec : ('b, 'a) map;
+      enc : 'a -> ('b, string) result;
+      dec : 'b -> ('a, string) result;
       repr : 'b t;
       pp : (Format.formatter -> 'a -> unit) option; }
 
@@ -35,11 +33,9 @@ module Type = struct
   | Text : string t | Blob : string t | Option : 'a t -> 'a option t
   | Coded : ('a, 'b) coded -> 'a t
 
-  type v = V : 'a t -> v
-
   module Coded = struct
     type 'a repr = 'a t
-    type nonrec ('a, 'b) map = ('a, 'b) map
+    type ('a, 'b) map = 'a -> ('b, string) result
     type ('a, 'b) t = ('a, 'b) coded
     let v ?pp ~name enc dec repr = { name; enc; dec; repr; pp }
     let name c = c.name
@@ -49,16 +45,22 @@ module Type = struct
     let pp c = c.pp
   end
 
-  let coded = Coded.v
-
   let invalid_unknown () = invalid_arg "Unknown 'a Rel.Type.t case."
   let invalid_nested_option () =
     invalid_arg "Nested option in 'a Rel.Type.t are unsupported."
 
+  let rec pp : type a. Format.formatter -> a t -> unit =
+  fun ppf t -> match t with
+  | Bool -> Fmt.string ppf "bool" | Int -> Fmt.string ppf "int"
+  | Int64 -> Fmt.string ppf "int64" | Float -> Fmt.string ppf "float"
+  | Text -> Fmt.string ppf "text" | Blob -> Fmt.string ppf "blob"
+  | Option v -> pp ppf v; Fmt.string ppf " option"
+  | Coded { name; _ } -> Fmt.string ppf name
+  | _ -> invalid_unknown ()
+
   let rec is_option : type a. a t -> bool = function
   | Bool | Int | Int64 | Float | Text | Blob -> false
-  | Coded c0 -> is_option (Coded.repr c0)
-  | _ -> invalid_unknown ()
+  | Coded c -> is_option (Coded.repr c) | _ -> invalid_unknown ()
 
   let rec equal : type a b. a t -> b t -> bool = fun t0 t1 -> match t0, t1 with
   | Bool, Bool -> true | Int, Int -> true | Int64, Int64 -> true
@@ -119,15 +121,6 @@ module Type = struct
       end
   | _, _ -> Some v1
 
-  let rec pp : type a. Format.formatter -> a t -> unit =
-  fun ppf t -> match t with
-  | Bool -> Fmt.string ppf "bool" | Int -> Fmt.string ppf "int"
-  | Int64 -> Fmt.string ppf "int64" | Float -> Fmt.string ppf "float"
-  | Text -> Fmt.string ppf "text" | Blob -> Fmt.string ppf "blob"
-  | Option v -> pp ppf v; Fmt.string ppf " option"
-  | Coded { name; _ } -> Fmt.string ppf name
-  | _ -> invalid_unknown ()
-
   let rec ocaml_spec : type a. a t -> string * string = function
   | Bool -> "bool", "Bool"
   | Int -> "int", "Int"
@@ -149,9 +142,9 @@ module Col = struct
   type ('r, 'a) t =
     { name : name;
       type' : 'a Type.t;
+      proj : ('r -> 'a);
       default : 'a default option;
-      params : 'a param list;
-      proj : ('r -> 'a); }
+      params : 'a param list; }
 
   type 'r v = V : ('r, 'a) t -> 'r v
   type 'r value = Value : ('r, 'a) t * 'a -> 'r value
@@ -162,19 +155,20 @@ module Col = struct
   let name c = c.name
   let name' (V c) = name c
   let type' c = c.type'
+  let proj c = c.proj
   let default c = c.default
   let params c = c.params
-  let proj c = c.proj
   let with_proj proj c = { c with proj }
   let no_proj _ = invalid_arg "No projection defined"
   let equal_name c0 c1 = String.equal (name c0) (name c1)
+  let list_equal_names cs0 cs1 =
+    List.equal String.equal (List.map name' cs0) (List.map name' cs1)
+
   let pp ppf c = Fmt.pf ppf "@[%a : %a@]" Fmt.string c.name Type.pp c.type'
   let pp_name ppf c = Fmt.string ppf c.name
   let value_pp c ppf r = Type.value_pp c.type' ppf (c.proj r)
   let pp_value ppf (Value (c, v)) = Type.value_pp c.type' ppf v
   let pp_sep ppf () = Format.pp_print_char ppf '|'
-  let list_equal_names cs0 cs1 =
-    List.equal String.equal (List.map name' cs0) (List.map name' cs1)
 end
 
 module Row = struct
@@ -191,53 +185,49 @@ module Row = struct
   let cat r ~proj row = Cat (r, proj, row)
   let empty = unit ()
 
-  module Quick = struct
-    let unit = unit
-    let ( * ) = prod
-    let bool ?(proj = Col.no_proj) n = Col.v n Type.Bool proj
-    let int ?(proj = Col.no_proj) n = Col.v n Type.Int proj
-    let int64 ?(proj = Col.no_proj) n = Col.v n Type.Int64 proj
-    let float ?(proj = Col.no_proj) n = Col.v n Type.Float proj
-    let text ?(proj = Col.no_proj) n = Col.v n Type.Text proj
-    let blob ?(proj = Col.no_proj) n = Col.v n Type.Blob proj
-    let option ?(proj = Col.no_proj) t n = Col.v n (Type.Option t) proj
+  let bool ?(proj = Col.no_proj) n = Col.v n Type.Bool proj
+  let int ?(proj = Col.no_proj) n = Col.v n Type.Int proj
+  let int64 ?(proj = Col.no_proj) n = Col.v n Type.Int64 proj
+  let float ?(proj = Col.no_proj) n = Col.v n Type.Float proj
+  let text ?(proj = Col.no_proj) n = Col.v n Type.Text proj
+  let blob ?(proj = Col.no_proj) n = Col.v n Type.Blob proj
+  let option ?(proj = Col.no_proj) t n = Col.v n (Type.Option t) proj
 
-    let t1 a = unit Fun.id * Col.with_proj Fun.id a
-    let t2 a b =
-      let a = Col.with_proj fst a in
-      let b = Col.with_proj snd b in
-      unit (fun a b -> a, b) * a * b
+  let t1 a = unit Fun.id * Col.with_proj Fun.id a
+  let t2 a b =
+    let a = Col.with_proj fst a in
+    let b = Col.with_proj snd b in
+    unit (fun a b -> a, b) * a * b
 
-    let t3 a b c =
-      let a = Col.with_proj (fun (a, _, _) -> a) a in
-      let b = Col.with_proj (fun (_, b, _) -> b) b in
-      let c = Col.with_proj (fun (_, _, c) -> c) c in
-      unit (fun a b c -> a, b, c) * a * b * c
+  let t3 a b c =
+    let a = Col.with_proj (fun (a, _, _) -> a) a in
+    let b = Col.with_proj (fun (_, b, _) -> b) b in
+    let c = Col.with_proj (fun (_, _, c) -> c) c in
+    unit (fun a b c -> a, b, c) * a * b * c
 
-    let t4 a b c d =
-      let a = Col.with_proj (fun (a, _, _, _) -> a) a in
-      let b = Col.with_proj (fun (_, b, _, _) -> b) b in
-      let c = Col.with_proj (fun (_, _, c, _) -> c) c in
-      let d = Col.with_proj (fun (_, _, _, d) -> d) d in
-      unit (fun a b c d -> a, b, c, d) * a * b * c * d
+  let t4 a b c d =
+    let a = Col.with_proj (fun (a, _, _, _) -> a) a in
+    let b = Col.with_proj (fun (_, b, _, _) -> b) b in
+    let c = Col.with_proj (fun (_, _, c, _) -> c) c in
+    let d = Col.with_proj (fun (_, _, _, d) -> d) d in
+    unit (fun a b c d -> a, b, c, d) * a * b * c * d
 
-    let t5 a b c d e =
-      let a = Col.with_proj (fun (a, _, _, _, _) -> a) a in
-      let b = Col.with_proj (fun (_, b, _, _, _) -> b) b in
-      let c = Col.with_proj (fun (_, _, c, _, _) -> c) c in
-      let d = Col.with_proj (fun (_, _, _, d, _) -> d) d in
-      let e = Col.with_proj (fun (_, _, _, _, e) -> e) e in
-      unit (fun a b c d e -> a, b, c, d, e) * a * b * c * d * e
+  let t5 a b c d e =
+    let a = Col.with_proj (fun (a, _, _, _, _) -> a) a in
+    let b = Col.with_proj (fun (_, b, _, _, _) -> b) b in
+    let c = Col.with_proj (fun (_, _, c, _, _) -> c) c in
+    let d = Col.with_proj (fun (_, _, _, d, _) -> d) d in
+    let e = Col.with_proj (fun (_, _, _, _, e) -> e) e in
+    unit (fun a b c d e -> a, b, c, d, e) * a * b * c * d * e
 
-    let t6 a b c d e f =
-      let a = Col.with_proj (fun (a, _, _, _, _, _) -> a) a in
-      let b = Col.with_proj (fun (_, b, _, _, _, _) -> b) b in
-      let c = Col.with_proj (fun (_, _, c, _, _, _) -> c) c in
-      let d = Col.with_proj (fun (_, _, _, d, _, _) -> d) d in
-      let e = Col.with_proj (fun (_, _, _, _, e, _) -> e) e in
-      let f = Col.with_proj (fun (_, _, _, _, _, f) -> f) f in
-      unit (fun a b c d e f -> a, b, c, d, e, f) * a * b * c * d * e * f
-  end
+  let t6 a b c d e f =
+    let a = Col.with_proj (fun (a, _, _, _, _, _) -> a) a in
+    let b = Col.with_proj (fun (_, b, _, _, _, _) -> b) b in
+    let c = Col.with_proj (fun (_, _, c, _, _, _) -> c) c in
+    let d = Col.with_proj (fun (_, _, _, d, _, _) -> d) d in
+    let e = Col.with_proj (fun (_, _, _, _, e, _) -> e) e in
+    let f = Col.with_proj (fun (_, _, _, _, _, f) -> f) f in
+    unit (fun a b c d e f -> a, b, c, d, e, f) * a * b * c * d * e * f
 
   let rec fold f acc r =
     let rec loop : type a r b. (a -> r Col.v -> a) -> a -> (r, b) prod -> a =
@@ -274,7 +264,7 @@ module Row = struct
   | Prod (r, c) -> value_pp r ppf v; Col.value_pp c ppf v; Col.pp_sep ppf ()
   | Cat (r, proj, row) -> value_pp r ppf v; value_pp row ppf (proj v)
 
-  let list_pp ?(header = false) r ppf rs =
+  let value_pp_list ?(header = false) r ppf rs =
     let pp_vs = Format.pp_print_list (value_pp r) in
     if header
     then Fmt.pf ppf "@[<v>%a@,%a@]" pp_header r pp_vs rs
@@ -305,10 +295,8 @@ module Table = struct
   type name = string
   type 'r primary_key = 'r Col.v list
   type 'r unique_key = { cols : 'r Col.v list }
-
   type 'r index = { unique : bool; name : name option; cols : 'r Col.v list }
   type 'r param = ..
-
   type action = [ `Set_null | `Set_default | `Cascade | `Restrict ]
   type parent' = Parent : [`Self | `Table of 'a t] * 'a Col.v list -> parent'
   and 'r foreign_key =
@@ -335,13 +323,14 @@ module Table = struct
     { name; row; primary_key; unique_keys; foreign_keys; params; indices }
 
   let name t = t.name
+  let name' (V t) = t.name
   let row t = t.row
   let primary_key t = t.primary_key
   let unique_keys t = t.unique_keys
   let foreign_keys t = t.foreign_keys
   let set_foreign_keys t fks = t.foreign_keys <- fks
-  let params t = t.params
   let indices t = t.indices
+  let params t = t.params
 
   let cols ?(ignore = []) t = match ignore with
   | [] -> Row.cols t.row
@@ -353,16 +342,14 @@ module Table = struct
 
   module Unique_key = struct
     type nonrec 'r t = 'r unique_key
-
     let v cols = { cols }
-    let cols (u : 'r unique_key) = u.cols
 
+    let cols (u : 'r unique_key) = u.cols
     let name (u : 'r unique_key) =
       (* When new DBMS will be added we may want to have that as a proper
          user settable field that we use as the constraint name. For now
          we can't get that back in SQLite without parsing SQL so we avoid. *)
-      let name (Col.V c) = Col.name c in
-      String.concat "_" (List.map name u.cols)
+      String.concat "_" (List.map Col.name' u.cols)
 
     let equal u0 u1 = Col.list_equal_names (cols u0) (cols u1)
   end
@@ -387,13 +374,12 @@ module Table = struct
       (* When new DBMS will be added we may want to have that as a proper
          user settable field that we use as the constraint name. For now
          we can't get that back in SQLite without parsing SQL so we avoid. *)
-      let cname (Col.V c) = Col.name c  in
-      let cols = List.map cname fk.cols in
+      let cols = List.map Col.name' fk.cols in
       match fk.parent with
       | Parent (`Self, dst) ->
-          String.concat "_" (cols @ ("" :: List.map cname dst))
+          String.concat "_" (cols @ ("" :: List.map Col.name' dst))
       | Parent (`Table t, dst) ->
-          String.concat "_" (cols @ (name t) :: List.map cname dst)
+          String.concat "_" (cols @ (name t) :: List.map Col.name' dst)
 
     let equal_parents p0 p1 = match p0, p1 with
     | Parent (`Self, _), Parent (`Table _, _) -> false
@@ -427,7 +413,7 @@ module Table = struct
     let name (i : 'r t) = i.name
     let cols (i : 'r t) = i.cols
     let auto_name ~table_name:t cs =
-      String.concat "_" (t :: List.map (fun (Col.V c) -> Col.name c) cs)
+      String.concat "_" (t :: List.map Col.name' cs)
 
     let get_name ~table_name i = match name i with
     | None -> auto_name ~table_name (cols i) | Some name -> name
@@ -443,8 +429,8 @@ module Table = struct
   (* Dependencies *)
 
   let check_name_unicity tables =
-    let check_name ns (V t) =
-      let n = name t in
+    let check_name ns t =
+      let n = name' t in
       if not (Sset.mem n ns) then Sset.add n ns else
       Fmt.invalid_arg "Two tables are named %s" n
     in
@@ -457,26 +443,27 @@ module Table = struct
     in
     List.fold_left add_dep Sset.empty (foreign_keys t)
 
-  let sort ts = (* Not t.r. but bound by depth of dependency DAG *)
+  let sort ts =
+    (* Not t.r. but bound by depth of dependency DAG. Sort by depth first
+       exploration of the graph. *)
     let () = check_name_unicity ts in
-    let name (V t) = name t in
     let table_by_name =
-      let add acc t = Smap.add (name t) (t, table_deps t) acc in
+      let add acc t = Smap.add (name' t) (t, table_deps t) acc in
       let map = List.fold_left add Smap.empty ts in
       fun n -> Smap.find_opt n map
     in
-    let deps t = match table_by_name (name t) with
+    let deps t = match table_by_name (name' t) with
     | None -> assert false
     | Some (_, deps) ->
         let add_dep n acc = match table_by_name n with
         | Some (t, _) -> t :: acc
         | None ->
             Fmt.invalid_arg
-              "dependency %s of table %s has no definition" n (name t)
+              "dependency %s of table %s has no definition" n (name' t)
         in
         Sset.fold add_dep deps []
     in
-    let mem t l = List.exists (fun t' -> name t = name t') l in
+    let mem t l = List.exists (fun t' -> name' t = name' t') l in
     let rec loop path order = function
     | [] -> Ok (path, order)
     | t :: ts ->
@@ -493,9 +480,7 @@ end
 
 module Schema = struct
   type name = string
-  type t =
-    { name : name option;
-      tables : Table.v list; }
+  type t = { name : name option; tables : Table.v list; }
 
   let v ?name ~tables () =
     Table.check_name_unicity tables;
@@ -519,9 +504,9 @@ module Schema = struct
 
   (* Changes
 
-     Note that we rewrite and manipulate schema values in unsound ways for
-     typed usage. But the result is sound for computing changes which is
-     mostly about comparing names. *)
+     Note that we rewrite and manipulate schema values in unsound ways
+     for typed usage. But the result is sound for computing changes
+     which is mostly (but not only) about comparing names. *)
 
   type rename = string * string
   type col_renames = Table.name * rename list
@@ -530,8 +515,7 @@ module Schema = struct
     let check errs (n, cs) = match find_table n srcs with
     | None -> Fmt.str "column rename for %s: no such table" n :: errs
     | Some (Table.V t) ->
-        let col_name (Col.V c) = Col.name c in
-        let cols = Sset.of_list (List.map col_name (Table.cols t)) in
+        let cols = Sset.of_list (List.map Col.name' (Table.cols t)) in
         let check_col errs (s, _) = match Sset.mem s cols with
         | true -> errs
         | false -> Fmt.str "column rename %s.%s: no such column" n s :: errs
@@ -800,13 +784,13 @@ module Schema = struct
       (* Doing all the renames first. That makes things easier. *)
       rename_src_schema ~col_renames ~table_renames ~src ~dst
     in
-    let drop (_, Table.V t) = `Drop_table (Table.name t) in
-    let assoc (Table.V t as tbl) = Table.name t, tbl in
+    let drop (_, t) = `Drop_table (Table.name' t) in
+    let assoc t = Table.name' t, t in
     let srcs = List.map assoc (tables src) in
     let rec loop rev_changes srcs = function
     | [] -> List.rev_append (List.map drop srcs) rev_changes
-    | (Table.V d as dst) :: dsts ->
-        let src, srcs = assoc_find_remove (Table.name d) srcs in
+    | dst :: dsts ->
+        let src, srcs = assoc_find_remove (Table.name' dst) srcs in
         let rev_changes = match src with
         | None -> `Create_table dst :: rev_changes
         | Some src ->
@@ -948,7 +932,11 @@ module Schema = struct
     Sset.(empty
           |> add "unit" |> add "prod" |> add "cat" |> add "empty" |> add "fold"
           |> add "cols" |> add "col_count" |> add "pp_header" |> add "value_pp"
-          |> add "list_pp")
+          |> add "list_pp" |> add "bool" |> add "int" |> add "int64"
+          |> add "float" |> add "text" |> add "blob" |> add "option"
+          |> add "t1" |> add "t2" |> add "t3" |> add "t4" |> add "t5"
+          |> add "t6")
+
 
   let idify = function ' ' -> '_' | c -> c (* There's likely more to it. *)
   let prime id = id ^ "'"

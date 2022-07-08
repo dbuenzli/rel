@@ -16,6 +16,8 @@ It provides:
 
 {1:manuals Manuals}
 
+A few things are {{!todo}TODO}.
+
 These manuals are available:
 
 - The {{!page-sqlite3_howto}Sqlite3 howto} explains how to get started
@@ -51,3 +53,34 @@ Rel_kit
 Rel_cli
 Rel_pool
 }
+
+{1:todo TODO}
+
+- SQLite seems quite unique in not specifying a size for
+  text. We likely need to add an int to {!Rel.Type.Text} at some
+  point.
+
+- A simple short, {{!page-tutorial}tutorial}.
+
+- {!Rel} should maybe depend on {!Rel_sql}, or possibly have a
+  pre-Rel_sql with the expression language, since we will hit
+  recursive dependencies. One issue is that we would like to be able
+  to define an expression for the default of columns.  This should be
+  parametric on the dialect and/or be a structured SQL expression.
+
+- Having {!Rel_sql.type-dialect} at the level of statements creation
+  is a bit annoying. Maybe go back to the idea of having an AST in
+  {!Rel_sql.Stmt.src}. The backends then directly act on this. The only thing
+  we need is something that is fast to test for equality for caches of
+  prepared statements.
+
+- {!Rel.Col} need a collation parameter. Also the [`Expr]
+  {!Rel.Col.type-default} case is unsatisfying it should be either an SQL
+  expression AST or at least be a function of the dialect (which gets
+  us into recursive trouble). Also for indexes this is not as
+  expressive as it
+  {{:https://www.sqlite.org/syntax/indexed-column.html}could be}.
+
+- Sort-out the naming stuff. For constraints and indices (the
+  {!Rel.Table.Index.get_name} stuff is not that great, should we simply
+  have [""] as a default and rename when we add to a table ?)

@@ -7,17 +7,7 @@
 
     This module provides mecanism to type and bind parameters of
     raw SQL statements and high-level functions to generate SQL
-    statements from {!Rel} representations.
-
-    {b TODO.}
-
-    - Maybe we still have our deps wrong here. Rel should
-      depend on Rel_sql, or possibly have a pre-Rel_sql with the
-      expression language, since we will hit recursive dependencies.
-    - Having {!Sql_rel.dialect} at the level of statements creation
-      is a bit annoying. Maybe go back to the idea of having an AST in
-      {!Stmt.src}. The only thing we need is something that is fast
-      to test for equality for caches. *)
+    statements from {!Rel} representations. *)
 
 (** {1:stmt Statements} *)
 
@@ -156,57 +146,19 @@ type insert_or_action = [`Abort | `Fail | `Ignore | `Replace | `Rollback ]
 
 (** SQL satements in a given dialect.
 
-    Note that this does not try to abstract SQL per se but rather what
-    we want to do with the SQL.
-
-    An example of this is {!DIALECT.change_stmts}: in SQLite most ALTER TABLE
-    statements are unsupportd so the returned statement implement the
-    {{:https://sqlite.org/lang_altertable.html#making_other_kinds_of_table_schema_changes}sequence of operations} that allow to mimic them. *)
+    This does not try to abstract SQL per se but rather what we want
+    to do with the SQL. For example {!DIALECT.schema_changes_stmts}: in
+    SQLite most ALTER TABLE statements are unsupported so the returned
+    statement implement the
+    {{:https://sqlite.org/lang_altertable.html#making_other_kinds_of_table_schema_changes}sequence
+    of operations} that allow to mimic them. *)
 module type DIALECT = sig
 
   val kind : string
-  (** [kind] is the kind of dialect. Usually the name of the DBMS. *)
+  (** [kind] is the kind of dialect. Usually the name of the database
+      management system. *)
 
-  (** {1:creating Creating} *)
-
-  val create_table :
-    ?schema:string -> ?if_not_exists:unit -> 'r Rel.Table.t -> unit Stmt.t
-  (** [create_table t] is a CREATE TABLE statement for [t]. The
-      table is created in [schema] if specified. The statement is
-      CREATE TABLE IF NOT EXISTS when [~if_not_exists:()] is
-      given. *)
-
-  val create_index :
-    ?schema:string -> ?if_not_exists:unit -> 'r Rel.Table.t ->
-    'r Rel.Table.index -> unit Stmt.t
-  (** [create_index t i] is a CREATE INDEX statement for [i] on table
-      [t] in schema [schema]. The statement is CREATE INDEX IF NOT
-      EXISTS when [~if_not_exists:()] is given. *)
-
-  (** {1:dropping Dropping} *)
-
-  val drop_table :
-    ?schema:string -> ?if_exists:unit -> 'r Rel.Table.t -> unit Stmt.t
-  (** [drop_table t] is a DROP TABLE statement for [t]. The
-      dropped table is in [schema] if specified. The statement is
-      DROP TABLE IF EXISTS when [~if_exists:()] is given. *)
-
-  val drop_index :
-    ?schema:string -> ?if_exists:unit -> 'r Rel.Table.t ->
-    'r Rel.Table.index -> unit Stmt.t
-  (** [drop_index t i] is a DROP INDEX statement to drop index [i]
-      of table [t]. The index and table are in [schema] if specified. The
-      statement is DROP INDEX IF EXISTS when [~if_exists:()] is
-      given. *)
-
-  (** {1:changing Changing} *)
-
-  val change_stmts :
-    ?schema:string -> Rel.Schema.change list -> unit Stmt.t
-  (** [changes cs] is a sequence of SQL statements to perform the
-      changes [cs] on the database. *)
-
-  (** {1:insert Insert} *)
+  (** {1:inserts Inserts} *)
 
   val insert_into :
     ?or_action:insert_or_action ->
@@ -224,6 +176,41 @@ module type DIALECT = sig
   val delete_from :
     ?schema:string -> 'r Rel.Table.t ->
     where:'r Rel.Col.value list -> unit Stmt.t
+
+  (** {1:ddl Data definition statements} *)
+
+  val create_table :
+    ?schema:string -> ?if_not_exists:unit -> 'r Rel.Table.t -> unit Stmt.t
+  (** [create_table t] is a CREATE TABLE statement for [t]. The
+      table is created in [schema] if specified. The statement is
+      CREATE TABLE IF NOT EXISTS when [~if_not_exists:()] is
+      given. *)
+
+  val create_index :
+    ?schema:string -> ?if_not_exists:unit -> 'r Rel.Table.t ->
+    'r Rel.Table.index -> unit Stmt.t
+  (** [create_index t i] is a CREATE INDEX statement for [i] on table
+      [t] in schema [schema]. The statement is CREATE INDEX IF NOT
+      EXISTS when [~if_not_exists:()] is given. *)
+
+  val drop_table :
+    ?schema:string -> ?if_exists:unit -> 'r Rel.Table.t -> unit Stmt.t
+  (** [drop_table t] is a DROP TABLE statement for [t]. The
+      dropped table is in [schema] if specified. The statement is
+      DROP TABLE IF EXISTS when [~if_exists:()] is given. *)
+
+  val drop_index :
+    ?schema:string -> ?if_exists:unit -> 'r Rel.Table.t ->
+    'r Rel.Table.index -> unit Stmt.t
+  (** [drop_index t i] is a DROP INDEX statement to drop index [i]
+      of table [t]. The index and table are in [schema] if specified. The
+      statement is DROP INDEX IF EXISTS when [~if_exists:()] is
+      given. *)
+
+  val schema_changes_stmts :
+    ?schema:string -> Rel.Schema.change list -> unit Stmt.t
+  (** [schema_changes_stmts cs] is a sequence of SQL statements to perform the
+      schema changes [cs] on the database. *)
 end
 
 type dialect = (module DIALECT)
@@ -235,11 +222,11 @@ val insert_into :
   dialect -> ?or_action:insert_or_action ->
   ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
   ('r -> unit Stmt.t)
-(** [insert_into d ~ignore t] is an SQL INSERT INTO statement
-    which inserts i [t] values draw from an value values drawn from
-    a provided OCaml table row. Columns mentioned in [col] of the
-    row are ignored for the insertion. [insert_or_action] specifies
-    a corresponding [INSERT OR]. *)
+(** [insert_into d ~ignore t] is an SQL INSERT INTO statement which
+    inserts i [t] values draw from an value values drawn from a
+    provided OCaml table row. Columns mentioned in [col] of the row
+    are ignored for the insertion. [insert_or_action] specifies a
+    corresponding [INSERT OR]. *)
 
 val insert_into_cols :
   dialect -> ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
@@ -265,6 +252,20 @@ val delete_from :
 
 (** {1:ddl Data definition statements} *)
 
+val create_schema_stmts :
+  dialect -> ?drop_if_exists:bool -> Rel.Schema.t -> unit Stmt.t
+(** [create_schema_stmts d ?drop_if_exists s] is the sequence of
+    statements to create schema [s].
+
+    If [drop_if_exists] is [true] (defaults to [false]), the sequence
+    starts by dropping the tables of [s] if they exist, {b this erases
+    any pre-existing data in these tables in database}. *)
+
+val schema_changes_stmts :
+  dialect -> ?schema:string -> Rel.Schema.change list -> unit Stmt.t
+(** [schmema_change_stmats d cs] is the sequence of statments to
+    perform the changes [cs]. *)
+
 val create_table :
   dialect -> ?schema:string -> ?if_not_exists:unit ->
   'a Rel.Table.t -> unit Stmt.t
@@ -288,14 +289,8 @@ val drop_index :
 (** [drop_index d stmt t i] drops index [i] of table [t], see
     {!DIALECT.drop_index}. *)
 
-val create_schema_stmts :
-  dialect -> ?drop_if_exists:bool -> Rel.Schema.t -> unit Stmt.t
-(** [create_schema_stmts d ?drop_if_exists s] is the sequence of
-    statements to create schema [s].
 
-    If [drop_if_exists] is [true] (defaults to [false]), the sequence
-    starts by dropping the tables of [s] if they exist, {b this erases
-    any pre-existing data in these tables in database}. *)
+
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The rel programmers

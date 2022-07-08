@@ -3,16 +3,19 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
-let strf = Format.asprintf
-let pf = Format.fprintf
-let pp_comma ppf _ = Format.pp_print_char ppf ','; Format.pp_print_space ppf ()
-let pp_string = Format.pp_print_string
-let pp_hbox pp_v ppf v =
-  Format.(pp_open_hbox ppf (); pp_v ppf v; pp_close_box ppf ())
+module Fmt =  struct
+  let str = Format.asprintf
+  let pf = Format.fprintf
+  let comma ppf _ = Format.pp_print_char ppf ','; Format.pp_print_space ppf ()
+  let string = Format.pp_print_string
+  let hbox pp_v ppf v =
+    Format.(pp_open_hbox ppf (); pp_v ppf v; pp_close_box ppf ())
 
-let pp_lines ppf s =
-  let ls = String.split_on_char '\n' s in
-  Format.pp_print_list ~pp_sep:Format.pp_force_newline pp_string ppf ls
+  let lines ppf s =
+    let ls = String.split_on_char '\n' s in
+    Format.pp_print_list ~pp_sep:Format.pp_force_newline
+ string ppf ls
+end
 
 module Stmt = struct
   open Rel
@@ -24,10 +27,10 @@ module Stmt = struct
   let src st = st.src
   let result st = st.result
   let rev_args st = st.rev_args
-  let pp_src ppf st = pp_lines ppf st.src
+  let pp_src ppf st = Fmt.lines ppf st.src
   let pp ppf st =
-    pf ppf "@[<v>%a@,@[%a@]@]"
-      pp_lines st.src
+    Fmt.pf ppf "@[<v>%a@,@[%a@]@]"
+      Fmt.lines st.src
       (Format.pp_print_list ~pp_sep:(Format.pp_print_space) pp_arg)
       (List.rev st.rev_args)
 
@@ -78,7 +81,7 @@ module Syntax = struct
       (* N.B. this will accept strings with single internal qchar *)
       let len = String.length s in
       if len < 2 || s.[0] <> qchar || s.[len - 1] <> qchar
-      then failwith (strf "%S: not a %s (missing %c)" s kind qchar) else
+      then failwith (Fmt.str "%S: not a %s (missing %c)" s kind qchar) else
       let rec find_len last len max i =
         if i > max then len else
         if last = qchar && s.[i] = qchar
@@ -104,8 +107,7 @@ module Syntax = struct
 
   let id s = sql_quote '\"' s
   let id_in_schema ?schema i = match schema with
-  | None -> id i | Some s -> strf "%s.%s" (id s) (id i)
-
+  | None -> id i | Some s -> Fmt.str "%s.%s" (id s) (id i)
 
   let sort_order_keyword = function `Asc -> "ASC" | `Desc -> "DESC"
   let foreign_key_action_keyword = function
@@ -113,11 +115,26 @@ module Syntax = struct
   | `Cascade -> "CASCADE" | `Restrict -> "RESTRICT"
 end
 
-
 type insert_or_action = [`Abort | `Fail | `Ignore | `Replace | `Rollback ]
 
 module type DIALECT = sig
   val kind : string
+
+  val insert_into :
+    ?or_action:insert_or_action -> ?schema:string ->
+    ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t -> ('r -> unit Stmt.t)
+
+  val insert_into_cols :
+    ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
+    ('r Rel.Col.value list -> unit Stmt.t)
+
+  val update :
+    ?schema:string -> 'r Rel.Table.t -> set:'r Rel.Col.value list ->
+    where:'r Rel.Col.value list -> unit Stmt.t
+
+  val delete_from :
+    ?schema:string -> 'r Rel.Table.t -> where:'r Rel.Col.value list ->
+    unit Stmt.t
 
   val create_table :
     ?schema:string -> ?if_not_exists:unit -> 'r Rel.Table.t -> unit Stmt.t
@@ -133,25 +150,8 @@ module type DIALECT = sig
     ?schema:string -> ?if_exists:unit -> 'r Rel.Table.t ->
     'r Rel.Table.index -> unit Stmt.t
 
-  val change_stmts :
+  val schema_changes_stmts :
     ?schema:string -> Rel.Schema.change list -> unit Stmt.t
-
-  val insert_into :
-    ?or_action:insert_or_action ->
-    ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
-    ('r -> unit Stmt.t)
-
-  val insert_into_cols :
-    ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
-    ('r Rel.Col.value list -> unit Stmt.t)
-
-  val update :
-    ?schema:string -> 'r Rel.Table.t -> set:'r Rel.Col.value list ->
-    where:'r Rel.Col.value list -> unit Stmt.t
-
-  val delete_from :
-    ?schema:string -> 'r Rel.Table.t ->
-    where:'r Rel.Col.value list -> unit Stmt.t
 end
 
 type dialect = (module DIALECT)
@@ -189,14 +189,17 @@ let create_schema_stmts (module Sql : DIALECT) ?(drop_if_exists = false) s =
   in
   let stmts =
     let add_table acc (Rel.Table.V t) =
+      let acc = (Sql.create_table ?schema t) :: acc in
       let add_index acc i = Sql.create_index ?schema t i :: acc in
-      let acc = List.fold_left add_index acc (Rel.Table.indices t) in
-      (Sql.create_table ?schema t) :: acc
+      List.fold_left add_index acc (Rel.Table.indices t)
     in
     List.fold_left add_table stmts (Rel.Schema.tables s)
   in
   let sql = String.concat "\n" (List.rev_map Stmt.src stmts) in
   Stmt.(func sql unit)
+
+let schema_changes_stmts (module Sql : DIALECT) ?schema cs =
+  Sql.schema_changes_stmts ?schema cs
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The rel programmers

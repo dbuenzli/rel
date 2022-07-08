@@ -20,7 +20,7 @@ It provides:
 Rel is distributed under the ISC license. The base library has no
 dependencies. The `Rel_cli` library depends on `cmdliner`. The
 `Rel_sqlite3` library depends on the C SQLite3 library (at least
-v3.26.2).
+v3.38.5).
 
 Homepage: https://erratique.ch/software/rel
 

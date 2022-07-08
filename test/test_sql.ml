@@ -37,7 +37,7 @@ let select_rows db bag row =
   log_sql "select" (Rel_sql.Stmt.src st);
   let* ops = Rel_sqlite3.fold db st List.cons [] in
   let ops = List.rev ops in
-  log "@[<v>%a@,---@]" (Row.list_pp ~header:true row) ops;
+  log "@[<v>%a@,---@]" (Row.value_pp_list ~header:true row) ops;
   Ok ()
 
 (*
@@ -138,7 +138,7 @@ module Test_duos = struct
   let diff = Q.diff
 
   let diff db =
-    let row = Row.Quick.(t2 (text "name") (int "diff")) in
+    let row = Row.(t2 (text "name") (int "diff")) in
     select_rows db diff row
 
   let thirties =
@@ -146,7 +146,7 @@ module Test_duos = struct
     Q.persons_in_age_range ~first:(Int.v 30) ~last:(Int.v 39)
 
   let thirties db =
-    let row = Row.Quick.(t1 (text "name")) in
+    let row = Row.(t1 (text "name")) in
     select_rows db thirties row
 
   let thirties' =
@@ -158,7 +158,7 @@ module Test_duos = struct
     Q.persons_sat ~sat:in_thirties
 
   let thirties' db =
-    let row = Row.Quick.(t1 (text "name")) in
+    let row = Row.(t1 (text "name")) in
     select_rows db thirties' row
 
   let between_edna_and_bert_excl =
@@ -168,7 +168,7 @@ module Test_duos = struct
     Q.persons_in_age_range ~first:edna ~last:(Int.(bert - v 1))
 
   let between_edna_and_bert_excl db =
-    let row = Row.Quick.(t1 (text "name")) in
+    let row = Row.(t1 (text "name")) in
     select_rows db between_edna_and_bert_excl row
 
   let thirties_by_pred pred =
@@ -180,11 +180,11 @@ module Test_duos = struct
     Q.persons_sat ~sat:in_thirties
 
   let thirties_by_pred' db =
-    let row = Row.Quick.(t1 (text "name")) in
+    let row = Row.(t1 (text "name")) in
     select_rows db (thirties_by_pred Q.thirties_pred') row
 
   let thirties_by_pred db =
-    let row = Row.Quick.(t1 (text "name")) in
+    let row = Row.(t1 (text "name")) in
     select_rows db (thirties_by_pred Q.thirties_pred) row
 
   let run () =
@@ -225,7 +225,7 @@ module Test_org = struct
     Q.department_expertise ~task:(Text.v "abstract")
 
   let abstract_expertise db =
-    let row = Row.Quick.(t1 (text "name")) in
+    let row = Row.(t1 (text "name")) in
     select_rows db abstract_expertise row
 
   let run () =
