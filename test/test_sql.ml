@@ -17,8 +17,9 @@ let log_if_error ~use = function
 | Ok v -> v | Error e -> Format.eprintf "Error: %s@." e; use
 
 let create_schema db schema =
-  log_sql "schema" (Rel_sql.Stmt.src schema);
-  Rel_sqlite3.exec_once db schema
+  List.iter (fun s -> log_sql "schema" (Rel_sql.Stmt.src s)) schema;
+  List.iter (fun s -> ignore (Rel_sqlite3.exec db s)) schema;
+  Ok ()
 
 let insert_row db sql r =
   let st = sql r in
@@ -75,7 +76,7 @@ module Test_products = struct
   let schema =
     let tables = [Table.V Product.table; Table.V Order.table] in
     let schema = Rel.Schema.v ~tables () in
-    Rel_sql.create_schema_stmts dialect ~drop_if_exists:false schema
+    Rel_sql.create_schema dialect schema
 
   let insert_orders = Rel_sql.insert_into dialect Order.table
   let insert_product =
@@ -108,10 +109,10 @@ module Test_products = struct
 
   let run () =
     log "Testing Products schema";
-    Rel_sqlite3.error_string @@
+    Rel_sqlite3.string_error @@
     let* db = Rel_sqlite3.(open' ~mode:Rel_sqlite3.Memory "") in
     let finally () =
-      log_if_error ~use:() Rel_sqlite3.(error_string @@ close db)
+      log_if_error ~use:() Rel_sqlite3.(string_error @@ close db)
     in
     Fun.protect ~finally @@ fun () ->
     let* () = create_schema db schema in
@@ -130,7 +131,7 @@ module Test_duos = struct
   let schema =
     let tables = [Table.V Person.table; Table.V Duo.table] in
     let schema = Schema.v ~tables () in
-    Rel_sql.create_schema_stmts dialect ~drop_if_exists:false schema
+    Rel_sql.create_schema dialect schema
 
   let insert_person = Rel_sql.insert_into dialect Person.table
   let insert_duo = Rel_sql.insert_into dialect Duo.table
@@ -189,10 +190,10 @@ module Test_duos = struct
 
   let run () =
     log "Testing Duos schema";
-    Rel_sqlite3.error_string @@
+    Rel_sqlite3.string_error @@
     let* db = Rel_sqlite3.open' ~mode:Rel_sqlite3.Memory "" in
     let finally () =
-      log_if_error ~use:() Rel_sqlite3.(error_string @@ close db)
+      log_if_error ~use:() Rel_sqlite3.(string_error @@ close db)
     in
     Fun.protect ~finally @@ fun () ->
     let* () = create_schema db schema in
@@ -214,7 +215,7 @@ module Test_org = struct
   let tables = Table.[V Department.table; V Person.table; V Task.table]
   let schema =
     let schema = Schema.v ~tables () in
-    Rel_sql.create_schema_stmts dialect ~drop_if_exists:false schema
+    Rel_sql.create_schema dialect schema
 
   let insert_department = Rel_sql.insert_into dialect Department.table
   let insert_person = Rel_sql.insert_into dialect Person.table
@@ -230,10 +231,10 @@ module Test_org = struct
 
   let run () =
     log "Testing Org schema";
-    Rel_sqlite3.error_string @@
+    Rel_sqlite3.string_error @@
     let* db = Rel_sqlite3.open' ~mode:Rel_sqlite3.Memory "" in
     let finally () =
-      log_if_error ~use:() Rel_sqlite3.(error_string @@ close db)
+      log_if_error ~use:() Rel_sqlite3.(string_error @@ close db)
     in
     Fun.protect ~finally @@ fun () ->
     let* () = create_schema db schema in

@@ -324,8 +324,8 @@ module Error : sig
       SQLITE_WARNING_AUTOINDEX} *)
 end
 
-val error_string : ('a, error) result -> ('a, string) result
-(** [error_string r] is [Result.map_error Error.message r]. *)
+val string_error : ('a, error) result -> ('a, string) result
+(** [string_error r] is [Result.map_error Error.message r]. *)
 
 (** {1:library Library configuration and information} *)
 
@@ -421,10 +421,6 @@ val exec_sql : t -> string -> (unit, error) result
     to execute SQL scripts. If you are doing lots of inserts or
     updates make a {{!Rel_sqlite3.with_transaction}transaction} to
     ensure good performance. *)
-
-val exec_once : t -> unit Rel_sql.Stmt.t -> (unit, error) result
-(** [exec_once db st] is {!exec_sql} [ db (Sql.Stmt.src st)]. Use {!exec}
-    if the source of [st] may be repeated in the future. *)
 
 val fold : t ->
   'r Rel_sql.Stmt.t -> ('r -> 'c -> 'c) -> 'c -> ('c, error) result

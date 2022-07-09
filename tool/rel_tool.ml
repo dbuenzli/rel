@@ -29,7 +29,7 @@ let string_of_file file =
 
 let sqlite3_db_of_sql sql_file = (* Create an in-memory db for the sql file. *)
   let* sql = string_of_file sql_file in
-  Rel_sqlite3.error_string @@ Result.join @@
+  Rel_sqlite3.string_error @@ Result.join @@
   let* db = Rel_sqlite3.(open' ~mode:Memory "") in
   Rel_sqlite3.with_transaction `Immediate db @@ fun db ->
   let* () = Rel_sqlite3.exec_sql db sql in
@@ -42,17 +42,17 @@ let get_sqlite3_schema spec =
   | `Sqlite3 "-" -> Error (strf "Cannot read an SQlite3 file from stdin")
   | `Sqlite3 file ->
       file_error file @@
-      let* db = Rel_sqlite3.(open' file |> error_string) in
+      let* db = Rel_sqlite3.(open' file |> string_error) in
       Ok (file, db)
   | `Sqlite3_sql file ->
       file_error file @@
       let* db = sqlite3_db_of_sql file in
       Ok (file, db)
   in
-  let finally () = log_if_error ~use:() Rel_sqlite3.(close db |> error_string)in
+  let finally () = log_if_error ~use:() Rel_sqlite3.(close db |> string_error)in
   Fun.protect ~finally @@ fun () ->
   file_error file @@
-  let* (s, issues) = Rel_sqlite3.(schema_of_db db |> error_string) in
+  let* (s, issues) = Rel_sqlite3.(schema_of_db db |> string_error) in
   Ok (file, s, issues)
 
 let get_schema db_spec = match db_spec with
@@ -66,8 +66,8 @@ let schema db_spec format =
   let* () = match format with
   | `Dot rankdir -> pr "@[%a@]@." (Schema.pp_dot ~rankdir) s; Ok ()
   | `Sqlite3 ->
-      let sql = Rel_sql.create_schema_stmts Rel_sqlite3.dialect s in
-      pr "@[%a@]@." Rel_sql.Stmt.pp_src sql; Ok ()
+      let stmts = Rel_sql.create_schema Rel_sqlite3.dialect s in
+      pr "@[<v>%a@]@." (Format.pp_print_list Rel_sql.Stmt.pp_src) stmts; Ok ()
   | `Ocaml kind ->
       let* () = Schema.must_be_dag s in
       pr "@[%a@]@." (Schema.pp_ocaml kind) s; Ok ()
@@ -77,7 +77,7 @@ let schema db_spec format =
 
 (* Changes command *)
 
-let pp_table_change table_name ppf c =
+let pp_table_change table_name ppf (c : 'a Table.change) =
   let pp_after ppf = function
   | None -> Format.pp_print_string ppf "FIRST"
   | Some c -> pf ppf "AFTER %s" (Col.name' c)
@@ -92,7 +92,7 @@ let pp_table_change table_name ppf c =
     let pp_sep ppf () = pf ppf ",@ " in
     pf ppf "(@[%a@])" (Format.pp_print_list ~pp_sep pp_col) cs
   in
-  match (c : Schema.table_change) with
+  match c with
   | Add_column_after (c,a) -> pf ppf "ADD COLUMN %s %a" (Col.name' c) pp_after a
   | Add_foreign_key k -> pf ppf "ADD FOREIGN KEY %s" (Table.Foreign_key.name k)
   | Add_primary_key k -> pf ppf "ADD PRIMARY KEY %a" pp_cols k
@@ -115,25 +115,33 @@ let pp_table_change table_name ppf c =
       pf ppf "COLUMN %s SET POSITION %a" (Col.name' c) pp_after after
 
 let pp_change ppf = function
-| `Create_table (Table.V t) -> pf ppf "CREATE %s …" (Table.name t)
-| `Drop_table n -> pf ppf "DROP TABLE %s" n
-| `Rename_column (t, (src, dst)) -> pf ppf "RENAME COLUMN %s.%s TO %s" t src dst
-| `Rename_table (src, dst) -> pf ppf "RENAME TABLE %s to %s" src dst
-| `Alter_table (Table.V t, cs) ->
+| Schema.Create_table t -> pf ppf "CREATE %s …" (Table.name t)
+| Drop_table n -> pf ppf "DROP TABLE %s" n
+| Rename_column (t, (src, dst)) -> pf ppf "RENAME COLUMN %s.%s TO %s" t src dst
+| Rename_table (src, dst) -> pf ppf "RENAME TABLE %s to %s" src dst
+| Alter_table (t, cs) ->
     let name = Table.name t in
     let pp_list = Format.pp_print_list (pp_table_change name) in
     pf ppf "@[<v2>ATLER TABLE %s@,%a@]" name pp_list cs
 
-let changes (col_renames, table_renames) src dst format =
+let changes (col_renames, table_renames) src dst' format =
   log_if_error ~use:Cmdliner.Cmd.Exit.some_error @@
   let* src_file, src, src_issues = get_schema src in
-  let* dst_file, dst, dst_issues = get_schema dst in
+  let* dst_file, dst, dst_issues = get_schema dst' in
   List.iter (log_warn "%s: %s" src_file) src_issues;
   List.iter (log_warn "%s: %s" dst_file) dst_issues;
   let* cs = Schema.changes ~col_renames ~table_renames ~src ~dst () in
   begin match format with
-  | None | Some `Debug -> pr "@[<v>%a@]" (Format.pp_print_list pp_change) cs;
-  | Some `Sqlite3 -> failwith "TODO"
+  | None ->
+      begin match dst' with
+      | `Sqlite3 _ | `Sqlite3_sql _ ->
+          let stmts = Rel_sql.schema_changes Rel_sqlite3.dialect cs in
+          pr "@[<v>%a@]@." (Format.pp_print_list Rel_sql.Stmt.pp_src) stmts
+      end
+  | Some `Debug -> pr "@[<v>%a@]" (Format.pp_print_list pp_change) cs;
+  | Some `Sqlite3 ->
+      let stmts = Rel_sql.schema_changes Rel_sqlite3.dialect cs in
+      pr "@[<v>%a@]@." (Format.pp_print_list Rel_sql.Stmt.pp_src) stmts
   end;
   Ok 0
 
@@ -215,8 +223,7 @@ let changes_cmd =
         (Arg.doc_alts_enum formats)
     in
     let docv = "FMT" in
-    Arg.(value & opt (some (enum formats)) None &
-         info ["format"] ~doc ~docv)
+    Arg.(value & opt (some (enum formats)) None & info ["format"] ~doc ~docv)
   in
   Cmd.v (Cmd.info "changes" ~doc ~man)
     Term.(const changes $ Rel_cli.renames () $ src $ dst $ format)

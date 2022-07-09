@@ -9,6 +9,8 @@
     raw SQL statements and high-level functions to generate SQL
     statements from {!Rel} representations. *)
 
+open Rel
+
 (** {1:stmt Statements} *)
 
 (** Typed SQL statements.
@@ -19,7 +21,7 @@ module Stmt : sig
 
   (** {1:arg Arguments} *)
 
-  type arg = Arg : 'a Rel.Type.t * 'a -> arg (** *)
+  type arg = Arg : 'a Type.t * 'a -> arg (** *)
   (** The type for SQL statement arguments (parameters). *)
 
   val pp_arg : Format.formatter -> arg -> unit
@@ -28,10 +30,11 @@ module Stmt : sig
   (** {1:stmts Statements} *)
 
   type 'r t
-  (** The type for a closed (all arguments are bound) SQL statements
-        returning rows of type ['r]. *)
+  (** The type for a closed (all arguments are bound) SQL statement
+      returning rows of type ['r]. Note that this must be a single
+      statement. *)
 
-  val v : string -> rev_args:arg list -> result:'r Rel.Row.t -> 'r t
+  val v : string -> rev_args:arg list -> result:'r Row.t -> 'r t
   (** [v sql rev_args result] is a closed statement with srouce
         [sql], revered list of arguments (parameters) [rev_args] and
         yielding rows of type [result]. *)
@@ -39,7 +42,7 @@ module Stmt : sig
   val src : 'r t -> string
   (** [src st] is the source SQL statement of [st]. *)
 
-  val result : 'r t -> 'r Rel.Row.t
+  val result : 'r t -> 'r Row.t
   (** [result s] is the result of [s]. *)
 
   val rev_args : 'r t -> arg list
@@ -61,16 +64,16 @@ module Stmt : sig
   (** [func sql f] is the binding function of [f] used on the source
         SQL statement [sql]. *)
 
-  val ret : 'r Rel.Row.t -> 'r t func
+  val ret : 'r Row.t -> 'r t func
   (** [ret st row] is an open SQL statement [st] returning values of
         type [row]. *)
 
-  val ret_rev : 'r Rel.Row.t -> 'r t func
+  val ret_rev : 'r Row.t -> 'r t func
 
-  val arg : 'a Rel.Type.t -> 'b func -> ('a -> 'b) func
+  val arg : 'a Type.t -> 'b func -> ('a -> 'b) func
   (** [arg t f] binds a new variable of type [t] to [f]. *)
 
-  val ( @-> ) : 'a Rel.Type.t -> 'b func -> ('a -> 'b) func
+  val ( @-> ) : 'a Type.t -> 'b func -> ('a -> 'b) func
   (** [t @-> f] is [arg t f]. *)
 
   val unit : unit t func
@@ -79,25 +82,25 @@ module Stmt : sig
   (** The following constants get redefined here to allow consise
         specification with the [Sql.Stmt.()] notation. *)
 
-  val bool : bool Rel.Type.t
+  val bool : bool Type.t
   (** [bool] is {!Rel.Type.Bool}. *)
 
-  val int : int Rel.Type.t
+  val int : int Type.t
   (** [int] is {!Rel.Type.Int}. *)
 
-  val int64 : int64 Rel.Type.t
+  val int64 : int64 Type.t
   (** [int64] is {!Rel.Type.Int64}. *)
 
-  val float : float Rel.Type.t
+  val float : float Type.t
   (** [float] is {!Rel.Type.Float}. *)
 
-  val text : string Rel.Type.t
+  val text : string Type.t
   (** [text] is {!Rel.Type.Text}. *)
 
-  val blob : string Rel.Type.t
+  val blob : string Type.t
   (** [blob] is {!Rel.Type.Blob}. *)
 
-  val option : 'a Rel.Type.t -> 'a option Rel.Type.t
+  val option : 'a Type.t -> 'a option Type.t
   (** [option t] is {!Rel.Type.Option}[ t]. *)
 
   (** {2:projs Binding projections}
@@ -108,10 +111,10 @@ module Stmt : sig
   val nop : 'b func -> ('a -> 'b) func
   (** [nop f] adds an unused argument to [f]. *)
 
-  val proj : ('r -> 'a) -> 'a Rel.Type.t -> ('r -> 'b) func -> ('r -> 'b) func
+  val proj : ('r -> 'a) -> 'a Type.t -> ('r -> 'b) func -> ('r -> 'b) func
   (** [proj p t] binds the projection [p] of a value of type [t]. *)
 
-  val col : ('r, 'a) Rel.Col.t -> ('r -> 'b) func -> ('r -> 'b) func
+  val col : ('r, 'a) Col.t -> ('r -> 'b) func -> ('r -> 'b) func
   (** [col c f] binds the projection on column [c] of a row of type ['r] *)
 end
 
@@ -139,19 +142,19 @@ module Syntax : sig
       [schema] if specified. *)
 
   val sort_order_keyword : [`Asc | `Desc] -> string
-  val foreign_key_action_keyword : Rel.Table.Foreign_key.action -> string
+  val foreign_key_action_keyword : Table.Foreign_key.action -> string
 end
 
 type insert_or_action = [`Abort | `Fail | `Ignore | `Replace | `Rollback ]
 
 (** SQL satements in a given dialect.
 
-    This does not try to abstract SQL per se but rather what we want
+    This does not always try to abstract SQL per se but rather what we want
     to do with the SQL. For example {!DIALECT.schema_changes_stmts}: in
     SQLite most ALTER TABLE statements are unsupported so the returned
     statement implement the
-    {{:https://sqlite.org/lang_altertable.html#making_other_kinds_of_table_schema_changes}sequence
-    of operations} that allow to mimic them. *)
+    {{:https://sqlite.org/lang_altertable.html#making_other_kinds_of_table_schema_changes}
+    sequence of operations} that allow to mimic them in bulk. *)
 module type DIALECT = sig
 
   val kind : string
@@ -161,56 +164,48 @@ module type DIALECT = sig
   (** {1:inserts Inserts} *)
 
   val insert_into :
-    ?or_action:insert_or_action ->
-    ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
-    ('r -> unit Stmt.t)
+    ?or_action:insert_or_action -> ?schema:Schema.name ->
+    ?ignore:'r Col.v list -> 'r Table.t -> ('r -> unit Stmt.t)
+  (** See {!Rel_sql.insert_into}. *)
 
   val insert_into_cols :
-    ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
-    ('r Rel.Col.value list -> unit Stmt.t)
+    ?schema:Schema.name -> ?ignore:'r Col.v list -> 'r Table.t ->
+    ('r Col.value list -> unit Stmt.t)
+  (** See {!Rel_sql.insert_into_cols}. *)
 
   val update :
-    ?schema:string -> 'r Rel.Table.t -> set:'r Rel.Col.value list ->
-    where:'r Rel.Col.value list -> unit Stmt.t
+    ?schema:Schema.name -> 'r Table.t -> set:'r Col.value list ->
+    where:'r Col.value list -> unit Stmt.t
+  (** See {!Rel_sql.update}. *)
 
   val delete_from :
-    ?schema:string -> 'r Rel.Table.t ->
-    where:'r Rel.Col.value list -> unit Stmt.t
+    ?schema:string -> 'r Table.t -> where:'r Col.value list ->
+    unit Stmt.t
+  (** See {!Rel_sql.delete_from}. *)
 
   (** {1:ddl Data definition statements} *)
 
   val create_table :
-    ?schema:string -> ?if_not_exists:unit -> 'r Rel.Table.t -> unit Stmt.t
-  (** [create_table t] is a CREATE TABLE statement for [t]. The
-      table is created in [schema] if specified. The statement is
-      CREATE TABLE IF NOT EXISTS when [~if_not_exists:()] is
-      given. *)
-
-  val create_index :
-    ?schema:string -> ?if_not_exists:unit -> 'r Rel.Table.t ->
-    'r Rel.Table.index -> unit Stmt.t
-  (** [create_index t i] is a CREATE INDEX statement for [i] on table
-      [t] in schema [schema]. The statement is CREATE INDEX IF NOT
-      EXISTS when [~if_not_exists:()] is given. *)
+    ?schema:Schema.name -> ?if_not_exists:unit -> 'r Table.t -> unit Stmt.t
+  (** See {!Rel_sql.create_table}. *)
 
   val drop_table :
-    ?schema:string -> ?if_exists:unit -> 'r Rel.Table.t -> unit Stmt.t
-  (** [drop_table t] is a DROP TABLE statement for [t]. The
-      dropped table is in [schema] if specified. The statement is
-      DROP TABLE IF EXISTS when [~if_exists:()] is given. *)
+    ?schema:Schema.name -> ?if_exists:unit -> 'r Table.t -> unit Stmt.t
+  (** See {!Rel_sql.drop_table}. *)
+
+  val create_index :
+    ?schema:Schema.name -> ?if_not_exists:unit -> 'r Table.t ->
+    'r Table.index -> unit Stmt.t
+  (** See {!Rel_sql.create_index}. *)
 
   val drop_index :
-    ?schema:string -> ?if_exists:unit -> 'r Rel.Table.t ->
-    'r Rel.Table.index -> unit Stmt.t
-  (** [drop_index t i] is a DROP INDEX statement to drop index [i]
-      of table [t]. The index and table are in [schema] if specified. The
-      statement is DROP INDEX IF EXISTS when [~if_exists:()] is
-      given. *)
+    ?schema:Schema.name -> ?if_exists:unit -> 'r Table.t -> 'r Table.index ->
+    unit Stmt.t
+  (** See {!Rel_sql.drop_index}. *)
 
-  val schema_changes_stmts :
-    ?schema:string -> Rel.Schema.change list -> unit Stmt.t
-  (** [schema_changes_stmts cs] is a sequence of SQL statements to perform the
-      schema changes [cs] on the database. *)
+  val schema_changes :
+    ?schema:Schema.name -> Schema.change list -> unit Stmt.t list
+  (** See {!Rel_sql.schema_changes} *)
 end
 
 type dialect = (module DIALECT)
@@ -219,78 +214,92 @@ type dialect = (module DIALECT)
 (** {1:insupd Inserting, updating and deleting} *)
 
 val insert_into :
-  dialect -> ?or_action:insert_or_action ->
-  ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
-  ('r -> unit Stmt.t)
-(** [insert_into d ~ignore t] is an SQL INSERT INTO statement which
+  dialect -> ?or_action:insert_or_action -> ?schema:Schema.name ->
+  ?ignore:'r Col.v list -> 'r Table.t -> ('r -> unit Stmt.t)
+(** [insert_into d ~ignore t] is an INSERT INTO statement which
     inserts i [t] values draw from an value values drawn from a
     provided OCaml table row. Columns mentioned in [col] of the row
     are ignored for the insertion. [insert_or_action] specifies a
     corresponding [INSERT OR]. *)
 
 val insert_into_cols :
-  dialect -> ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
-  ('r Rel.Col.value list -> unit Stmt.t)
+  dialect -> ?schema:Schema.name -> ?ignore:'r Col.v list -> 'r Table.t ->
+  ('r Col.value list -> unit Stmt.t)
 (** [insert_into_cols] is like {!insert_into} but uses the
       given column values for the insertion. *)
 
 val update :
-  dialect ->
-  ?schema:string -> 'r Rel.Table.t -> set:'r Rel.Col.value list ->
-  where:'r Rel.Col.value list -> unit Stmt.t
-(** [update_cols d t ~set:cols ~where] is an SQL UPDATE statement
+  dialect -> ?schema:Schema.name -> 'r Table.t -> set:'r Col.value list ->
+  where:'r Col.value list -> unit Stmt.t
+(** [update_cols d t ~set:cols ~where] is an UPDATE statement
       which updates columns values [cols] of the rows of [t] where
       columns have all the values in [where] (AND).  {b FIXME.} The
       [where] should become (['r Bag.t -> bool value]). *)
 
 val delete_from :
-  dialect -> ?schema:string -> 'r Rel.Table.t -> where:'r Rel.Col.value list ->
+  dialect -> ?schema:Schema.name -> 'r Table.t -> where:'r Col.value list ->
   unit Stmt.t
-(** [delete_from d t ~where] is an SQL DELETE FROM statement which deletes
+(** [delete_from d t ~where] is a DELETE FROM statement which deletes
     rows where columns have all the values in [where] (AND).
     {b FIXME.} The [where] should become (['r Bag.t -> bool value]). *)
 
 (** {1:ddl Data definition statements} *)
 
-val create_schema_stmts :
-  dialect -> ?drop_if_exists:bool -> Rel.Schema.t -> unit Stmt.t
-(** [create_schema_stmts d ?drop_if_exists s] is the sequence of
-    statements to create schema [s].
-
-    If [drop_if_exists] is [true] (defaults to [false]), the sequence
-    starts by dropping the tables of [s] if they exist, {b this erases
-    any pre-existing data in these tables in database}. *)
-
-val schema_changes_stmts :
-  dialect -> ?schema:string -> Rel.Schema.change list -> unit Stmt.t
-(** [schmema_change_stmats d cs] is the sequence of statments to
-    perform the changes [cs]. *)
+(** {2:table Tables} *)
 
 val create_table :
-  dialect -> ?schema:string -> ?if_not_exists:unit ->
-  'a Rel.Table.t -> unit Stmt.t
-(** [create_table d stmt t] create table [t] using [stmt]. See
-      {!DIALECT.create_table}. *)
-
-val create_index :
-  dialect -> ?schema:string -> ?if_not_exists:unit ->
-  'a Rel.Table.t -> 'a Rel.Table.Index.t -> unit Stmt.t
-(** [create_table d stmt t] create index [i] on table [t] using [stmt]. See
-    {!DIALECT.create_index}. *)
+  dialect -> ?schema:Schema.name -> ?if_not_exists:unit -> 'a Table.t ->
+  unit Stmt.t
+(** [create_table d t] is a CREATE TABLE statement for [t]. The table
+    is created in [schema] if specified. The statement is CREATE TABLE
+    IF NOT EXISTS when [~if_not_exists:()] is given. *)
 
 val drop_table :
-  dialect -> ?schema:string -> ?if_exists:unit -> 'a Rel.Table.t -> unit Stmt.t
-(** [drop_table d stmt t] drops table [t] using [stmt]. See
-    {!DIALECT.drop_table}. *)
+  dialect -> ?schema:Schema.name -> ?if_exists:unit -> 'a Table.t -> unit Stmt.t
+(** [drop_table d t] is a DROP TABLE statement for [t]. The dropped
+    table is in [schema] if specified. The statement is DROP TABLE IF
+    EXISTS when [~if_exists:()] is given. *)
+
+(** {2:indices Indices} *)
+
+val create_index :
+  dialect -> ?schema:Schema.name -> ?if_not_exists:unit -> 'a Table.t ->
+  'a Table.Index.t -> unit Stmt.t
+(** [create_index d t i] is a CREATE INDEX statement for [i] on table
+    [t] in schema [schema]. The statement is CREATE INDEX IF NOT
+    EXISTS when [~if_not_exists:()] is given. *)
 
 val drop_index :
-  dialect -> ?schema:string -> ?if_exists:unit ->
-  'a Rel.Table.t -> 'a Rel.Table.index -> unit Stmt.t
-(** [drop_index d stmt t i] drops index [i] of table [t], see
-    {!DIALECT.drop_index}. *)
+  dialect -> ?schema:Schema.name -> ?if_exists:unit ->
+  'a Table.t -> 'a Table.index -> unit Stmt.t
+(** [drop_index d t i] is a DROP INDEX statement to drop index [i] of
+    table [t]. The index and table are in [schema] if specified. The
+    statement is DROP INDEX IF EXISTS when [~if_exists:()] is
+    given. *)
 
+(** {2:schema Schemas} *)
 
+val create_schema : dialect -> Schema.t -> unit Stmt.t list
+(** [create_schema_stmts d s] is the sequence of statements to create
+    schema [s]. This creates tables and their indices, all of which
+    should not exist.  Use {!drop_schema_stmts} to remove previous
+    definitions. *)
 
+val drop_schema : dialect -> ?if_exists:unit -> Schema.t -> unit Stmt.t list
+(** [drop_schema_stmts d s] is the sequence of statementes to drop
+    schema [s]. All definitions need to exist unless [~if_exists:()]
+    is provided. This drops all tables (which should drop their
+    indices aswell) in reverse order of {!Schema.tables}; if you have
+    recursive table dependencies you may have to disable foreign keys
+    before executing the statment.  *)
+
+val schema_changes :
+  dialect -> ?schema:Schema.name -> Schema.change list -> unit Stmt.t list
+(** [schema_change_stmts d cs] is the sequence of statements to perform
+    the changes [cs]. This should be performed in a transaction.
+
+    {b Warning.} In the {!Rel_sqlite3.dialect}, this may set foreign keys on,
+    if you have them off you may want to set it them off again afterwards. *)
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The rel programmers

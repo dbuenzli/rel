@@ -4,6 +4,9 @@
   ---------------------------------------------------------------------------*)
 
 let ( let* ) = Result.bind
+let assoc_find_remove k l = match List.assoc_opt k l with
+| None -> None, l | Some _ as v -> v, List.remove_assoc k l
+
 module Sset = Set.Make (String)
 module Smap = Map.Make (String)
 module Fmt = struct
@@ -331,6 +334,7 @@ module Table = struct
   let set_foreign_keys t fks = t.foreign_keys <- fks
   let indices t = t.indices
   let params t = t.params
+  let with_name t name = { t with name }
 
   let cols ?(ignore = []) t = match ignore with
   | [] -> Row.cols t.row
@@ -426,6 +430,142 @@ module Table = struct
 
   let index = Index.v
 
+  (* Changes *)
+
+  type 'r change =
+  | Add_column_after : 'r Col.v * 'r Col.v option -> 'r change
+  | Add_foreign_key : 'r foreign_key -> 'r change
+  | Add_primary_key : 'r primary_key -> 'r change
+  | Add_unique_key : 'r unique_key -> 'r change
+  | Create_index : 'r index -> 'r change
+  | Drop_column : Col.name -> 'r change
+  | Drop_foreign_key : 'a foreign_key -> 'r change
+  | Drop_index : Index.name -> 'r change
+  | Drop_primary_key : 'r change
+  | Drop_unique_key : 'a unique_key -> 'r change
+  | Set_column_default : 'r Col.v -> 'r change
+  | Set_column_type : 'r Col.v * 'b Col.v -> 'r change
+  | Set_column_pos_after : 'r Col.v * 'r Col.v option -> 'r change
+
+  let column_changes cs (Col.V s as src) (Col.V d as dst) =
+    let src_type = Col.type' s and dst_type = Col.type' d in
+    match Type.equal src_type dst_type with
+    | false -> Set_column_type (dst, src) :: cs
+    | true ->
+        let change = match Col.default s, Col.default d with
+        | None, None -> false
+        | Some _, None | None, Some _ -> true
+        | Some s, Some d ->
+            match s, d with
+            | `Expr es, `Expr es' when es = es' -> false
+            | `Value vs, `Value vd ->
+                (match Type.value_change src_type vs dst_type vd with
+                | None -> false
+                | Some _ -> true)
+            | _, _ -> true
+        in
+        if change then Set_column_default dst :: cs else cs
+
+  let columns_changes cs ~src ~dst =
+    (* The algo for setting positions is a bit naive and generates
+       useless moves. If but if the dbms is smart this should be nops. *)
+    let drop (c, _) = Drop_column c in
+    let srcs =
+      let rec loop acc after = function
+      | [] -> List.rev acc
+      | c :: cs -> loop ((Col.name' c, (c, after)) :: acc) (Some c) cs
+      in
+      loop [] None (cols src)
+    in
+    let rec loop cs srcs after = function
+    | [] -> List.rev_append (List.map drop srcs) cs
+    | dst :: dsts ->
+        let src, srcs = assoc_find_remove (Col.name' dst) srcs in
+        let rev_changes = match src with
+        | None -> Add_column_after (dst, after) :: cs
+        | Some (src, src_after) ->
+            let rev_changes =
+              let safter = Option.map Col.name' src_after in
+              let dafter = Option.map Col.name' after in
+              if Option.equal String.equal safter dafter then cs else
+              (Set_column_pos_after (dst, after) :: cs)
+            in
+            column_changes rev_changes src dst
+        in
+        loop rev_changes srcs (Some dst) dsts
+    in
+    loop cs srcs None (cols dst)
+
+  let primary_key_changes cs ~src ~dst =
+    match primary_key src, primary_key dst with
+    | None, None -> cs
+    | None, Some pk -> Add_primary_key pk :: cs
+    | Some _, None -> Drop_primary_key :: cs
+    | Some spk, Some dpk when Col.list_equal_names spk dpk -> cs
+    | Some spk, Some dpk -> Add_primary_key dpk :: Drop_primary_key :: cs
+
+  let unique_key_changes cs ~src ~dst =
+    let drop (_, u) = Drop_unique_key u in
+    let srcs = List.map (fun u -> Unique_key.name u, u) (unique_keys src) in
+    let rec loop cs srcs = function
+    | [] -> List.rev_append (List.map drop srcs) cs
+    | dst :: dsts ->
+        let src, srcs = assoc_find_remove (Unique_key.name dst) srcs in
+        let rev_changes = match src with
+        | None -> Add_unique_key dst :: cs
+        | Some src when Unique_key.equal src dst -> cs
+        | Some src -> Add_unique_key dst :: Drop_unique_key src :: cs
+        in
+        loop rev_changes srcs dsts
+    in
+    loop cs srcs (unique_keys dst)
+
+  let foreign_key_changes cs ~src ~dst =
+    let drop (_, fk) = Drop_foreign_key fk in
+    let srcs = List.map (fun k -> Foreign_key.name k, k) (foreign_keys src) in
+    let rec loop cs srcs = function
+    | [] -> List.rev_append (List.map drop srcs) cs
+    | dst :: dsts ->
+        let src, srcs = assoc_find_remove (Foreign_key.name dst) srcs in
+        let cs = match src with
+        | None -> Add_foreign_key dst :: cs
+        | Some src when Foreign_key.equal src dst -> cs
+        | Some src ->  Add_foreign_key dst :: Drop_foreign_key src :: cs
+        in
+        loop cs srcs dsts
+    in
+    loop cs srcs (foreign_keys dst)
+
+  let index_changes cs ~src ~dst =
+    let drop (n, _) = Drop_index n in
+    let name i = match Index.name i with
+    | Some n -> n
+    | None ->
+        let table_name = name src (* [dst] has the same name *) in
+        Index.auto_name ~table_name (Index.cols i)
+    in
+    let srcs = List.map (fun i -> name i, i) (indices src) in
+    let rec loop cs srcs = function
+    | [] -> List.rev_append (List.map drop srcs) cs
+    | dst :: dsts ->
+        let src, srcs = assoc_find_remove (name dst) srcs in
+        let cs = match src with
+        | None -> Create_index dst :: cs
+        | Some src when Index.equal src dst -> cs
+        | Some src -> Create_index dst :: Drop_index (name src) :: cs
+        in
+        loop cs srcs dsts
+    in
+    loop cs srcs (indices dst)
+
+  let changes ~src ~dst =
+    let cs = columns_changes [] ~src ~dst in
+    let cs = primary_key_changes cs ~src ~dst in
+    let cs = unique_key_changes cs ~src ~dst in
+    let cs = foreign_key_changes cs ~src ~dst in
+    let cs = index_changes cs ~src ~dst in
+    List.rev cs
+
   (* Dependencies *)
 
   let check_name_unicity tables =
@@ -510,6 +650,12 @@ module Schema = struct
 
   type rename = string * string
   type col_renames = Table.name * rename list
+  type change =
+  | Alter_table : 'r Table.t * 'r Table.change list -> change
+  | Create_table : 'r Table.t -> change
+  | Drop_table : Table.name -> change
+  | Rename_column : Table.name * rename -> change
+  | Rename_table : rename -> change
 
   let check_col_renames errs ~col_renames srcs =
     let check errs (n, cs) = match find_table n srcs with
@@ -534,9 +680,6 @@ module Schema = struct
       | Some _, Some _ -> errs
     in
     List.fold_left check_change errs table_renames
-
-  let assoc_find_remove k l = match List.assoc_opt k l with
-  | None -> None, l | Some _ as v -> v, List.remove_assoc k l
 
   let rename_map ns =
     List.fold_left (fun acc (s, d) -> Smap.add s d acc) Smap.empty ns
@@ -571,26 +714,26 @@ module Schema = struct
   let rename_index_cols ~map (i : 'r Table.index) =
     { i with Table.cols = rename_cols ~map (Table.Index.cols i) }
 
-  let rename_table ~col_map ~table_map rev_changes (Table.V t) =
+  let rename_table ~col_map ~table_map cs (Table.V t) =
     let map = match Smap.find_opt (Table.name t) col_map with
     | None -> Smap.empty | Some col_map -> col_map
     in
-    let rev_changes, rev_cols =
-      let add_col (rev_changes, cs) (Col.V c) =
-        let rev_changes, name = match Smap.find_opt (Col.name c) map with
-        | None -> rev_changes, Col.name c
+    let cs, rev_cols =
+      let add_col (cs, cols) (Col.V c) =
+        let cs, name = match Smap.find_opt (Col.name c) map with
+        | None -> cs, Col.name c
         | Some n ->
-            let change = `Rename_column (Table.name t, (Col.name c, n)) in
-            (change :: rev_changes), n
+            let change = Rename_column (Table.name t, (Col.name c, n)) in
+            (change :: cs), n
         in
         let never _ = assert false in
-        rev_changes, Col.V { c with name; Col.proj = never } :: cs
+        cs, Col.V { c with name; Col.proj = never } :: cols
       in
-      List.fold_left add_col (rev_changes, []) (Table.cols t)
+      List.fold_left add_col (cs, []) (Table.cols t)
     in
-    let rev_changes, name = match Smap.find_opt (Table.name t) table_map with
-    | Some name -> (`Rename_table (Table.name t, name) :: rev_changes), name
-    | None -> rev_changes, Table.name t
+    let cs, name = match Smap.find_opt (Table.name t) table_map with
+    | Some name -> (Rename_table (Table.name t, name) :: cs), name
+    | None -> cs, Table.name t
     in
     let row = Row.Private.row_of_cols (List.rev rev_cols) in
     let primary_key = Option.map (rename_cols ~map) (Table.primary_key t) in
@@ -605,10 +748,8 @@ module Schema = struct
       let rename = rename_table_foreign_key ~self_col_map ~col_map ~table_map in
       List.map rename (Table.foreign_keys t)
     in
-    let table =
-      Table.v name row ?primary_key ~unique_keys ~foreign_keys ~indices
-    in
-    rev_changes, Table.V table
+    let t = Table.v name row ?primary_key ~unique_keys ~foreign_keys ~indices in
+    cs, Table.V t
 
   let rename_src_schema ~col_renames ~table_renames ~src ~dst =
     let errs = check_col_renames [] ~col_renames src in
@@ -619,188 +760,34 @@ module Schema = struct
       let add_table acc (t, cols) = Smap.add t (rename_map cols) acc in
       List.fold_left add_table Smap.empty col_renames
     in
-    let rev_changes, rev_tables =
-      let table (rev_changes, ts) t =
-        let rev_changes, t = rename_table ~col_map ~table_map rev_changes t in
-        rev_changes, (t :: ts)
+    let cs, rev_tables =
+      let table (cs, ts) t =
+        let cs, t = rename_table ~col_map ~table_map cs t in
+        cs, (t :: ts)
       in
       List.fold_left table ([], []) (tables src)
     in
-    let name = name src and tables = List.rev rev_tables in
-    Ok (rev_changes, v ?name ~tables ())
-
-  type table_change =
-  | Add_column_after : 'a Col.v * 'a Col.v option -> table_change
-  | Add_foreign_key : 'a Table.foreign_key -> table_change
-  | Add_primary_key : 'a Table.primary_key -> table_change
-  | Add_unique_key : 'a Table.unique_key -> table_change
-  | Create_index : 'a Table.index -> table_change
-  | Drop_column : Col.name -> table_change
-  | Drop_foreign_key : 'a Table.foreign_key -> table_change
-  | Drop_index : Table.Index.name -> table_change
-  | Drop_primary_key : table_change
-  | Drop_unique_key : 'a Table.unique_key -> table_change
-  | Set_column_default : 'a Col.v -> table_change
-  | Set_column_type : 'a Col.v * 'b Col.v -> table_change
-  | Set_column_pos_after : 'a Col.v * 'a Col.v option -> table_change
-
-  let table_column_changes rev_changes (Col.V s as src) (Col.V d as dst) =
-    let src_type = Col.type' s and dst_type = Col.type' d in
-    match Type.equal src_type dst_type with
-    | false -> Set_column_type (dst, src) :: rev_changes
-    | true ->
-        let change = match Col.default s, Col.default d with
-        | None, None -> false
-        | Some _, None | None, Some _ -> true
-        | Some s, Some d ->
-            match s, d with
-            | `Expr es, `Expr es' when es = es' -> false
-            | `Value vs, `Value vd ->
-                (match Type.value_change src_type vs dst_type vd with
-                | None -> false
-                | Some _ -> true)
-            | _, _ -> true
-        in
-        if change then Set_column_default dst :: rev_changes else
-        rev_changes
-
-  let table_column_changes rev_changes ~src ~dst =
-    (* The algo for setting positions is a bit naive and generates
-       useless moves. If but if the dbms is smart this should be nops. *)
-    let drop (c, _) = Drop_column c in
-    let name = Col.name' in
-    let srcs =
-      let rec loop acc after = function
-      | [] -> List.rev acc
-      | c :: cs -> loop ((name c, (c, after)) :: acc) (Some c) cs
-      in
-      loop [] None (Table.cols src)
-    in
-    let rec loop rev_changes srcs after = function
-    | [] -> List.rev_append (List.map drop srcs) rev_changes
-    | dst :: dsts ->
-        let src, srcs = assoc_find_remove (name dst) srcs in
-        let rev_changes = match src with
-        | None -> Add_column_after (dst, after) :: rev_changes
-        | Some (src, src_after) ->
-            let rev_changes =
-              let safter = Option.map name src_after in
-              let dafter = Option.map name after in
-              if Option.equal String.equal safter dafter then rev_changes else
-              (Set_column_pos_after (dst, after) :: rev_changes)
-            in
-            table_column_changes rev_changes src dst
-        in
-        loop rev_changes srcs (Some dst) dsts
-    in
-    loop rev_changes srcs None (Table.cols dst)
-
-  let table_primary_key_changes rev_changes ~src ~dst =
-    match Table.primary_key src, Table.primary_key dst with
-    | None, None -> rev_changes
-    | None, Some pk -> Add_primary_key pk :: rev_changes
-    | Some _, None -> Drop_primary_key :: rev_changes
-    | Some spk, Some dpk ->
-        if Col.list_equal_names spk dpk then rev_changes else
-        Add_primary_key dpk :: Drop_primary_key :: rev_changes
-
-  let table_unique_key_changes rev_changes ~src ~dst =
-    let drop (_, u) = Drop_unique_key u in
-    let name = Table.Unique_key.name in
-    let srcs = List.map (fun u -> name u, u) (Table.unique_keys src) in
-    let rec loop rev_changes srcs = function
-    | [] -> List.rev_append (List.map drop srcs) rev_changes
-    | dst :: dsts ->
-        let src, srcs = assoc_find_remove (name dst) srcs in
-        let rev_changes = match src with
-        | None -> Add_unique_key dst :: rev_changes
-        | Some src ->
-            if Table.Unique_key.equal src dst then rev_changes else
-            (Add_unique_key dst :: Drop_unique_key src :: rev_changes)
-        in
-        loop rev_changes srcs dsts
-    in
-    loop rev_changes srcs (Table.unique_keys dst)
-
-  let table_foreign_key_changes rev_changes ~src ~dst =
-    let drop (_, fk) = Drop_foreign_key fk in
-    let name = Table.Foreign_key.name in
-    let srcs = List.map (fun fk -> name fk, fk) (Table.foreign_keys src) in
-    let rec loop rev_changes srcs = function
-    | [] -> List.rev_append (List.map drop srcs) rev_changes
-    | dst :: dsts ->
-        let src, srcs = assoc_find_remove (name dst) srcs in
-        let rev_changes = match src with
-        | None -> Add_foreign_key dst :: rev_changes
-        | Some src ->
-            if Table.Foreign_key.equal src dst then rev_changes else
-            (Add_foreign_key dst :: Drop_foreign_key src :: rev_changes)
-        in
-        loop rev_changes srcs dsts
-    in
-    loop rev_changes srcs (Table.foreign_keys dst)
-
-  let table_index_changes rev_changes ~src ~dst =
-    let drop (n, _) = Drop_index n in
-    let name i = match Table.Index.name i with
-    | Some n -> n
-    | None ->
-        let table_name = Table.name src (* [dst] has the same name *) in
-        Table.Index.auto_name ~table_name (Table.Index.cols i)
-    in
-    let srcs = List.map (fun i -> name i, i) (Table.indices src) in
-    let rec loop rev_changes srcs = function
-    | [] -> List.rev_append (List.map drop srcs) rev_changes
-    | dst :: dsts ->
-        let src, srcs = assoc_find_remove (name dst) srcs in
-        let rev_changes = match src with
-        | None -> Create_index dst :: rev_changes
-        | Some src ->
-            if Table.Index.equal src dst then rev_changes else
-            (Create_index dst :: Drop_index (name src) :: rev_changes)
-        in
-        loop rev_changes srcs dsts
-    in
-    loop rev_changes srcs (Table.indices dst)
-
-  let table_changes ~src:(Table.V src) ~dst:(Table.V dst) =
-    let rev_changes = [] in
-    let rev_changes = table_column_changes rev_changes ~src ~dst in
-    let rev_changes = table_primary_key_changes rev_changes ~src ~dst in
-    let rev_changes = table_unique_key_changes rev_changes ~src ~dst in
-    let rev_changes = table_foreign_key_changes rev_changes ~src ~dst in
-    let rev_changes = table_index_changes rev_changes ~src ~dst in
-    List.rev rev_changes
-
-  type change =
-  [ `Alter_table of Table.v * table_change list
-  | `Create_table of Table.v
-  | `Drop_table of Table.name
-  | `Rename_column of Table.name * rename
-  | `Rename_table of rename ]
+    let tables = List.rev rev_tables in
+    Ok (cs, v ?name:(name src) ~tables ())
 
   let changes ?(col_renames = []) ?(table_renames = []) ~src ~dst () =
-    let* rev_changes, src =
-      (* Doing all the renames first. That makes things easier. *)
-      rename_src_schema ~col_renames ~table_renames ~src ~dst
-    in
-    let drop (_, t) = `Drop_table (Table.name' t) in
-    let assoc t = Table.name' t, t in
-    let srcs = List.map assoc (tables src) in
-    let rec loop rev_changes srcs = function
-    | [] -> List.rev_append (List.map drop srcs) rev_changes
-    | dst :: dsts ->
-        let src, srcs = assoc_find_remove (Table.name' dst) srcs in
+    (* Do all the renames first. That makes things easier. *)
+    let* cs, src = rename_src_schema ~col_renames ~table_renames ~src ~dst in
+    let drop (_, t) = Drop_table (Table.name' t) in
+    let srcs = List.map (fun t -> Table.name' t, t) (tables src) in
+    let rec loop cs srcs = function
+    | [] -> List.rev_append (List.map drop srcs) cs
+    | (Table.V dst) :: dsts ->
+        let src, srcs = assoc_find_remove (Table.name dst) srcs in
         let rev_changes = match src with
-        | None -> `Create_table dst :: rev_changes
-        | Some src ->
-            let cs = table_changes ~src ~dst in
-            if cs = [] then rev_changes else
-            (`Alter_table (dst, cs) :: rev_changes)
+        | None -> Create_table dst :: cs
+        | Some (Table.V src) ->
+            let tcs = Table.changes ~src ~dst in
+            if tcs = [] then cs else (Alter_table (dst, tcs) :: cs)
         in
         loop rev_changes srcs dsts
     in
-    Ok (List.rev (loop rev_changes srcs (tables dst)))
+    Ok (List.rev (loop cs srcs (tables dst)))
 
   (* Dot diagrams
 

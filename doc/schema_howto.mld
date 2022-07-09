@@ -1,63 +1,58 @@
 {0 Schema management howto}
 
-A few tips on how to manage your database schema with Rel.
+A few tips on how to manage your database schema with rel.
 
-{1:def Definition strategy}
+{1:def Schema definition strategy}
 
 Rel lets you decide where you want to define your database schema.
 You can define it either {e internally}, with an OCaml {!Rel.Schema.t}
-value or {e externally} using any other tool you may see fit.
+value or {e externally} using any other tool you may see fit. It is
+also possible, to some extent, to move from one strategy to the other.
 
-An internal OCaml definition can always be switched to an external one
-by generating legible SQL data definition statements for you database
-management system (DBMS) from a {!Rel.Schema.t} with the
-{!Rel_sql.create_schema_stmts} function. Would you need to move away
-from Rel this direction {e always} works since it is needed to use Rel
-schemas with DBMS.
+An internal OCaml definition can always be switched to an external
+one. The {!Rel_sql.create_schema_stmts} function generates legible SQL
+data definitions from a {!Rel.Schema.t} value in the dialect of your
+database management system (DBMS). Would you need to move away
+from rel this {e always} works.
 
-An external schema definition can be moved to an OCaml one if your
-external defiition uses only features that expressible by
-{!Rel.Schema.t} values. In this case the [rel] command line tool
-connects to your database to generate the OCaml code for a
-{!Rel.Schema.t} value (or use e.g. {!Rel_sqlite3.schema_of_db} and
-{!Rel.Schema.pp_ocaml}).
-
-However if the external schema definition uses features that cannot be
-expressed into a {!Rel.Schema.t} value, it is not posssible to
-recreate the external schema from these generated OCaml values – they
-are nevertheless useful to interact with the external schema using
-Rel.
+An external schema definition can be moved to an OCaml one by
+connecting to your database and generating the OCaml code for a
+{!Rel.Schema.t} value representing it. The [rel] command line tool or
+(e.g.) {!Rel_sqlite3.schema_of_db} and {!Rel.Schema.pp_ocaml} can be
+used for that. However if the external schema definition uses features
+that cannot be expressed by a {!Rel.Schema.t} value, it is not
+posssible to faithfully represent and regenerate the external schema
+from the generated OCaml schema – it is nevertheless useful to query
+the database with rel.
 
 Ultimately which solution you choose depends on the degree of control
 you need over your DBMS. Since {!Rel.Schema.t} abstracts over DBMS and
 their differences, you may find yourself limited by sticking to an
-OCaml internal definition. Though using {{:page-sql_stmt_howto} raw
+OCaml internal definition. Though using {{!page-sql_stmt_howto} raw
 SQL statements} can bring you a long way.
 
 {1:changes Schema changes}
 
-The goal of a schema change is to make the {e live schema} of a
+The goal of a schema change is to make the {e live schema} (which can
+be captured for example with {!Rel_sqlite3.schema_of_db}) of a
 database instance to coincide with the {e application's schema}, that
 is the schema that your software is assuming to hold.
 
 Rel provides support to compute the change between a source and
-destination {!Rel.Schema.t} value (see the {!Rel.Schema.val-changes}
-function). Table and column renames need however to be provided
-manually.
+destination {!Rel.Schema.t} value. Table and column renames need
+however to be provided manually. The [rel changes] command or
+the {!Rel.Schema.val-changes} function perform this.
 
-This allow to compute changes between versions of your schema or
-between the schema of a live database (which can be derived e.g.  with
-{!Rel_sqlite3.schema_of_db}). The [rel changes] command also allows
-you to output and inspect these changes between live and SQL defined
-schemas.
+ This allow to compute the changes
+needed by your live database to bring it the schema you need.
 
 These changes can be turned into SQL data definition statements with
-the {!Rel_sql.schema_changes_stmts} functions to apply on a source schema to
-bring it to the destination schema. Note that this only handles
-structural changes to the database. You may need to provide additional
-statements to handle data migrations. You should also always have a
-careful look at these steps and possibly tweak them, especially if you
-do this with externally defined schemas.
+the {!Rel_sql.schema_changes_stmts} functions to apply on a source
+schema to bring it to the destination schema. Note that this only
+handles structural changes to the database. You may need to provide
+additional statements to handle data migrations. You should also
+always have a careful look at these steps and possibly tweak them,
+especially if you do this with externally defined schemas.
 
 {2:single Single live database instance or development mode}
 
@@ -209,26 +204,24 @@ tables but simply have them as generic column map (i.e. heterogenous
 dictionary). Could have less boiler plate and less gc pressure since
 we do pack {!Rel.Col.value}s at the IO boundary anyways.
 
-
 {1:unsupported Unsupported DBMS features}
 
-A few DBMS features that would be nice to have but are not
-supported at the moment.
+A few DBMS features that would be nice to have but are not supported
+at the moment.
 
-From SQLite.
+For SQLite3.
 
-{ul
-{- Generating SQLite {{:https://www.sqlite.org/stricttables.html}
-   strict table} would be nice. However if we do so we can no longer
-   distinguish between [bool], [int] and [int64] columns.
-{- Tables. Table options. [CHECK] constraints on tables. First needs a
-   story for SQL expressions. Second in SQLite3 AFAIK it's not possible
-   to get it from the meta tables. This means we would have to parse
-   the SQL CREATE statements for {!Rel_sqlite3.schema_of_db} which
-   we avoided so far. }
-{- Indices. partial indexes.}
-{- Views. Virtual tables. Triggers}
-{- Column constraints. Some are supported at the table level (primary
-   key, unique, foreign keys) or the type level (not null). But we are
-   missing COLLATE, GENERATED, AUTOINCREMENT.}
-{- Primary keys ASC/DESC.}}
+- Generating SQLite {{:https://www.sqlite.org/stricttables.html}
+  strict table} would be nice. However if we do so we can no longer
+  distinguish between [bool], [int] and [int64] columns.
+- Tables. Table options. [CHECK] constraints on tables. First needs a
+  story for SQL expressions. Second in SQLite3 AFAIK it's not possible
+  to get it from the meta tables. This means we would have to parse
+  the SQL CREATE statements for {!Rel_sqlite3.schema_of_db} which
+  we avoided so far.
+- Indices. partial indexes.
+- Views. Virtual tables. Triggers
+- Column constraints. Some are supported at the table level (primary
+  key, unique, foreign keys) or the type level (not null). But we are
+  missing COLLATE, GENERATED, AUTOINCREMENT.
+- Primary keys ASC/DESC.

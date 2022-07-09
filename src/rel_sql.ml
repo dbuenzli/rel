@@ -3,6 +3,8 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+open Rel
+
 module Fmt =  struct
   let str = Format.asprintf
   let pf = Format.fprintf
@@ -13,12 +15,10 @@ module Fmt =  struct
 
   let lines ppf s =
     let ls = String.split_on_char '\n' s in
-    Format.pp_print_list ~pp_sep:Format.pp_force_newline
- string ppf ls
+    Format.pp_print_list ~pp_sep:Format.pp_force_newline string ppf ls
 end
 
 module Stmt = struct
-  open Rel
   type arg = Arg : 'a Type.t * 'a -> arg
   let pp_arg ppf (Arg (t, v)) = Type.value_pp t ppf v
 
@@ -121,52 +121,40 @@ module type DIALECT = sig
   val kind : string
 
   val insert_into :
-    ?or_action:insert_or_action -> ?schema:string ->
-    ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t -> ('r -> unit Stmt.t)
+    ?or_action:insert_or_action -> ?schema:Schema.name ->
+    ?ignore:'r Col.v list -> 'r Table.t -> ('r -> unit Stmt.t)
 
   val insert_into_cols :
-    ?schema:string -> ?ignore:'r Rel.Col.v list -> 'r Rel.Table.t ->
-    ('r Rel.Col.value list -> unit Stmt.t)
+    ?schema:Schema.name -> ?ignore:'r Col.v list -> 'r Table.t ->
+    ('r Col.value list -> unit Stmt.t)
 
   val update :
-    ?schema:string -> 'r Rel.Table.t -> set:'r Rel.Col.value list ->
-    where:'r Rel.Col.value list -> unit Stmt.t
+    ?schema:Schema.name -> 'r Table.t -> set:'r Col.value list ->
+    where:'r Col.value list -> unit Stmt.t
 
   val delete_from :
-    ?schema:string -> 'r Rel.Table.t -> where:'r Rel.Col.value list ->
+    ?schema:string -> 'r Table.t -> where:'r Col.value list ->
     unit Stmt.t
 
   val create_table :
-    ?schema:string -> ?if_not_exists:unit -> 'r Rel.Table.t -> unit Stmt.t
-
-  val create_index :
-    ?schema:string -> ?if_not_exists:unit -> 'r Rel.Table.t  ->
-    'r Rel.Table.index -> unit Stmt.t
+    ?schema:Schema.name -> ?if_not_exists:unit -> 'r Table.t -> unit Stmt.t
 
   val drop_table :
-    ?schema:string -> ?if_exists:unit -> 'r Rel.Table.t -> unit Stmt.t
+    ?schema:Schema.name -> ?if_exists:unit -> 'r Table.t -> unit Stmt.t
+
+  val create_index :
+    ?schema:Schema.name -> ?if_not_exists:unit -> 'r Table.t ->
+    'r Table.index -> unit Stmt.t
 
   val drop_index :
-    ?schema:string -> ?if_exists:unit -> 'r Rel.Table.t ->
-    'r Rel.Table.index -> unit Stmt.t
+    ?schema:Schema.name -> ?if_exists:unit -> 'r Table.t -> 'r Table.index ->
+    unit Stmt.t
 
-  val schema_changes_stmts :
-    ?schema:string -> Rel.Schema.change list -> unit Stmt.t
+  val schema_changes :
+    ?schema:Schema.name -> Schema.change list -> unit Stmt.t list
 end
 
 type dialect = (module DIALECT)
-
-let create_table (module Sql : DIALECT) ?schema ?if_not_exists t =
-  Sql.create_table ?schema ?if_not_exists t
-
-let create_index (module Sql : DIALECT) ?schema ?if_not_exists t i =
-  Sql.create_index ?schema ?if_not_exists t i
-
-let drop_table (module Sql : DIALECT) ?schema ?if_exists t =
-  Sql.drop_table ?schema ?if_exists t
-
-let drop_index (module Sql : DIALECT) ?schema ?if_exists t i =
-  Sql.drop_index ?schema ?if_exists t i
 
 let insert_into (module Sql : DIALECT) ?or_action ?schema ?ignore t =
   Sql.insert_into ?or_action ?schema ?ignore t
@@ -180,26 +168,34 @@ let update (module Sql : DIALECT) ?schema t ~set ~where =
 let delete_from (module Sql : DIALECT) ?schema t ~where =
   Sql.delete_from ?schema t ~where
 
-let create_schema_stmts (module Sql : DIALECT) ?(drop_if_exists = false) s =
-  let schema = Rel.Schema.name s in
-  let stmts =
-    if not drop_if_exists then [] else
-    let drop (Rel.Table.V t) = Sql.drop_table ?schema ~if_exists:() t in
-    List.rev_map drop (Rel.Schema.tables s)
-  in
-  let stmts =
-    let add_table acc (Rel.Table.V t) =
-      let acc = (Sql.create_table ?schema t) :: acc in
-      let add_index acc i = Sql.create_index ?schema t i :: acc in
-      List.fold_left add_index acc (Rel.Table.indices t)
-    in
-    List.fold_left add_table stmts (Rel.Schema.tables s)
-  in
-  let sql = String.concat "\n" (List.rev_map Stmt.src stmts) in
-  Stmt.(func sql unit)
+let create_table (module Sql : DIALECT) ?schema ?if_not_exists t =
+  Sql.create_table ?schema ?if_not_exists t
 
-let schema_changes_stmts (module Sql : DIALECT) ?schema cs =
-  Sql.schema_changes_stmts ?schema cs
+let drop_table (module Sql : DIALECT) ?schema ?if_exists t =
+  Sql.drop_table ?schema ?if_exists t
+
+let create_index (module Sql : DIALECT) ?schema ?if_not_exists t i =
+  Sql.create_index ?schema ?if_not_exists t i
+
+let drop_index (module Sql : DIALECT) ?schema ?if_exists t i =
+  Sql.drop_index ?schema ?if_exists t i
+
+let create_schema (module Sql : DIALECT) s =
+  let schema = Schema.name s in
+  let add_table acc (Table.V t) =
+    let acc = Sql.create_table ?schema t :: acc in
+    let add_index acc i = Sql.create_index ?schema t i :: acc in
+    List.fold_left add_index acc (Table.indices t)
+  in
+  List.rev (List.fold_left add_table [] (Schema.tables s))
+
+let drop_schema (module Sql : DIALECT) ?if_exists s =
+  let schema = Schema.name s in
+  let drop_table (Table.V t) = Sql.drop_table ?schema ?if_exists t in
+  List.rev_map drop_table (Schema.tables s)
+
+let schema_changes (module Sql : DIALECT) ?schema cs =
+  Sql.schema_changes ?schema cs
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The rel programmers

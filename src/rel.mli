@@ -438,6 +438,10 @@ module Table : sig
   val params : 'r t -> 'r param list
   (** [name t] are the parameters of [t]. *)
 
+  (**/**)
+  val with_name : 'r t -> string -> 'r t
+  (**/**)
+
   (** {1:unique_keys Unique keys} *)
 
   (** Unique keys.
@@ -585,6 +589,42 @@ module Table : sig
   val index : ?unique:bool -> ?name:name -> 'r Col.v list -> 'r index
   (** [index] is {!Index.v}. *)
 
+  (** {1:changes Changes} *)
+
+  type 'r change =
+  | Add_column_after : 'r Col.v * 'r Col.v option -> 'r change
+      (** If the second column is None, in the first position. *)
+  | Add_foreign_key : 'r foreign_key -> 'r change
+  | Add_primary_key : 'r primary_key -> 'r change
+  | Add_unique_key : 'r unique_key -> 'r change
+  | Create_index : 'r index -> 'r change
+  | Drop_column : Col.name -> 'r change
+  | Drop_foreign_key : 'a foreign_key -> 'r change
+  | Drop_index : Index.name -> 'r change
+  | Drop_primary_key : 'r change
+  | Drop_unique_key : 'a unique_key -> 'r change
+  | Set_column_default : 'r Col.v -> 'r change
+      (** The given column default changed. *)
+  | Set_column_type : 'r Col.v * 'b Col.v -> 'r change
+      (** The given column type changed, the second column is the old column.
+          The default should also be changed. *)
+  | Set_column_pos_after : 'r Col.v * 'r Col.v option -> 'r change
+      (** If the second column is None, in the first position. *)
+  (** The type for table changes. *)
+
+  val changes : src:'a t -> dst:'r t -> 'r change list
+  (** [changes ~src ~dst] is the list of structural changes to bring table
+      [src] to [dst].
+
+      This function does not handle renames which should be performed
+      before (also the table name is ignored). Any name found in [src]
+      (resp. [dst]) and absent in [dst] (resp. [src])
+      will result in a column drop (resp. add).
+
+      See also {!Schema.val-changes} which integrates renames.
+
+      {b XXX.} Maybe we could surface the renaming business.*)
+
   (** {1:deps Dependencies} *)
 
   val sort : v list -> (v list, v list) result
@@ -642,36 +682,15 @@ module Schema : sig
   (** The type for table column renames. The table name and the list of
       column renames. *)
 
-  type table_change =
-  | Add_column_after : 'a Col.v * 'a Col.v option -> table_change
-      (** If the second column is None, in the first position. *)
-  | Add_foreign_key : 'a Table.foreign_key -> table_change
-  | Add_primary_key : 'a Table.primary_key -> table_change
-  | Add_unique_key : 'a Table.unique_key -> table_change
-  | Create_index : 'a Table.index -> table_change
-  | Drop_column : Col.name -> table_change
-  | Drop_foreign_key : 'a Table.foreign_key -> table_change
-  | Drop_index : Table.Index.name -> table_change
-  | Drop_primary_key : table_change
-  | Drop_unique_key : 'a Table.unique_key -> table_change
-  | Set_column_default : 'a Col.v -> table_change
-      (** The given column default changed. *)
-  | Set_column_type : 'a Col.v * 'b Col.v -> table_change
-  (** The given column type changed, the second column is the old column.
-      The default should also be changed. *)
-  | Set_column_pos_after : 'a Col.v * 'a Col.v option -> table_change
-      (** If the second column is None, in the first position. *)
-  (** The type for table changes. *)
-
   type change =
-  [ `Alter_table of Table.v * table_change list
-  | `Create_table of Table.v
-  | `Drop_table of Table.name
-  | `Rename_column of Table.name * rename
-  | `Rename_table of rename ]
-  (** The type for schema changes. Table values that are as found in the
-      destination schema, in particular [`Alter_table] changes assume all
-      renames have already occured. *)
+  | Alter_table : 'r Table.t * 'r Table.change list -> change
+  | Create_table : 'r Table.t -> change
+  | Drop_table : Table.name -> change
+  | Rename_column : Table.name * rename -> change
+  | Rename_table : rename -> change (** *)
+  (** The type for schema changes. Table values that are as found in
+      the destination schema, in particular [Alter_table] changes
+      assume all renames have already occured. *)
 
   val changes :
     ?col_renames:col_renames list -> ?table_renames:rename list ->

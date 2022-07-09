@@ -264,7 +264,7 @@ module Error = struct
 end
 
 type error = Error.t
-let error_string r = Result.map_error Error.message r
+let string_error r = Result.map_error Error.message r
 let db_error rc db = Error.v rc (Tsqlite3.errmsg db)
 
 let strf = Printf.sprintf
@@ -503,8 +503,6 @@ let exec_sql db sql =
   match Tsqlite3.exec db.db sql with
   | 0 -> Ok () | rc -> Error (db_error rc db.db)
 
-let exec_once db st = exec_sql db (Rel_sql.Stmt.src st)
-
 let fold db st f acc =
   validate db;
   try
@@ -599,6 +597,9 @@ end
 module Dialect = struct
   let kind = "sqlite3"
 
+  let sqlid = Rel_sql.Syntax.id
+  let sqlid_in_schema = Rel_sql.Syntax.id_in_schema
+
   let rec insert_columns ~ignore:ign i rev_cols rev_vars rev_args cols =
     let ignore c =
       List.exists (fun (Rel.Col.V i) -> Rel.Col.equal_name i c) ign
@@ -610,14 +611,14 @@ module Dialect = struct
     | Rel.Col.Value (col, _) :: cols when ignore col ->
         insert_columns ~ignore:ign i rev_cols rev_vars rev_args cols
     | Rel.Col.Value (col, v) :: cols ->
-        let c = Rel_sql.Syntax.id (Rel.Col.name col) in
+        let c = sqlid (Rel.Col.name col) in
         let var = "?" ^ string_of_int i in
         let arg = Rel_sql.Stmt.Arg (Col.type' col, v) in
         insert_columns ~ignore:ign (i + 1)
           (c :: rev_cols) (var :: rev_vars)  (arg :: rev_args) cols
 
   let insert_into_cols ?schema ?(ignore = []) t cols =
-    let table = Rel_sql.Syntax.id_in_schema ?schema (Rel.Table.name t) in
+    let table = sqlid_in_schema ?schema (Rel.Table.name t) in
     let i, cols, vars, rev_args = insert_columns ~ignore 1 [] [] [] cols in
     let sql = ["INSERT INTO "; table; " ("; cols; ")\nVALUES ("; vars; ")"] in
     let sql = String.concat "" sql in
@@ -626,13 +627,13 @@ module Dialect = struct
   let rec bind_columns ~sep i rev_cols rev_args = function
   | [] -> i, String.concat sep (List.rev rev_cols), rev_args
   | Rel.Col.Value (col, v) :: cols ->
-      let col_name c = Rel_sql.Syntax.id (Rel.Col.name col)in
+      let col_name c = sqlid (Rel.Col.name col)in
       let set_col = String.concat "" [col_name col; " = ?"; string_of_int i] in
       let arg = Rel_sql.Stmt.Arg (Col.type' col, v) in
       bind_columns ~sep (i + 1) (set_col :: rev_cols) (arg :: rev_args) cols
 
   let update ?schema t ~set:cols ~where =
-    let table = Rel_sql.Syntax.id_in_schema ?schema (Rel.Table.name t) in
+    let table = sqlid_in_schema ?schema (Rel.Table.name t) in
     let i, columns, rev_args = bind_columns ~sep:", " 1 [] [] cols in
     let _, where, rev_args = bind_columns ~sep:" AND " i [] rev_args where in
     let sql = ["UPDATE "; table; " SET "; columns; " WHERE "; where ] in
@@ -640,7 +641,7 @@ module Dialect = struct
     Rel_sql.Stmt.v sql ~rev_args ~result:Rel.Row.empty
 
   let delete_from ?schema t ~where =
-    let table = Rel_sql.Syntax.id_in_schema ?schema (Rel.Table.name t) in
+    let table = sqlid_in_schema ?schema (Rel.Table.name t) in
     let _, where, rev_args = bind_columns ~sep:" AND " 1 [] [] where in
     let sql = ["DELETE FROM "; table; " WHERE "; where ] in
     let sql = String.concat "" sql in
@@ -652,15 +653,12 @@ module Dialect = struct
   let if_exists_ext c = ext c " IF EXISTS"
   let if_not_exists_ext c = ext c " IF NOT EXISTS"
 
+  let col_id c = sqlid (Col.name' c)
   let pp_strf = Format.asprintf
   let pp_comma ppf () = Format.fprintf ppf ",@ "
-  let pp_col_name ppf c =
-    Format.pp_print_string ppf (Rel_sql.Syntax.id (Col.name' c))
-
+  let pp_col_name ppf c = Format.pp_print_string ppf (col_id c)
   let pp_col_names ppf cs =
-    Format.pp_open_hbox ppf ();
-    (Format.pp_print_list ~pp_sep:pp_comma pp_col_name) ppf cs;
-    Format.pp_close_box ppf ()
+    (Format.pp_print_list ~pp_sep:pp_comma pp_col_name) ppf cs
 
   let err_kind s ~kind = strf "%S: not a %s literal" s kind
 
@@ -784,7 +782,7 @@ module Dialect = struct
   | _ -> Rel.Type.invalid_unknown ()
 
   let col_def (Col.V col) =
-    let name = Rel_sql.Syntax.id (Col.name col) in
+    let name = sqlid (Col.name col) in
     let type' = Rel.Col.type' col in
     let typ, not_null = type_of_type type' in
     let not_null = if not_null then " NOT NULL" else "" in
@@ -798,33 +796,35 @@ module Dialect = struct
   let foreign_key ?schema t fk =
     let parent fk =
       let name, cs = match Table.Foreign_key.parent fk with
-      | Parent (`Self, cs) -> Table.name t, pp_strf "%a" pp_col_names cs
-      | Parent (`Table t, cs) -> Table.name t, pp_strf "%a" pp_col_names cs
+      | Parent (`Self, cs) -> Table.name t, pp_strf "@[<h>%a@]" pp_col_names cs
+      | Parent (`Table t, cs) ->
+          Table.name t, pp_strf "@[<h>%a@]" pp_col_names cs
       in
-      let name = Rel_sql.Syntax.id_in_schema ?schema name in
+      let name = sqlid_in_schema ?schema name in
       strf " REFERENCES %s (%s)" name cs
     in
     let action act a = match a with
     | None -> "" | Some a ->
         strf " %s %s" act (Rel_sql.Syntax.foreign_key_action_keyword a)
     in
-    pp_strf "FOREIGN KEY (%a)%s%s%s"
+    pp_strf "FOREIGN KEY (@[<h>%a@])%s%s%s"
       pp_col_names (Table.Foreign_key.cols fk)
       (parent fk)
       (action "ON UPDATE" (Table.Foreign_key.on_update fk))
       (action "ON DELETE" (Table.Foreign_key.on_delete fk))
 
   let unique_key k =
-    pp_strf "UNIQUE (%a)" pp_col_names (Table.Unique_key.cols k)
+    pp_strf "UNIQUE (@[<h>%a@])" pp_col_names (Table.Unique_key.cols k)
 
   let create_table ?schema ?if_not_exists t =
     let if_not_exists = if_not_exists_ext if_not_exists  in
     let name = Table.name t in
-    let name = Rel_sql.Syntax.id_in_schema ?schema name in
+    let name = sqlid_in_schema ?schema name in
     let cols = List.map col_def (Table.cols t) in
     let uniques = List.map unique_key (Table.unique_keys t) in
     let primary_key = match Table.primary_key t with
-    | None -> [] | Some pk -> [pp_strf "PRIMARY KEY (%a)" pp_col_names pk]
+    | None -> []
+    | Some pk -> [pp_strf "PRIMARY KEY (@[<h>%a@])" pp_col_names pk]
     in
     let fks = List.map (foreign_key ?schema t) (Table.foreign_keys t) in
     let defs = cols @ primary_key @ uniques @ fks in
@@ -839,7 +839,7 @@ module Dialect = struct
 
   let create_index ?schema ?if_not_exists t i =
     let pp_index_col ppf c =
-      let name = Rel_sql.Syntax.id (Col.name' c) in
+      let name = sqlid (Col.name' c) in
       Format.fprintf ppf "%s" name
 (*
       let ord = match Rel_sql.Index.Col.sort_order c  with
@@ -852,8 +852,8 @@ module Dialect = struct
     let unique = if Table.Index.unique i then " UNIQUE" else "" in
     let if_not_exists = if_not_exists_ext if_not_exists  in
     let name = Table.Index.get_name ~table_name:(Table.name t) i in
-    let name = Rel_sql.Syntax.id_in_schema ?schema name in
-    let table_name = Rel_sql.Syntax.id_in_schema ?schema (Table.name t) in
+    let name = sqlid_in_schema ?schema name in
+    let table_name = sqlid_in_schema ?schema (Table.name t) in
     let cols = Table.Index.cols i in
     let sql =
       pp_strf "@[<v2>CREATE%s INDEX%s %s ON %s @[<1>(%a)@];@]"
@@ -864,14 +864,14 @@ module Dialect = struct
 
   let drop_table ?schema ?if_exists t =
     let if_exists = if_exists_ext if_exists  in
-    let name = Rel_sql.Syntax.id_in_schema ?schema (Table.name t) in
+    let name = sqlid_in_schema ?schema (Table.name t) in
     let sql = strf "DROP TABLE%s %s;" if_exists name in
     Rel_sql.Stmt.(func sql @@ unit)
 
   let drop_index ?schema ?if_exists t i =
     let if_exists = if_exists_ext if_exists in
     let name = Table.Index.get_name ~table_name:(Table.name t) i in
-    let name = Rel_sql.Syntax.id_in_schema ?schema name in
+    let name = sqlid_in_schema ?schema name in
     let sql = strf "DROP INDEX%s %s;" if_exists name in
     Rel_sql.Stmt.(func sql @@ unit)
 
@@ -904,13 +904,67 @@ module Dialect = struct
         Format.pp_print_list ~pp_sep:pp_comma Format.pp_print_string ppf vs;
         Format.pp_close_box ppf ()
       in
-      let name = Rel_sql.Syntax.id_in_schema ?schema (Rel.Table.name t) in
-      pp_strf "@[<v>INSERT%s INTO %s (%a)@,VALUES (%a)@]"
+      let name = sqlid_in_schema ?schema (Rel.Table.name t) in
+      pp_strf "@[<v>INSERT%s INTO %s (@[<v>%a@])@,VALUES (%a)@]"
         or_action name pp_col_names cs pp_vars vars
     in
     Rel_sql.Stmt.func sql f
 
-  let schema_changes_stmts ?schema cs = failwith "TODO"
+  (* Schema alterations, see https://www.sqlite.org/lang_altertable.html *)
+
+  let new_columns cs =
+    let add_new_col acc = function
+    | Table.Add_column_after (c, _) -> c :: acc | _ -> acc
+    in
+    List.fold_left add_new_col [] cs
+
+  let stmt fmt =
+    Format.kasprintf (fun sql -> Rel_sql.Stmt.(func sql unit)) fmt
+
+  let table_changes_stmts ?schema acc t cs =
+    let tmp = Table.with_name t ("_rel_" ^ Table.name t) in
+    let t_id = sqlid (Table.name t) in
+    let t_sid = sqlid_in_schema ?schema (Table.name t) in
+    let tmp_sid = sqlid_in_schema ?schema (Table.name tmp) in
+    let acc = stmt
+        "-- Alter table %s\nPRAGMA foreign_keys = OFF;" (Table.name t) ::
+              acc
+    in
+    let acc = create_table ?schema tmp :: acc in
+    let acc =
+      let cols = Table.cols ~ignore:(new_columns cs) t in
+      stmt
+        "@[<v>INSERT INTO %s (@[%a@])@, SELECT @[%a@]@, FROM %s WHERE true;@]"
+        tmp_sid pp_col_names cols pp_col_names cols t_sid :: acc
+    in
+    let acc = stmt "DROP TABLE %s;" t_sid :: acc in
+    let acc = stmt "ALTER TABLE %s RENAME TO %s;" tmp_sid t_id :: acc in
+    let acc =
+      let add acc i = create_index ?schema t i :: acc in
+      List.fold_left add acc (Table.indices t)
+    in
+    let acc =
+      let schema = match schema with None -> "" | Some i -> sqlid i ^ "." in
+      stmt "PRAGMA %sforeign_key_check (%s);" schema t_id ::
+      stmt "PRAGMA %sintegrity_check (%s);" schema t_id :: acc
+    in
+    (* problem: client maybe had it off *)
+    stmt "PRAGMA foreign_keys = ON;\n" :: acc
+
+  let schema_changes ?schema (cs : Schema.change list) =
+    let add acc = function
+    | Schema.Alter_table (t, cs) -> table_changes_stmts ?schema acc t cs
+    | Create_table t -> create_table ?schema t :: acc
+    | Drop_table t -> stmt "DROP TABLE %s" (sqlid_in_schema ?schema t) :: acc
+    | Rename_column (t, (src, dst)) ->
+        let t = sqlid_in_schema ?schema t in
+        stmt "ALTER TABLE %s RENAME COLUMN %s TO %s;" t src dst :: acc
+    | Rename_table (src, dst) ->
+        let src = sqlid_in_schema ?schema src in
+        stmt "ALTER TABLE %s RENAME TO %s;" src (sqlid dst) :: acc
+    in
+    let stmts = List.fold_left add [] cs in
+    List.rev stmts
 end
 
 let dialect = (module Dialect : Rel_sql.DIALECT)
