@@ -70,6 +70,8 @@ module Type = struct
   | Float, Float -> true | Text, Text -> true | Blob, Blob -> true
   | Option t0, Option t1 -> equal t0 t1
   | Coded c0, Coded c1 -> equal (Coded.repr c0) (Coded.repr c1)
+  | Coded c, t -> equal (Coded.repr c) t
+  | t, Coded c -> equal t (Coded.repr c)
   | _, _ -> false
 
   let value_equal : type a. a t -> a -> a -> bool =
