@@ -150,7 +150,7 @@ type insert_or_action = [`Abort | `Fail | `Ignore | `Replace | `Rollback ]
 (** SQL satements in a given dialect.
 
     This does not always try to abstract SQL per se but rather what we want
-    to do with the SQL. For example {!DIALECT.schema_changes_stmts}: in
+    to do with the SQL. For example {!DIALECT.schema_changes}: in
     SQLite most ALTER TABLE statements are unsupported so the returned
     statement implement the
     {{:https://sqlite.org/lang_altertable.html#making_other_kinds_of_table_schema_changes}
@@ -282,14 +282,14 @@ val drop_index :
 val create_schema : dialect -> Schema.t -> unit Stmt.t list
 (** [create_schema_stmts d s] is the sequence of statements to create
     schema [s]. This creates tables and their indices, all of which
-    should not exist.  Use {!drop_schema_stmts} to remove previous
+    should not exist.  Use {!drop_schema} to remove previous
     definitions. *)
 
 val drop_schema : dialect -> ?if_exists:unit -> Schema.t -> unit Stmt.t list
 (** [drop_schema_stmts d s] is the sequence of statementes to drop
     schema [s]. All definitions need to exist unless [~if_exists:()]
     is provided. This drops all tables (which should drop their
-    indices aswell) in reverse order of {!Schema.tables}; if you have
+    indices aswell) in reverse order of {!Rel.Schema.tables}; if you have
     recursive table dependencies you may have to disable foreign keys
     before executing the statment.  *)
 

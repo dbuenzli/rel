@@ -566,6 +566,50 @@ module Table = struct
     let cs = index_changes cs ~src ~dst in
     List.rev cs
 
+  let pp_change ppf c =
+    let pp_after ppf = function
+    | None -> Format.pp_print_string ppf "FIRST"
+    | Some c -> Fmt.pf ppf "AFTER %s" (Col.name' c)
+    in
+    let pp_default t ppf = function
+    | None -> Fmt.pf ppf "DROP DEFAULT"
+    | Some (`Expr expr) -> Fmt.pf ppf "SET DEFAULT TO (%s)" expr
+    | Some (`Value v) -> Fmt.pf ppf "SET DEFAULT TO %a" (Type.value_pp t) v
+    in
+    let pp_cols ppf cs =
+      let pp_col ppf c = Format.pp_print_string ppf (Col.name' c) in
+      let pp_sep ppf () = Fmt.pf ppf ",@ " in
+      Fmt.pf ppf "(@[%a@])" (Format.pp_print_list ~pp_sep pp_col) cs
+    in
+    match c with
+    | Add_column_after (c, a) ->
+        Fmt.pf ppf "ADD COLUMN %s %a" (Col.name' c) pp_after a
+    | Add_foreign_key k ->
+        Fmt.pf ppf "ADD FOREIGN KEY %s" (Foreign_key.name k)
+    | Add_primary_key k ->
+        Fmt.pf ppf "ADD PRIMARY KEY %a" pp_cols k
+    | Add_unique_key u ->
+        Fmt.pf ppf "ADD UNIQUE KEY %a" pp_cols (Unique_key.cols u)
+    | Create_index i ->
+        Fmt.pf ppf "CREATE INDEX %s" (Index.get_name ~table_name:"???" i)
+    | Drop_column c ->
+        Fmt.pf ppf "DROP COLUMN %s" c
+    | Drop_foreign_key k ->
+        Fmt.pf ppf "DROP FOREIGN KEY %s" (Foreign_key.name k)
+    | Drop_index i ->
+        Fmt.pf ppf "DROP INDEX %s" i
+    | Drop_primary_key ->
+        Fmt.pf ppf "DROP PRIMARY KEY"
+    | Drop_unique_key u ->
+        Fmt.pf ppf "DROP UNIQUE KEY %a" pp_cols (Unique_key.cols u)
+    | Set_column_default (Col.V c) ->
+        Fmt.pf ppf "COLUMN %s %a" (Col.name c)
+          (pp_default (Col.type' c)) (Col.default c)
+    | Set_column_type (Col.V c, _old) ->
+        Fmt.pf ppf "COLUMN %s SET TYPE %a" (Col.name c) Type.pp (Col.type' c)
+    | Set_column_pos_after (c, after) ->
+        Fmt.pf ppf "COLUMN %s SET POSITION %a" (Col.name' c) pp_after after
+
   (* Dependencies *)
 
   let check_name_unicity tables =
@@ -788,6 +832,19 @@ module Schema = struct
         loop rev_changes srcs dsts
     in
     Ok (List.rev (loop cs srcs (tables dst)))
+
+  let pp_change ppf = function
+  | Create_table t ->
+      Fmt.pf ppf "CREATE %s …" (Table.name t)
+  | Drop_table n ->
+      Fmt.pf ppf "DROP TABLE %s" n
+  | Rename_column (t, (src, dst)) ->
+      Fmt.pf ppf "RENAME COLUMN %s.%s TO %s" t src dst
+  | Rename_table (src, dst) ->
+      Fmt.pf ppf "RENAME TABLE %s to %s" src dst
+  | Alter_table (t, cs) ->
+      let pp_list = Fmt.list Table.pp_change in
+      Fmt.pf ppf "@[<v2>ALTER TABLE %s@,%a@]" (Table.name t) pp_list cs
 
   (* Dot diagrams
 

@@ -77,53 +77,6 @@ let schema db_spec format =
 
 (* Changes command *)
 
-let pp_table_change table_name ppf (c : 'a Table.change) =
-  let pp_after ppf = function
-  | None -> Format.pp_print_string ppf "FIRST"
-  | Some c -> pf ppf "AFTER %s" (Col.name' c)
-  in
-  let pp_default t ppf = function
-  | None -> pf ppf "DROP DEFAULT"
-  | Some (`Expr expr) -> pf ppf "SET DEFAULT TO %s" expr
-  | Some (`Value v) -> pf ppf "SET DEFAULT TO %a" (Type.value_pp t) v
-  in
-  let pp_cols ppf cs =
-    let pp_col ppf c = Format.pp_print_string ppf (Col.name' c) in
-    let pp_sep ppf () = pf ppf ",@ " in
-    pf ppf "(@[%a@])" (Format.pp_print_list ~pp_sep pp_col) cs
-  in
-  match c with
-  | Add_column_after (c,a) -> pf ppf "ADD COLUMN %s %a" (Col.name' c) pp_after a
-  | Add_foreign_key k -> pf ppf "ADD FOREIGN KEY %s" (Table.Foreign_key.name k)
-  | Add_primary_key k -> pf ppf "ADD PRIMARY KEY %a" pp_cols k
-  | Add_unique_key u ->
-      pf ppf "ADD UNIQUE KEY %a" pp_cols (Table.Unique_key.cols u)
-  | Create_index i ->
-      pf ppf "CREATE INDEX %s" (Table.Index.get_name ~table_name i)
-  | Drop_column c -> pf ppf "DROP COLUMN %s" c
-  | Drop_foreign_key k ->pf ppf "DROP FOREIGN KEY %s" (Table.Foreign_key.name k)
-  | Drop_index i -> pf ppf "DROP INDEX %s" i
-  | Drop_primary_key -> pf ppf "DROP PRIMARY KEY"
-  | Drop_unique_key u ->
-      pf ppf "DROP UNIQUE KEY %a" pp_cols (Table.Unique_key.cols u)
-  | Set_column_default (Col.V c) ->
-      pf ppf "COLUMN %s %a" (Col.name c)
-        (pp_default (Col.type' c)) (Col.default c)
-  | Set_column_type (Col.V c, _old) ->
-      pf ppf "COLUMN %s SET TYPE %a" (Col.name c) Type.pp (Col.type' c)
-  | Set_column_pos_after (c, after) ->
-      pf ppf "COLUMN %s SET POSITION %a" (Col.name' c) pp_after after
-
-let pp_change ppf = function
-| Schema.Create_table t -> pf ppf "CREATE %s …" (Table.name t)
-| Drop_table n -> pf ppf "DROP TABLE %s" n
-| Rename_column (t, (src, dst)) -> pf ppf "RENAME COLUMN %s.%s TO %s" t src dst
-| Rename_table (src, dst) -> pf ppf "RENAME TABLE %s to %s" src dst
-| Alter_table (t, cs) ->
-    let name = Table.name t in
-    let pp_list = Format.pp_print_list (pp_table_change name) in
-    pf ppf "@[<v2>ATLER TABLE %s@,%a@]" name pp_list cs
-
 let changes (col_renames, table_renames) src dst' format =
   log_if_error ~use:Cmdliner.Cmd.Exit.some_error @@
   let* src_file, src, src_issues = get_schema src in
@@ -138,7 +91,8 @@ let changes (col_renames, table_renames) src dst' format =
           let stmts = Rel_sql.schema_changes Rel_sqlite3.dialect cs in
           pr "@[<v>%a@]@." (Format.pp_print_list Rel_sql.Stmt.pp_src) stmts
       end
-  | Some `Debug -> pr "@[<v>%a@]" (Format.pp_print_list pp_change) cs;
+  | Some `Pseudo_sql ->
+      pr "@[<v>%a@]" (Format.pp_print_list Schema.pp_change) cs;
   | Some `Sqlite3 ->
       let stmts = Rel_sql.schema_changes Rel_sqlite3.dialect cs in
       pr "@[<v>%a@]@." (Format.pp_print_list Rel_sql.Stmt.pp_src) stmts
@@ -213,13 +167,13 @@ let changes_cmd =
     Arg.(required & pos 1 (some db_spec) None & info [] ~doc ~docv)
   in
   let format =
-    let formats = [ "debug", `Debug; "sqlite3", `Sqlite3; ] in
+    let formats = [ "pseudo-sql", `Pseudo_sql; "sqlite3", `Sqlite3; ] in
     let doc = Printf.sprintf
         "Changes output format, by default outputs SQL data definition in \
-         the dialect of the destination. $(docv) must be %s. $(b,debug) is \
-         an ad-hoc format used for debugging. Other values are for SQL data \
-         definitions in the dialect of the corresponding database management \
-         system."
+         the dialect of the destination. $(docv) must be %s. $(b,pseudo-sql) \
+         is an ad-hoc format used for understanding. Other values are \
+         for SQL data definitions in the dialect of the corresponding \
+         database management system."
         (Arg.doc_alts_enum formats)
     in
     let docv = "FMT" in

@@ -625,6 +625,9 @@ module Table : sig
 
       {b XXX.} Maybe we could surface the renaming business.*)
 
+  val pp_change : Format.formatter -> 'r change -> unit
+  (** [pp_change ppf c] formats change [c] in a pseudo, non-executable, SQL. *)
+
   (** {1:deps Dependencies} *)
 
   val sort : v list -> (v list, v list) result
@@ -712,10 +715,13 @@ module Schema : sig
 
       {b Note.} Do not see the output as a silver bullet, review
       changes that are computed after they have gone through your SQL
-      DBMS dialect via {!Rel_sql.schema_changes_stmts} and suggest
+      DBMS dialect via {!Rel_sql.schema_changes} and suggest
       improvements if you see some or non-sensical transforms. Also
       it's a bit unclear to the author how DBMS react if your schema
       is not a directed acyclic graph.*)
+
+  val pp_change : Format.formatter -> change -> unit
+  (** [pp_change ppf c] formats change [c] in a pseudo, non-executable, SQL. *)
 
   (** {1:dot Dot diagrams} *)
 

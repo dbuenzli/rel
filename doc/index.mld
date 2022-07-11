@@ -84,3 +84,6 @@ Rel_pool
 - Sort-out the naming stuff. For constraints and indices (the
   {!Rel.Table.Index.get_name} stuff is not that great, should we simply
   have [""] as a default and rename when we add to a table ?)
+
+- {!Rel_sqlite3} changes. Be smarter on tables changes that involve
+  only index/add drops.
