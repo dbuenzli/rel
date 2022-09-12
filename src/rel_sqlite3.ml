@@ -954,7 +954,9 @@ module Dialect = struct
   let schema_changes ?schema (cs : Schema.change list) =
     let add acc = function
     | Schema.Alter_table (t, cs) -> table_changes_stmts ?schema acc t cs
-    | Create_table t -> create_table ?schema t :: acc
+    | Create_table t ->
+        let is = List.map (create_index ?schema t) (Table.indices t) in
+        List.rev_append is (create_table ?schema t :: acc)
     | Drop_table t -> stmt "DROP TABLE %s;" (sqlid_in_schema ?schema t) :: acc
     | Rename_column (t, (src, dst)) ->
         let t = sqlid_in_schema ?schema t in
