@@ -19,8 +19,8 @@ let mod_srcs m =
 
 let rel_lib =
   let mods = ["rel"; "rel_sql"; "rel_query"; "rel_list"] in
-  let srcs = List.concat_map mod_srcs mods in
-  B0_ocaml.lib rel ~doc:"Rel library" ~srcs ~requires:[]
+  let srcs = List.concat_map mod_srcs mods and name = "rel-lib" in
+  B0_ocaml.lib rel ~name ~doc:"Rel library" ~srcs ~requires:[]
 
 let rel_kit_lib =
   let srcs = mod_srcs "rel_kit" in
@@ -35,9 +35,9 @@ let rel_cli_lib =
 let rel_sqlite3_lib =
   let stubs =`File (Fpath.v "src/rel_sqlite3_stubs.c") in
   let srcs = stubs :: mod_srcs "rel_sqlite3" in
-  let c_requires = Cmd.atom "-lsqlite3" in
+  let c_requires = Cmd.arg "-lsqlite3" in
   let requires = [rel] in
-  let name = "rel_sqlite3_lib" (* FIXME b0 map . to _ for name *) in
+  let name = "rel_sqlite3_lib" (* TODO b0: map . to _ for name *) in
   B0_ocaml.lib
     ~name rel_sqlite3 ~doc:"Rel sqlite3 library" ~srcs ~requires ~c_requires
 
@@ -51,7 +51,7 @@ let rel_pool_lib =
 let rel_tool =
   let srcs = Fpath.[`File (v "tool/rel_tool.ml")] in
   let requires = [cmdliner; rel; rel_cli; rel_kit; rel_sqlite3] in
-  B0_ocaml.exe "rel-tool" ~doc:"Rel tool" ~srcs ~requires
+  B0_ocaml.exe "rel" ~public:true ~doc:"Rel tool" ~srcs ~requires
 
 (* Tests *)
 
@@ -76,20 +76,20 @@ let test_chinook =
 
 let default =
   let meta =
-    let open B0_meta in
-    empty
-    |> add authors ["The rel programmers"]
-    |> add maintainers ["Daniel Bünzli <daniel.buenzl i@erratique.ch>"]
-    |> add homepage "https://erratique.ch/software/rel"
-    |> add online_doc "https://erratique.ch/software/rel/doc"
-    |> add repo "git+https://erratique.ch/repos/rel.git"
-    |> add issues "https://github.com/dbuenzli/rel/issues"
-    |> add description_tags ["database"; "query"; "SQL"; "org:erratique"; ]
-    |> add licenses ["ISC"]
-    |> add B0_opam.Meta.build
+    B0_meta.empty
+    |> ~~ B0_meta.authors ["The rel programmers"]
+    |> ~~ B0_meta.maintainers ["Daniel Bünzli <daniel.buenzl i@erratique.ch>"]
+    |> ~~ B0_meta.homepage "https://erratique.ch/software/rel"
+    |> ~~ B0_meta.online_doc "https://erratique.ch/software/rel/doc"
+    |> ~~ B0_meta.repo "git+https://erratique.ch/repos/rel.git"
+    |> ~~ B0_meta.issues "https://github.com/dbuenzli/rel/issues"
+    |> ~~ B0_meta.description_tags
+      ["database"; "query"; "SQL"; "org:erratique"; ]
+    |> ~~ B0_meta.licenses ["ISC"]
+    |> ~~ B0_opam.build
       {|[["ocaml" "pkg/pkg.ml" "build" "--dev-pkg" "%{dev}%"
           "--with-conf-sqlite3" "%{conf-sqlite3:installed}%" ]]|}
-    |> add B0_opam.Meta.depends
+    |> ~~ B0_opam.depends
       [ "ocaml", {|>= "4.14.0"|};
         "ocamlfind", {|build|};
         "ocamlbuild", {|build|};
@@ -97,7 +97,8 @@ let default =
         "conf-sqlite3", {|build|};
         "cmdliner", {|>= "1.0.0"|};
       ]
-    |> tag B0_opam.tag
+    |> B0_meta.tag B0_opam.tag
+    |> B0_meta.tag B0_release.tag
   in
-  B0_pack.v "default" ~doc:"rel package" ~meta ~locked:true @@
+  B0_pack.make "default" ~doc:"rel package" ~meta ~locked:true @@
   B0_unit.list ()
