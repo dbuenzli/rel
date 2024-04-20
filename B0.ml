@@ -86,6 +86,7 @@ let default =
     |> ~~ B0_meta.description_tags
       ["database"; "query"; "SQL"; "org:erratique"; ]
     |> ~~ B0_meta.licenses ["ISC"]
+    |> ~~ B0_opam.depopts ["conf-sqlite3", ""]
     |> ~~ B0_opam.build
       {|[["ocaml" "pkg/pkg.ml" "build" "--dev-pkg" "%{dev}%"
           "--with-conf-sqlite3" "%{conf-sqlite3:installed}%" ]]|}
@@ -94,7 +95,6 @@ let default =
         "ocamlfind", {|build|};
         "ocamlbuild", {|build|};
         "topkg", {|build & >= "1.0.3"|};
-        "conf-sqlite3", {|build|};
         "cmdliner", {|>= "1.0.0"|};
       ]
     |> B0_meta.tag B0_opam.tag

@@ -5,6 +5,9 @@ open Command
 
 let strf = Printf.sprintf
 
+let pkg_config_exists package =
+  (Sys.command ("pkg-config --exists " ^ package) = 0)
+
 let pkg_config flags package =
   let cmd tmp =
     Command.execute ~quiet:true &
@@ -56,8 +59,9 @@ let lib_with_clib ~lib ~clib ~has_lib ~src_dir ~stublib =
 let () =
   dispatch begin function
   | After_rules ->
-      lib_with_clib
-        ~lib:"rel_sqlite3" ~clib:"sqlite3" ~has_lib:"-DHAS_SQLITE3"
-        ~src_dir:"src" ~stublib:"rel_sqlite3_stubs";
+      if pkg_config_exists "sqlite3" then
+        lib_with_clib
+          ~lib:"rel_sqlite3" ~clib:"sqlite3" ~has_lib:"-DHAS_SQLITE3"
+          ~src_dir:"src" ~stublib:"rel_sqlite3_stubs";
   | _ -> ()
   end
