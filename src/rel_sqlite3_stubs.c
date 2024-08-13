@@ -145,7 +145,9 @@ CAMLprim value ocaml_rel_sqlite3_stmt_errmsg (value stmt)
 {
   sqlite3_stmt *stmtc = Sqlite3_stmt_val (stmt);
   sqlite3 *dbc = sqlite3_db_handle (stmtc);
-  return caml_copy_string (sqlite3_errmsg (dbc));
+  const char *err = sqlite3_errmsg (dbc);
+  if (!err) err = "";
+  return caml_copy_string (err);
 }
 
 CAMLprim value ocaml_rel_sqlite3_prepare (value db, value sql)

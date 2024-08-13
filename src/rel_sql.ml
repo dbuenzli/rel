@@ -151,7 +151,7 @@ module type DIALECT = sig
     unit Stmt.t
 
   val schema_changes :
-    ?schema:Schema.name -> Schema.change list -> unit Stmt.t list
+    ?schema:Schema.name -> Schema.change list -> bool * unit Stmt.t list
 end
 
 type dialect = (module DIALECT)

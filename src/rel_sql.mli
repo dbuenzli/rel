@@ -204,7 +204,7 @@ module type DIALECT = sig
   (** See {!Rel_sql.drop_index}. *)
 
   val schema_changes :
-    ?schema:Schema.name -> Schema.change list -> unit Stmt.t list
+    ?schema:Schema.name -> Schema.change list -> bool * unit Stmt.t list
   (** See {!Rel_sql.schema_changes} *)
 end
 
@@ -294,12 +294,15 @@ val drop_schema : dialect -> ?if_exists:unit -> Schema.t -> unit Stmt.t list
     before executing the statment.  *)
 
 val schema_changes :
-  dialect -> ?schema:Schema.name -> Schema.change list -> unit Stmt.t list
+  dialect -> ?schema:Schema.name -> Schema.change list ->
+  bool * unit Stmt.t list
 (** [schema_change_stmts d cs] is the sequence of statements to perform
-    the changes [cs]. This should be performed in a transaction.
+    the changes [cs]. The boolean indicates if this should be performed in
+    a transaction.
 
     {b Warning.} In the {!Rel_sqlite3.dialect}, this may set foreign keys on,
-    if you have them off you may want to set it them off again afterwards. *)
+    if you have them off you may want to set it them off again afterwards.
+*)
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2020 The rel programmers

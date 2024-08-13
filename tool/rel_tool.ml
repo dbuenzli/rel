@@ -88,13 +88,13 @@ let changes (col_renames, table_renames) src dst' format =
   | None ->
       begin match dst' with
       | `Sqlite3 _ | `Sqlite3_sql _ ->
-          let stmts = Rel_sql.schema_changes Rel_sqlite3.dialect cs in
+          let _, stmts = Rel_sql.schema_changes Rel_sqlite3.dialect cs in
           pr "@[<v>%a@]@." (Format.pp_print_list Rel_sql.Stmt.pp_src) stmts
       end
   | Some `Pseudo_sql ->
       pr "@[<v>%a@]" (Format.pp_print_list Schema.pp_change) cs;
   | Some `Sqlite3 ->
-      let stmts = Rel_sql.schema_changes Rel_sqlite3.dialect cs in
+      let _, stmts = Rel_sql.schema_changes Rel_sqlite3.dialect cs in
       pr "@[<v>%a@]@." (Format.pp_print_list Rel_sql.Stmt.pp_src) stmts
   end;
   Ok 0

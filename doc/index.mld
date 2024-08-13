@@ -60,6 +60,11 @@ Rel_pool
   text. We likely need to add an int to {!Rel.Type.Text} at some
   point.
 
+- When we try to prepare a statement with a comment, our error
+  path through the DB handle gets a misleading out of memory
+  error. If we consult the error message of the code it's SQL_MISUSE.
+  (?) a bit unclear what the correct workflow is here.
+
 - A simple short, {{!page-tutorial}tutorial}.
 
 - {!Rel} should maybe depend on {!Rel_sql}, or possibly have a

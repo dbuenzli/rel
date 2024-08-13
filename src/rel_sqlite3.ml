@@ -926,15 +926,13 @@ module Dialect = struct
     let t_id = sqlid (Table.name t) in
     let t_sid = sqlid_in_schema ?schema (Table.name t) in
     let tmp_sid = sqlid_in_schema ?schema (Table.name tmp) in
-    let acc = stmt
-        "-- Alter table %s\nPRAGMA foreign_keys = OFF;" (Table.name t) ::
-              acc
-    in
     let acc = create_table ?schema tmp :: acc in
     let acc =
       let cols = Table.cols ~ignore:(new_columns cs) t in
       stmt
-        "@[<v>INSERT INTO %s (@[%a@])@, SELECT @[%a@]@, FROM %s WHERE true;@]"
+        "@[<v>-- encoding of ALTER TABLE %s@,\
+         INSERT INTO %s (@[%a@])@, SELECT @[%a@]@, FROM %s WHERE true;@]"
+        (Table.name t)
         tmp_sid pp_col_names cols pp_col_names cols t_sid :: acc
     in
     let acc = stmt "DROP TABLE %s;" t_sid :: acc in
@@ -948,25 +946,38 @@ module Dialect = struct
       stmt "PRAGMA %sforeign_key_check (%s);" schema t_id ::
       stmt "PRAGMA %sintegrity_check (%s);" schema t_id :: acc
     in
-    (* problem: client maybe had it off *)
-    stmt "PRAGMA foreign_keys = ON;\n" :: acc
+    acc
 
   let schema_changes ?schema (cs : Schema.change list) =
-    let add acc = function
-    | Schema.Alter_table (t, cs) -> table_changes_stmts ?schema acc t cs
+    (* Note we do the transaction ourselves because the foreign_keys
+       pragma has no effect in a transaction and we need it in case
+       of alter table. *)
+    let add (alt_table, acc) = function
+    | Schema.Alter_table (t, cs) -> true, table_changes_stmts ?schema acc t cs
     | Create_table t ->
         let is = List.map (create_index ?schema t) (Table.indices t) in
-        List.rev_append is (create_table ?schema t :: acc)
-    | Drop_table t -> stmt "DROP TABLE %s;" (sqlid_in_schema ?schema t) :: acc
+        alt_table, List.rev_append is (create_table ?schema t :: acc)
+    | Drop_table t ->
+        alt_table, stmt "DROP TABLE %s;" (sqlid_in_schema ?schema t) :: acc
     | Rename_column (t, (src, dst)) ->
         let t = sqlid_in_schema ?schema t in
+        alt_table,
         stmt "ALTER TABLE %s RENAME COLUMN %s TO %s;" t src dst :: acc
     | Rename_table (src, dst) ->
         let src = sqlid_in_schema ?schema src in
-        stmt "ALTER TABLE %s RENAME TO %s;" src (sqlid dst) :: acc
+        alt_table, stmt "ALTER TABLE %s RENAME TO %s;" src (sqlid dst) :: acc
     in
-    let stmts = List.fold_left add [] cs in
-    List.rev stmts
+    let alt_table, stmts = List.fold_left add (false, []) cs in
+    let stmts =
+      let start = stmt "BEGIN IMMEDIATE TRANSACTION;" in
+      let commit = stmt "COMMIT TRANSACTION;" in
+      if not alt_table then start :: List.rev (commit :: stmts) else
+      let fk_off = stmt "PRAGMA foreign_keys = OFF;" in
+      (* problem: client maybe had it off *)
+      let fk_on = stmt "PRAGMA foreign_keys = ON;" in
+      fk_off :: start :: (List.rev (fk_on :: commit :: stmts))
+    in
+    false, stmts
 end
 
 let dialect = (module Dialect : Rel_sql.DIALECT)
