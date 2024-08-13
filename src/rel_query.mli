@@ -271,17 +271,17 @@ module Option : sig
   val none : 'a Rel.Type.t -> 'a option value
   (** [none t] is [v t None]. *)
 
-  val some : 'a Rel.Type.t -> 'a -> 'a option value
-  (** [some t v] is [v t (Some v)].
-
-      {b FIXME.} This looks wrong shouldn't that have
-      sig ['a value -> 'a option value] ?
-
- *)
+  val some : 'a Rel.Type.t -> 'a value -> 'a option value
+  (** [some t v] is [Some v]. *)
 
   val is_none : 'a option value -> bool value
+  (** [is_none v] is [true] iff [v] is [None]. *)
+
   val is_some : 'a option value -> bool value
+  (** [is_some v] is [true] ifff [v] is [Some _]. *)
+
   val get : 'a option value -> 'a value
+  (** [get v] is the value of [v] and an error otherwise. *)
 
   val has_value :
     eq:('a value -> 'a value -> bool value) ->

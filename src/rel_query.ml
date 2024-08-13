@@ -606,7 +606,7 @@ module Option = struct
   open Private
   let v t o = Const (Type.Option t, o)
   let none t = Const (Type.Option t, None)
-  let some t v = Const (Type.Option t, Some v)
+  let some src v = Unop (Cast { src; dst = Type.Option src }, v)
   let is_none v = Unop (Is_null, v)
   let is_some v = Unop (Is_not_null, v)
   let get v = Unop (Get_some, v)
