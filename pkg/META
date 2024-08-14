@@ -1,55 +1,56 @@
 description = "Relational database programming for OCaml"
 version = "%%VERSION_NUM%%"
-
 requires = ""
 archive(byte) = "rel.cma"
 archive(native) = "rel.cmxa"
 plugin(byte) = "rel.cma"
 plugin(native) = "rel.cmxs"
-exists_if = "rel.cma"
+exists_if = "rel.cma rel.cmxa"
 
-package "sqlite3" (
-  description = "Rel sqlite3"
+package "cli" (
+  directory = "cli"
+  description = "The rel.cli library"
   version = "%%VERSION_NUM%%"
-  directory = "sqlite3"
+  requires = "rel cmdliner"
+  archive(byte) = "rel_cli.cma"
+  archive(native) = "rel_cli.cmxa"
+  plugin(byte) = "rel_cli.cma"
+  plugin(native) = "rel_cli.cmxs"
+  exists_if = "rel_cli.cma rel_cli.cmxa"
+)
+
+package "kit" (
+  directory = "kit"
+  description = "The rel.kit library"
+  version = "%%VERSION_NUM%%"
   requires = "rel"
-  archive(byte) = "rel_sqlite3.cma"
-  archive(native) = "rel_sqlite3.cmxa"
-  plugin(byte) = "rel_sqlite3.cma"
-  plugin(native) = "rel_sqlite3.cmxs"
-  exists_if = "rel_sqlite3.cma"
+  archive(byte) = "rel_kit.cma"
+  archive(native) = "rel_kit.cmxa"
+  plugin(byte) = "rel_kit.cma"
+  plugin(native) = "rel_kit.cmxs"
+  exists_if = "rel_kit.cma rel_kit.cmxa"
 )
 
 package "pool" (
-  description = "Rel resource pool"
-  version = "%%VERSION_NUM%%"
   directory = "pool"
+  description = "The rel.pool library"
+  version = "%%VERSION_NUM%%"
   requires = "threads.posix"
   archive(byte) = "rel_pool.cma"
   archive(native) = "rel_pool.cmxa"
   plugin(byte) = "rel_pool.cma"
   plugin(native) = "rel_pool.cmxs"
-  exists_if = "rel_pool.cma"
+  exists_if = "rel_pool.cma rel_pool.cmxa"
 )
 
-package "kit" (
-  description = "Rel library tooklit"
+package "sqlite3" (
+  directory = "sqlite3"
+  description = "The rel.sqlite3 library"
   version = "%%VERSION_NUM%%"
-  directory = "kit"
-  archive(byte) = "rel_kit.cma"
-  archive(native) = "rel_kit.cmxa"
-  plugin(byte) = "rel_kit.cma"
-  plugin(native) = "rel_kit.cmxs"
-  exists_if = "rel_kit.cma"
-)
-
-package "cli" (
-  description = "Rel cmdliner library"
-  version = "%%VERSION_NUM%%"
-  directory = "cli"
-  archive(byte) = "rel_cli.cma"
-  archive(native) = "rel_cli.cmxa"
-  plugin(byte) = "rel_cli.cma"
-  plugin(native) = "rel_cli.cmxs"
-  exists_if = "rel_cli.cma"
+  requires = "rel"
+  archive(byte) = "rel_sqlite3.cma"
+  archive(native) = "rel_sqlite3.cmxa"
+  plugin(byte) = "rel_sqlite3.cma"
+  plugin(native) = "rel_sqlite3.cmxs"
+  exists_if = "rel_sqlite3.cma rel_sqlite3.cmxa"
 )

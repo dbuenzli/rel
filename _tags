@@ -1,16 +1,17 @@
 true : bin_annot, safe_string
 <_b0> : -traverse
 <src> : include
+<src/sqlite3> : include
+<src/pool> : include
+<src/kit> : include
+<src/cli> : include
 
-<src/rel_sqlite3_stubs.c> : use_sqlite3
-<src/rel_sqlite3.{cma,cmxa}> : record_rel_sqlite3_stubs
-<src/rel_sqlite3.cmxs> : link_rel_sqlite3_stubs_archive
-<src/librel_sqlite3_stubs.*> : use_sqlite3
+<src/sqlite3/rel_sqlite3_stubs.c> : use_sqlite3
+<src/sqlite3/rel_sqlite3.{cma,cmxa}> : record_rel_sqlite3_stubs
+<src/sqlite3/rel_sqlite3.cmxs> : link_rel_sqlite3_stubs_archive
+<src/sqlite3/librel_sqlite3_stubs.*> : use_sqlite3
 
-<src/rel_pool*> : thread, package(threads.posix)
-<src/rel_cli*> : package(cmdliner)
-<test/test_sqlite3*> : use_rel_sqlite3
-<test/test_sql*> : use_rel_sqlite3
-<test/test_chinook*> : use_rel_sqlite3
+<src/pool/rel_pool*> : thread, package(threads.posix)
+<src/cli/rel_cli*> : package(cmdliner)
 
 <tool/rel*> : package(cmdliner), use_rel_sqlite3

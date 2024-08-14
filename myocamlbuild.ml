@@ -62,6 +62,6 @@ let () =
       if pkg_config_exists "sqlite3" then
         lib_with_clib
           ~lib:"rel_sqlite3" ~clib:"sqlite3" ~has_lib:"-DHAS_SQLITE3"
-          ~src_dir:"src" ~stublib:"rel_sqlite3_stubs";
+          ~src_dir:"src/sqlite3" ~stublib:"rel_sqlite3_stubs";
   | _ -> ()
   end
