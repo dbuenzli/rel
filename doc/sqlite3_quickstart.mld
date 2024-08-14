@@ -1,0 +1,66 @@
+{0 Rel SQLite3 quick start}
+
+A few steps to get you started if you need extract data from an
+SQLite3 database.
+
+{1:sample_data Get the data}
+
+We use the Chinook sample database which represents a digital media
+store. First download the latest
+{{:https://github.com/lerocha/chinook-database/releases/latest/download/Chinook_Sqlite.sqlite}[Chinook_Sqlite.sqlite]} file.
+
+{1:schema Get a feeling of the database schema}
+
+We will show how to do this using the [Rel] library itself but for now
+the simplest is to use the [rel] tool distributed with the library and
+{{:https://graphviz.org/}graphviz}'s [dot] tool in your [PATH].
+
+{[
+rel schema --format=dot Chinook_Sqlite.sqlite | dot -Tsvg > chinook.svg
+show-url schema.svg
+]}
+
+Note that there are a few columns where `option` types show up where
+you might not expect them. These columns lack a [NOT NULL] directive
+so they might be [NULL] which [Rel] represents by option types.
+
+If you don't have [dot] you can simply look
+{{:https://github.com/lerocha/chinook-database?tab=readme-ov-file#data-model}
+here}.
+
+{1:quick_extraction Quick extraction}
+
+These steps can be invoked an [ocaml] toplevel in which the
+[rel.sqlite3] library is loaded and with the database file in the current
+working directory.
+
+First let's make a bracket for using the database with a function:
+
+{[
+let ( let* ) = Result.bind
+let with_db ?(mode = Rel_sqlite3.Read ) f =
+  Rel_sqlite3.string_error @@ Result.join @@
+  let* db = Rel_sqlite3.open' ~mode "Chinook_Sqlite.sqlite" in
+  let finally () = ignore (Rel_sqlite3.close db) in
+  Ok (Fun.protect ~finally @@ fun () -> f db)
+]}
+
+Then we devise this query that selects the identifier and title column
+of the [Album] table {b TODO.} it would be nice to avoid the raw sql
+while not getting directly into formal schema modelling.
+
+{[
+let print_albums db =
+  let row = Rel.Row.(t2 (int "id") (text "title")) in
+  let sql = "select AlbumId, Title from Album" in
+  let st = Rel_sql.Stmt.(func sql @@ ret row) in
+  let* ps = Rel_sqlite3.fold db st List.cons [] in
+  Format.printf "%a@." (Rel.Row.value_pp_list ~header:true row) (List.rev ps);
+  Ok ()
+]}
+
+Here they are:
+
+{[
+let () = Result.iter_error prerr_endline (with_db print_albums)
+]}

@@ -1,4 +1,5 @@
 open B0_kit.V000
+open Result.Syntax
 
 (* OCaml library names *)
 
@@ -65,6 +66,18 @@ let test_sqlite3 =
 
 let test_chinook =
   test ~/"test/test_chinook.ml" ~requires:[rel_sqlite3] ~srcs:chinook
+
+(* Test data *)
+
+let chinook_sqlite3_url =
+  "https://github.com/lerocha/chinook-database/releases/latest/\
+   download/Chinook_Sqlite.sqlite"
+
+let download_chinook =
+  let doc = "Download the Chinook test database to test/" in
+  B0_unit.of_action "download-chinook" ~doc @@ fun env _ ~args:_ ->
+  let file = B0_env.in_scope_dir env ~/"test/Chinook_Sqlite.sqlite" in
+  B0_action_kit.fetch_url env chinook_sqlite3_url file
 
 (* Packs *)
 
