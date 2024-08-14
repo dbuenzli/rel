@@ -3,11 +3,16 @@
    SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
-open Rel
+open B0_testing
 
-let test () =
-  Printf.printf "SQLite version: %s\n%!" (Rel_sqlite3.version ())
+let test_version () =
+  Test.test "Rel_sqlite3.version" @@ fun () ->
+  Test.log "SQLite version: %s" (Rel_sqlite3.version ());
+  ()
 
-let main () = test (); 0
+let main () =
+  Test.main @@ fun () ->
+  test_version ();
+  ()
 
 let () = if !Sys.interactive then () else (exit (main ()))

@@ -85,7 +85,7 @@ module Tsqlite3 = struct
     (t, rc) result = "ocaml_rel_sqlite3_open"
 
   let open'
-      ?(vfs = "") ?(uri = true) ?(mutex = Full) ?(mode = Read_write_create) f
+      ?(vfs = "") ?(uri = true) ?(mutex = Full) ~mode f
     =
     _open' ~vfs ~uri ~mode ~mutex f
 
@@ -468,9 +468,9 @@ let[@inline] validate db =
   if db.closed then invalid_arg "connection closed" else ()
 
 let open'
-    ?(foreign_keys = true) ?(stmt_cache_size = 10) ?vfs ?uri ?mutex ?mode f
+    ?(foreign_keys = true) ?(stmt_cache_size = 10) ?vfs ?uri ?mutex ~mode f
   =
-  match Tsqlite3.open' ?vfs ?uri ?mode ?mutex f with
+  match Tsqlite3.open' ?vfs ?uri ~mode ?mutex f with
   | Error rc -> Error (Error.v rc (Error.code_to_string rc))
   | Ok db ->
       let foreign_keys = strf "PRAGMA foreign_keys = %b" foreign_keys in

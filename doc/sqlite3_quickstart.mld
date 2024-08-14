@@ -9,36 +9,42 @@ We use the Chinook sample database which represents a digital media
 store. First download the latest
 {{:https://github.com/lerocha/chinook-database/releases/latest/download/Chinook_Sqlite.sqlite}[Chinook_Sqlite.sqlite]} file.
 
-{1:schema Get a feeling of the database schema}
+{1:schema Get a feel of the schema}
 
-We will show how to do this using the [Rel] library itself but for now
-the simplest is to use the [rel] tool distributed with the library and
+You can to this with the [Rel] library itself but for now the simplest
+is to use the [rel] tool distributed with the library and
 {{:https://graphviz.org/}graphviz}'s [dot] tool in your [PATH].
 
 {[
-rel schema --format=dot Chinook_Sqlite.sqlite | dot -Tsvg > chinook.svg
-show-url schema.svg
+rel schema -f dot Chinook_Sqlite.sqlite | dot -Tsvg | show-url -t ch.svg
 ]}
 
-Note that there are a few columns where `option` types show up where
-you might not expect them. These columns lack a [NOT NULL] directive
-so they might be [NULL] which [Rel] represents by option types.
+Note the few columns where [option] types show up where you might not
+expect them. These columns lack a [NOT NULL] directive so they might
+be [NULL] which [Rel] represents by option types.
 
 If you don't have [dot] you can simply look
 {{:https://github.com/lerocha/chinook-database?tab=readme-ov-file#data-model}
-here}.
+here}. Or simply read the SQL data definitions:
+
+{[
+rel schema -f sqlite3 Chinook_Sqlite.sqlite
+sqlite3 Chinook_Sqlite.sqlite -- .schema
+]}
 
 {1:quick_extraction Quick extraction}
 
-These steps can be invoked an [ocaml] toplevel in which the
-[rel.sqlite3] library is loaded and with the database file in the current
-working directory.
+These steps can be invoked an [ocaml] REPL in which the
+[rel.sqlite3] library is loaded and with the [Chinook_Sqlite.sqlite]
+file in the current working directory.
 
-First let's make a bracket for using the database with a function:
+First let's make a bracket for using the database with a function
+and printing out errors.
 
 {[
 let ( let* ) = Result.bind
 let with_db ?(mode = Rel_sqlite3.Read ) f =
+  Result.fold ~ok:Fun.id ~error:prerr_endline @@
   Rel_sqlite3.string_error @@ Result.join @@
   let* db = Rel_sqlite3.open' ~mode "Chinook_Sqlite.sqlite" in
   let finally () = ignore (Rel_sqlite3.close db) in
@@ -62,5 +68,5 @@ let print_albums db =
 Here they are:
 
 {[
-let () = Result.iter_error prerr_endline (with_db print_albums)
+let () = with_db print_albums
 ]}

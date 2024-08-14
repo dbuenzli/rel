@@ -11,7 +11,7 @@ type schema_format =
 [ `Dot of Rel.Schema.dot_rankdir | `Sqlite3
 | `Ocaml of [`Intf | `Impl | `Both] ]
 
-let schema_format ?docs ?(opts = ["format"]) ~default () =
+let schema_format ?docs ?(opts = ["f"; "format"]) ~default () =
   let formats =
     [ "dot", `Dot `LR; "dot-lr", `Dot `LR; "dot-tb", `Dot `TB;
       "sqlite3", `Sqlite3;
@@ -20,8 +20,8 @@ let schema_format ?docs ?(opts = ["format"]) ~default () =
   in
   let doc = Printf.sprintf
       "Schema output format. $(docv) Must be %s. $(b,dot*) are for dot \
-       graphs with given rank directions; pipe to $(b,dot -Tsvg \
-       [-Grandkir=\\$RANKDIR]) to generate an SVG file. $(b,ocaml*) is for \
+       graphs with given rank directions; pipe to $(b,dot -Tsvg) to \
+       generate an SVG file. $(b,ocaml*) is for \
        rel OCaml definitions. Other values are for SQL data definitions \
        in the dialect of the corresponding database management system."
       (Arg.doc_alts_enum formats)

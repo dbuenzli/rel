@@ -354,10 +354,10 @@ type t
 
 val open' :
   ?foreign_keys:bool -> ?stmt_cache_size:int -> ?vfs:string -> ?uri:bool ->
-  ?mutex:mutex -> ?mode:mode -> string -> (t, error) result
+  ?mutex:mutex -> mode:mode -> string -> (t, error) result
 (** [open' file] opens a connection on file [file]:
     {ul
-    {- [mode] defines the connection mode. Defaults to [Read_write_create].}
+    {- [mode] defines the connection mode.}
     {- [mutex] defines the threading mode. Defauls to [Full].}
     {- [uri], if [true] (default) the
        {{:https://sqlite.org/uri.html}URI syntax} is allowed for [file].}

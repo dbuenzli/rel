@@ -5,6 +5,7 @@ open Result.Syntax
 
 let threads = B0_ocaml.libname "threads.posix"
 let cmdliner = B0_ocaml.libname "cmdliner"
+let b0_std = B0_ocaml.libname "b0.std"
 
 let rel = B0_ocaml.libname "rel"
 let rel_kit = B0_ocaml.libname "rel.kit"
@@ -32,7 +33,7 @@ let rel_sqlite3_lib =
   let c_requires = Cmd.arg "-lsqlite3" in
   B0_ocaml.lib rel_sqlite3 ~srcs ~requires:[rel] ~c_requires
 
-let rel_pool_lib = (* We like can meld that into rel on OCaml > 5. *)
+let rel_pool_lib = (* We can put that into the rel library on OCaml > 5. *)
   let srcs = [`Dir ~/"src/pool"] in
   let requires = [threads] in
   B0_ocaml.lib rel_pool ~srcs ~requires
@@ -48,24 +49,27 @@ let rel_tool =
 
 let test ?doc ?run:(r = true) ?(requires = []) ?(srcs = []) src =
   let srcs = (`File src) :: srcs in
-  let requires = rel :: requires in
-  let meta = B0_meta.(empty |> tag test |> ~~ run r) in
+  let requires = b0_std :: rel :: requires in
+  let meta =
+    B0_meta.empty
+    |> B0_meta.(tag test)
+    |> ~~ B0_meta.run r
+    |> ~~ B0_unit.Action.cwd (`In (`Scope_dir, ~/"test"))
+  in
   let name = Fpath.basename ~strip_ext:true src in
   B0_ocaml.exe name ~srcs ~requires ~meta ?doc
 
 let chinook = [`File ~/"test/chinook.ml"]
-let test_schema = [`File ~/"test/test_schema.ml"]
+let schemas = [`File ~/"test/schemas.ml"]
 
-let test_t = test ~/"test/test.ml" ~srcs:test_schema
-let test_list = test ~/"test/test_list.ml" ~srcs:test_schema
 let test_sql =
-  test ~/"test/test_sql.ml" ~requires:[rel_sqlite3] ~srcs:test_schema
+  test ~/"test/test_sql.ml" ~requires:[rel_sqlite3] ~srcs:schemas
 
-let test_sqlite3 =
-  test ~/"test/test_sqlite3.ml" ~requires:[rel_sqlite3] ~srcs:test_schema
+let test_sqlite3_stub =
+  test ~/"test/test_sqlite3_stub.ml" ~requires:[rel_sqlite3] ~srcs:schemas
 
-let test_chinook =
-  test ~/"test/test_chinook.ml" ~requires:[rel_sqlite3] ~srcs:chinook
+let test_sqlite3_chinook =
+  test ~/"test/test_sqlite3_chinook.ml" ~requires:[rel_sqlite3] ~srcs:chinook
 
 (* Test data *)
 

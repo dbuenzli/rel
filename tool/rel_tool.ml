@@ -8,15 +8,23 @@ open Rel
 (* Preliminaries *)
 
 let ( let* ) = Result.bind
+let exec = Filename.basename Sys.executable_name
 
-let exec = "rel"
+let tty_bold = "\027[01m"
+let tty_red_bold = "\027[31;01m"
+let tty_reset = "\027[m"
+let pp_code ppf s = Format.fprintf ppf "@<0>%s%s@<0>%s" tty_bold s tty_reset
+let log_err fmt =
+  Format.eprintf ("@[%s: @<0>%s%s@<0>%s: " ^^ fmt ^^ "@]@.")
+    exec tty_red_bold "Error" tty_reset
+
+let log_if_error ~use = function Ok v -> v | Error e -> log_err "%s" e; use
+
+let log_warn fmt = Format.eprintf ("Warning: " ^^ fmt ^^ "@.")
+
 let strf = Format.sprintf
 let pf = Format.fprintf
 let pr = Format.printf
-let log_err fmt = Format.eprintf (fmt ^^ "@.")
-let log_warn fmt = Format.eprintf ("Warning: " ^^ fmt ^^ "@.")
-let log_if_error ~use = function
-| Ok v -> v | Error e -> log_err "%s: %s" exec e; use
 
 let string_of_file file =
   try
@@ -42,7 +50,7 @@ let get_sqlite3_schema spec =
   | `Sqlite3 "-" -> Error (strf "Cannot read an SQlite3 file from stdin")
   | `Sqlite3 file ->
       file_error file @@
-      let* db = Rel_sqlite3.(open' file |> string_error) in
+      let* db = Rel_sqlite3.(open' ~mode:Read file |> string_error) in
       Ok (file, db)
   | `Sqlite3_sql file ->
       file_error file @@

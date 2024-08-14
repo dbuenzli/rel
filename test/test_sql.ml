@@ -3,6 +3,7 @@
    SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
+open B0_testing
 
 (* FIXME rewrites w.r.t. to API evolution. *)
 
@@ -11,10 +12,13 @@ open Rel_query.Syntax
 
 let ( let* ) = Result.bind
 
-let log fmt = Format.printf (fmt ^^ "@.")
+let debug = false
+
+let log fmt =
+  if debug then Format.printf (fmt ^^ "@.") else
+  Format.ifprintf Format.std_formatter (fmt ^^ "@.")
+
 let log_sql what sql = log "@[<v>Executing %s@,---@,%s@,---@,@]" what sql
-let log_if_error ~use = function
-| Ok v -> v | Error e -> Format.eprintf "Error: %s@." e; use
 
 let create_schema db schema =
   List.iter (fun s -> log_sql "schema" (Rel_sql.Stmt.src s)) schema;
@@ -40,6 +44,14 @@ let select_rows db bag row =
   let ops = List.rev ops in
   log "@[<v>%a@,---@]" (Row.value_pp_list ~header:true row) ops;
   Ok ()
+
+let with_in_memory_db f =
+  B0_std.Result.get_ok' @@ Rel_sqlite3.string_error @@
+  let* db = Rel_sqlite3.open' ~mode:Memory "" in
+  let finally () = match Rel_sqlite3.close db with
+  | Ok () -> () | Error e -> Test.log_fail "%s" (Rel_sqlite3.Error.message e)
+  in
+  Fun.protect ~finally @@ fun () -> f db
 
 (*
 module Test_sql_src = struct
@@ -67,7 +79,7 @@ end
 *)
 
 module Test_products = struct
-  open Test_schema.Products_with_adts
+  open Schemas.Products_with_adts
 
   (* SQL *)
 
@@ -103,18 +115,13 @@ module Test_products = struct
 
   (*
   let get_order2_sales db =
-    let row = Row.Quick.(t3 (int "pid") (text "name") (int "sales")) in
+    let row = Row.(t3 (int "pid") (text "name") (int "sales")) in
     select_rows db order2_sales row
 *)
 
-  let run () =
-    log "Testing Products schema";
-    Rel_sqlite3.string_error @@
-    let* db = Rel_sqlite3.(open' ~mode:Rel_sqlite3.Memory "") in
-    let finally () =
-      log_if_error ~use:() Rel_sqlite3.(string_error @@ close db)
-    in
-    Fun.protect ~finally @@ fun () ->
+  let test () =
+    Test.test "Products schema" @@ fun () ->
+    with_in_memory_db @@ fun db ->
     let* () = create_schema db schema in
     let* () = insert_rows db insert_product Product.table Data.products in
     let* () = insert_rows db insert_orders Order.table Data.orders in
@@ -125,7 +132,7 @@ module Test_products = struct
 end
 
 module Test_duos = struct
-  open Test_schema.Duos
+  open Schemas.Duos
 
   let dialect = Rel_sqlite3.dialect
   let schema =
@@ -188,14 +195,9 @@ module Test_duos = struct
     let row = Row.(t1 (text "name")) in
     select_rows db (thirties_by_pred Q.thirties_pred) row
 
-  let run () =
-    log "Testing Duos schema";
-    Rel_sqlite3.string_error @@
-    let* db = Rel_sqlite3.open' ~mode:Rel_sqlite3.Memory "" in
-    let finally () =
-      log_if_error ~use:() Rel_sqlite3.(string_error @@ close db)
-    in
-    Fun.protect ~finally @@ fun () ->
+  let test () =
+    Test.test "Duos schema" @@ fun () ->
+    with_in_memory_db @@ fun db ->
     let* () = create_schema db schema in
     let* () = insert_rows db insert_person Person.table Data.persons in
     let* () = insert_rows db insert_duo Duo.table Data.duos in
@@ -209,7 +211,7 @@ module Test_duos = struct
 end
 
 module Test_org = struct
-  open Test_schema.Org
+  open Schemas.Org
   let dialect = Rel_sqlite3.dialect
 
   let tables = Table.[V Department.table; V Person.table; V Task.table]
@@ -229,14 +231,9 @@ module Test_org = struct
     let row = Row.(t1 (text "name")) in
     select_rows db abstract_expertise row
 
-  let run () =
-    log "Testing Org schema";
-    Rel_sqlite3.string_error @@
-    let* db = Rel_sqlite3.open' ~mode:Rel_sqlite3.Memory "" in
-    let finally () =
-      log_if_error ~use:() Rel_sqlite3.(string_error @@ close db)
-    in
-    Fun.protect ~finally @@ fun () ->
+  let test () =
+    Test.test "Duos" @@ fun () ->
+    with_in_memory_db @@ fun db ->
     let* () = create_schema db schema in
     let* () =
       insert_rows db insert_department Department.table Data.departments
@@ -247,12 +244,12 @@ module Test_org = struct
     Ok ()
 end
 
-let tests () =
-  log_if_error ~use:1 @@
-(*  let* () = Test_sql_src.run () in *)
-  let* () = Test_products.run () in
-  let* () = Test_duos.run () in
-  let* () = Test_org.run () in
-  Ok 0
+let main () =
+  Test.main @@ fun () ->
+  (*  let* () = Test_sql_src.run () in *)
+  Test_products.test ();
+  Test_duos.test ();
+  Test_org.test ();
+  ()
 
-let () = exit (tests ())
+let () = if !Sys.interactive then () else exit (main ())
