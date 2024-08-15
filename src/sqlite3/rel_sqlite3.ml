@@ -592,6 +592,40 @@ module Stmt = struct
   | Stmt'.Error e -> Error e
 end
 
+(* Backups *)
+
+module Backup = struct
+  type t =
+    { backup : Tsqlite3.backup;
+      mutable finished : bool; }
+
+  let error rc = Error (Error.v rc (Error.code_to_string rc))
+
+  let init ~dst ?(dname = "main") ~src ?(sname = "name") () =
+    validate src; validate dst;
+    match Tsqlite3.backup_init dst.db dname src.db sname with
+    | Ok backup -> Ok { backup; finished = false }
+    | Error rc -> error rc
+
+  let[@inline] validate b =
+    if b.finished then invalid_arg "backup finished" else ()
+
+  let finish b =
+    validate b;
+    match Tsqlite3.backup_finish b.backup with
+    | 0 (* SQLITE_OK *)  -> b.finished <- true; Ok () | rc -> error rc
+
+  let step b ?(n = -1) () =
+    validate b;
+    match Tsqlite3.backup_step b.backup n with
+    | 101 (* SQLITE_DONE *) -> Ok true
+    | 0 (* SQLITE_OK *) -> Ok false
+    | rc -> error rc
+
+  let remaining b = validate b; Tsqlite3.backup_remaining b.backup
+  let pagecount b = validate b; Tsqlite3.backup_pagecount b.backup
+end
+
 (* SQL *)
 
 module Dialect = struct

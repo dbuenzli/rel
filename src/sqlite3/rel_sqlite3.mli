@@ -494,6 +494,38 @@ module Stmt : sig
   (** [inalize s] finalizes statement [st]. *)
 end
 
+(** Low-level backup interface.
+
+    See the {{:https://sqlite.org/c3ref/backup_finish.html}SQLite
+    backup API}. *)
+module Backup : sig
+
+  type db := t
+
+  type t
+  (** The type for backups. . *)
+
+  val init :
+    dst:db -> ?dname:string -> src:db -> ?sname:string -> unit ->
+    (t, error) result
+  (** [init ~dst ~dname ~src ~sname] backups [sname] of [src] into
+      [dname] of [dst]. Database names default to [main]. *)
+
+  val finish : t -> (unit, error) result
+  (** [finish b] finished backup [b]. *)
+
+  val step : t -> ?n:int -> unit -> (bool, error) result
+  (** [step b ~n ()] copies up to [n] pages. If [n] is unspecified all
+      remaining pages are copied. Returns [Ok true] when there are no
+      more pages to be copied. *)
+
+  val remaining : t -> int
+  (** [remaining b] is the number of pages remaining to be backed up. *)
+
+  val pagecount : t -> int
+  (** [pagecount b] is the total nubmer of pages to be backed up. *)
+end
+
 (** {1:sql SQL} *)
 
 module Dialect : Rel_sql.DIALECT

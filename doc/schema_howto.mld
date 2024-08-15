@@ -141,7 +141,7 @@ module Person : sig
   (** [v ~id ~first_name ~last_name] is a person with given attributes.
       See accessors for semantics. *)
 
-  val row : int -> string -> string -> t
+  val row : id -> string -> string -> t
   (** [row] is unlabelled {!v}. *)
 
   val id : t -> id
@@ -188,12 +188,14 @@ module Person = struct
 
   open Rel
 
-  let id' = Col.v "id" ~params:[Col.Primary_key] Type.Int id
+  let id' = Col.v "id" Type.Int id
   let first_name' = Col.v "first_name" Type.Text first_name
   let last_name' = Col.v "last_name" Type.Text last_name
 
  let table =
-   Table.v "person" Row.(unit row * id' * first_name' * last_name')
+   let primary_key = Col.[V id'] in
+   Table.v "person" ~primary_key @@
+   Row.(unit row * id' * first_name' * last_name')
 end
 ]}
 

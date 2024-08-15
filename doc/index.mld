@@ -92,5 +92,9 @@ Rel_pool
   {!Rel.Table.Index.get_name} stuff is not that great, should we simply
   have [""] as a default and rename when we add to a table ?)
 
+- Table updates or inserts we can likely avoid going through listts of
+  {!Rel.Col.value} value but that's not what we have in the API at the
+  moment.
+
 - {!Rel_sqlite3} changes. Be smarter on tables changes that involve
   only index/add drops.
