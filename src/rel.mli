@@ -70,10 +70,10 @@ module Type : sig
     type ('a, 'b) t = ('a, 'b) coded
     (** See {!Rel.Type.coded}. *)
 
-    val v :
+    val make :
       ?pp:(Format.formatter -> 'a -> unit) -> name:string ->
       ('a, 'b) map -> ('b, 'a) map -> 'b repr -> ('a, 'b) coded
-    (** [v ~pp ~name enc dec repr] is a coding using [enc] and [dec]
+    (** [make ~pp ~name enc dec repr] is a coding using [enc] and [dec]
         to codec values to representation [repr]. [name] is a name for
         the coded type. [pp] is an optional formatter for the values
         of the type. *)
@@ -93,6 +93,9 @@ module Type : sig
     val pp : ('a, 'b) coded -> (Format.formatter -> 'a -> unit) option
     (** [pp c] is [c]'s pretty printer (if any). *)
   end
+
+  val coded : ('a, 'b) Coded.t -> 'a t
+  (** [coded c] is [Coded c]. *)
 
   (** {1:preds Predicates} *)
 
@@ -207,6 +210,10 @@ module Col : sig
   val pp_value : Format.formatter -> 'r value -> unit
   (** [pp_value ppf v] formats [v]'s value. *)
 
+  val pp_named_value : Format.formatter -> 'r value -> unit
+  (** [pp_named_value ppf v] formats [v]'s value prefixed by the column
+      name. *)
+
   val pp_sep : Format.formatter -> unit -> unit
   (** [pp_sep] formats a separator for columns. *)
 end
@@ -260,6 +267,9 @@ module Row : sig
 
   (** {2:quick_cols Column constructors} *)
 
+  val col : ?proj:('r -> 'a) -> string -> 'a Type.t -> ('r, 'a) Col.t
+  (** [col n t] is column named [n] of type [t]. *)
+
   val bool : ?proj:('r -> bool) -> string -> ('r, bool) Col.t
   (** [bool n] is a boolean column named [n]. *)
 
@@ -273,10 +283,10 @@ module Row : sig
   (** [float n] is a float column named [n]. *)
 
   val text : ?proj:('r -> string) -> string -> ('r, string) Col.t
-  (** [text] is a text column named [n]. *)
+  (** [text n] is a text column named [n]. *)
 
   val blob : ?proj:('r -> string) -> string -> ('r, string) Col.t
-  (** [blob] is a blob column named [n]. *)
+  (** [blob n] is a blob column named [n]. *)
 
   val option :
     ?proj:('r -> 'a option) -> 'a Type.t -> string -> ('r, 'a option) Col.t

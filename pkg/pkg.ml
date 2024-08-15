@@ -17,6 +17,7 @@ let () =
       ~cond:sqlite3 "src/sqlite3/librel_sqlite3_stubs.clib"
       ~lib_dst_dir:"sqlite3";
     Pkg.doc "doc/index.mld" ~dst:"odoc-pages/index.mld";
+    Pkg.doc "doc/sqlite3_quickstart.mld" ~dst:"odoc-pages/sqlite3_quickstart.mld";
     Pkg.doc "doc/sqlite3_howto.mld" ~dst:"odoc-pages/sqlite3_howto.mld";
     Pkg.doc "doc/tutorial.mld" ~dst:"odoc-pages/tutorial.mld";
     Pkg.doc "doc/sql_stmt_howto.mld" ~dst:"odoc-pages/sql_stmt_howto.mld";

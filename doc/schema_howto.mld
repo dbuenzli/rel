@@ -44,7 +44,7 @@ however to be provided manually. The [rel changes] command or
 the {!Rel.Schema.val-changes} function perform this.
 
 This allow to compute the changes needed by your live database to
-bring it the schema you need.
+bring it to the schema you need.
 
 These changes can be turned into SQL data definition statements with
 the {!Rel_sql.schema_changes} functions to apply on a source

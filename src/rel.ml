@@ -20,6 +20,13 @@ module Fmt = struct
 
   let invalid_arg fmt = Format.kasprintf invalid_arg fmt
   let error fmt = Format.kasprintf Result.error fmt
+
+  let tty_bold = "\027[01m"
+  let tty_red_bold = "\027[31;01m"
+  let tty_reset = "\027[m"
+  let tty_yellow = "\027[33m"
+  let bold ppf s = Format.fprintf ppf "@<0>%s%s@<0>%s" tty_bold s tty_reset
+  let yellow ppf s = Format.fprintf ppf "@<0>%s%s@<0>%s" tty_yellow s tty_reset
 end
 
 module Type = struct
@@ -40,13 +47,15 @@ module Type = struct
     type 'a repr = 'a t
     type ('a, 'b) map = 'a -> ('b, string) result
     type ('a, 'b) t = ('a, 'b) coded
-    let v ?pp ~name enc dec repr = { name; enc; dec; repr; pp }
+    let make ?pp ~name enc dec repr = { name; enc; dec; repr; pp }
     let name c = c.name
     let enc c = c.enc
     let dec c = c.dec
     let repr c = c.repr
     let pp c = c.pp
   end
+
+  let coded c = Coded c
 
   let invalid_unknown () = invalid_arg "Unknown 'a Rel.Type.t case."
   let invalid_nested_option () =
@@ -170,9 +179,11 @@ module Col = struct
     List.equal String.equal (List.map name' cs0) (List.map name' cs1)
 
   let pp ppf c = Fmt.pf ppf "@[%a : %a@]" Fmt.string c.name Type.pp c.type'
-  let pp_name ppf c = Fmt.string ppf c.name
+  let pp_name ppf c = Fmt.yellow ppf c.name
   let value_pp c ppf r = Type.value_pp c.type' ppf (c.proj r)
   let pp_value ppf (Value (c, v)) = Type.value_pp c.type' ppf v
+  let pp_named_value ppf (Value (c, v)) =
+    Fmt.pf ppf "@[%a: %a@]" pp_name c (Type.value_pp c.type') v
   let pp_sep ppf () = Format.pp_print_char ppf '|'
 end
 
@@ -190,6 +201,7 @@ module Row = struct
   let cat r ~proj row = Cat (r, proj, row)
   let empty = unit ()
 
+  let col ?(proj = Col.no_proj) n t = Col.v n t proj
   let bool ?(proj = Col.no_proj) n = Col.v n Type.Bool proj
   let int ?(proj = Col.no_proj) n = Col.v n Type.Int proj
   let int64 ?(proj = Col.no_proj) n = Col.v n Type.Int64 proj
