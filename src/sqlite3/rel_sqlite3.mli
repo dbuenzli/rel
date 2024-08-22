@@ -25,7 +25,7 @@
     {b TODO.}
     {ul
     {- Provide support for the {{:https://sqlite.org/errlog.html}
-       errorlog}, the backup API (really ? look into VACUUM) and the blob API.}
+       errorlog}, the blob API.}
     {- Have a look again at {{:https://sqlite.org/tclsqlite.html}tcl's binding}
        feature set.}
     {- [rel-sqlite3] tool, support for indexes}
@@ -461,7 +461,9 @@ val explain :
 (** [explain ~query_plan db st] explains statement [st] or its query plan
     if [query_plan] is [true] (defaults to [false]. *)
 
-(** {1:stmt Low-level interface} *)
+
+(** {1:low Low-level interface} *)
+
 
 (** Low-level prepared statement interface. *)
 module Stmt : sig

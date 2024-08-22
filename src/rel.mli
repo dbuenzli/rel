@@ -68,7 +68,7 @@ module Type : sig
         type ['b]. *)
 
     type ('a, 'b) t = ('a, 'b) coded
-    (** See {!Rel.Type.coded}. *)
+    (** See {!Rel.Type.type-coded}. *)
 
     val make :
       ?pp:(Format.formatter -> 'a -> unit) -> name:string ->
@@ -113,7 +113,7 @@ module Type : sig
   val value_equal : 'a t -> 'a -> 'a -> bool
   (** [value_equal t v0 v1] is [true] iff [v0] and [v1] of type [t]
       are equal. {b Note} that for now this is simply [( = )] but we may add
-      a notion of equality to {!coded} at some point. *)
+      a notion of equality to {!type-coded} at some point. *)
 
   val value_pp : 'a t -> (Format.formatter -> 'a -> unit)
   (** [value_pp t] is a formatter for values of type [t]. Raises

@@ -170,6 +170,23 @@ module Tsqlite3 = struct
 
   external column_blob : stmt -> int -> string =
     "ocaml_rel_sqlite3_column_blob"
+
+  type backup (* Boxed pointer to sqlite3_backup struct *)
+
+  external backup_init : t -> string -> t -> string -> (backup, rc) result =
+    "ocaml_rel_sqlite3_backup_init"
+
+  external backup_finish : backup -> rc =
+    "ocaml_rel_sqlite3_backup_finish"
+
+  external backup_step : backup -> int -> rc =
+    "ocaml_rel_sqlite3_backup_step"
+
+  external backup_remaining : backup -> int =
+    "ocaml_rel_sqlite3_backup_remaining"
+
+  external backup_pagecount : backup -> int =
+    "ocaml_rel_sqlite3_backup_pagecount"
 end
 
 (* Errors *)
@@ -601,8 +618,8 @@ module Backup = struct
 
   let error rc = Error (Error.v rc (Error.code_to_string rc))
 
-  let init ~dst ?(dname = "main") ~src ?(sname = "name") () =
-    validate src; validate dst;
+  let init ~dst ?(dname = "main") ~src ?(sname = "main") () =
+    validate dst; validate src;
     match Tsqlite3.backup_init dst.db dname src.db sname with
     | Ok backup -> Ok { backup; finished = false }
     | Error rc -> error rc

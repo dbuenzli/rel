@@ -22,6 +22,7 @@
 
 #define Sqlite3_val(v) (*((sqlite3 **) Data_abstract_val(v)))
 #define Sqlite3_stmt_val(v) (*((sqlite3_stmt **) Data_abstract_val(v)))
+#define Sqlite3_backup_val(v) (*((sqlite3_backup **) Data_abstract_val(v)))
 #define Sqlite3_rc_val(v) Int_val(v)
 #define Val_sqlite3_rc(v) Val_int(v)
 
@@ -303,4 +304,71 @@ CAMLprim value ocaml_rel_sqlite3_column_blob (value stmt, value i)
   int len = sqlite3_column_bytes (stmtc, Int_val (i));
   return caml_alloc_initialized_string
     (len, (char *)sqlite3_column_blob (stmtc, Int_val (i)));
+}
+
+/* Backups */
+
+CAMLprim value ocaml_rel_sqlite3_backup_init
+(value dst, value dname, value src, value sname)
+{
+  CAMLparam4 (dst, dname, src, sname);
+  CAMLlocal2 (ret, b);
+
+  if (!caml_string_is_c_safe (dname))
+    caml_invalid_argument
+      ("sqlite3_backup_init: destination database name is not C safe.");
+
+  if (!caml_string_is_c_safe (sname))
+    caml_invalid_argument
+      ("sqlite3_backup_init: source database name is not C safe.");
+
+  sqlite3_backup *bc = NULL;
+  sqlite3 *dstc = Sqlite3_val (dst);
+  sqlite3 *srcc = Sqlite3_val (src);
+  char *dnamec = caml_stat_strdup (String_val (dname));
+  char *snamec = caml_stat_strdup (String_val (sname));
+  caml_release_runtime_system ();
+  bc = sqlite3_backup_init (dstc, dnamec, srcc, snamec);
+  caml_stat_free (dnamec);
+  caml_stat_free (snamec);
+  caml_acquire_runtime_system ();
+
+  if (bc)
+  {
+    value b = caml_alloc (1, Abstract_tag);
+    *((sqlite3_backup **) Data_abstract_val (b)) = bc;
+    ret = caml_alloc (1, 0);
+    Store_field (ret, 0, b);
+  } else {
+    int rc = sqlite3_errcode (dstc);
+    ret = caml_alloc (1, 1);
+    Store_field (ret, 0, Val_sqlite3_rc (rc));
+  }
+  CAMLreturn (ret);
+}
+
+CAMLprim value ocaml_rel_sqlite3_backup_finish (value b)
+{
+  return Val_sqlite3_rc (sqlite3_backup_finish (Sqlite3_backup_val (b)));
+}
+
+CAMLprim value ocaml_rel_sqlite3_backup_step (value b, value n)
+{
+
+  sqlite3_backup *bc = Sqlite3_backup_val (b);
+  int nc = Int_val (n);
+  caml_release_runtime_system ();
+  int rc = sqlite3_backup_step (bc, nc);
+  caml_acquire_runtime_system();
+  return Val_sqlite3_rc (rc);
+}
+
+CAMLprim value ocaml_rel_sqlite3_backup_remaining (value b)
+{
+  return Val_int (sqlite3_backup_remaining (Sqlite3_backup_val (b)));
+}
+
+CAMLprim value ocaml_rel_sqlite3_backup_pagecount (value b)
+{
+  return Val_int (sqlite3_backup_pagecount (Sqlite3_backup_val (b)));
 }
