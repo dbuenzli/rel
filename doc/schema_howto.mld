@@ -1,6 +1,6 @@
 {0 Schema management howto}
 
-A few tips on how to manage your database schema with rel.
+A few tips on how to manage your database schema with Rel.
 
 {1:def Schema definition strategy}
 
@@ -13,22 +13,25 @@ An internal OCaml definition can always be switched to an external
 one. The {!Rel_sql.create_schema} function generates legible SQL
 data definitions from a {!Rel.Schema.t} value in the dialect of your
 database management system (DBMS). Would you need to move away
-from rel this {e always} works.
+from Rel this {e always} works.
 
 An external schema definition can be moved to an OCaml one by
 connecting to your database and generating the OCaml code for a
-{!Rel.Schema.t} value representing it. The [rel] command line tool or
-(e.g.) {!Rel_sqlite3.schema_of_db} and {!Rel.Schema.pp_ocaml} can be
-used for that. However if the external schema definition uses features
-that cannot be expressed by a {!Rel.Schema.t} value, it is not
-posssible to faithfully represent and regenerate the external schema
-from the generated OCaml schema – it is nevertheless useful to query
-the database with rel.
+{!Rel.Schema.t} value representing it. This can be done with:
+
+- The [rel] command line tool.
+- {!Rel_sqlite3.schema_of_db} and {!Rel.Schema.pp_ocaml}
+
+However if the external schema definition uses features that cannot be
+expressed by a {!Rel.Schema.t} value, it is not posssible to
+faithfully represent and regenerate the external schema from the
+generated OCaml schema – it is nevertheless useful to query and update
+the database with Rel.
 
 Ultimately which solution you choose depends on the degree of control
 you need over your DBMS. Since {!Rel.Schema.t} abstracts over DBMS and
 their differences, you may find yourself limited by sticking to an
-OCaml internal definition. Though using {{!page-sql_stmt_howto} raw
+OCaml internal definition. Though using {{!page-sql_stmt_manual}raw
 SQL statements} can bring you a long way.
 
 {1:changes Schema changes}
@@ -36,7 +39,8 @@ SQL statements} can bring you a long way.
 The goal of a schema change is to make the {e live schema} (which can
 be captured for example with {!Rel_sqlite3.schema_of_db}) of a
 database instance to coincide with the {e application's schema}, that
-is the schema that your software is assuming to hold.
+is the schema that your software is assuming to hold in the database
+it interacts with.
 
 Rel provides support to compute the change between a source and
 destination {!Rel.Schema.t} value. Table and column renames need
@@ -227,3 +231,28 @@ For SQLite3.
   key, unique, foreign keys) or the type level (not null). But we are
   missing COLLATE, GENERATED, AUTOINCREMENT.
 - Primary keys ASC/DESC.
+
+
+{1:recipes Recipes}
+
+{2:enum_column Column type for a simple OCaml variant}
+
+Use a coded column. Example
+{[
+module Role = struct
+  type t = Author | Editor
+
+  let to_string = function Author -> "author" | Editor -> "editor"
+  let pp ppf r = Fmt.string ppf (role_to_string r)
+
+  let role_type =
+    let enc = function Author -> 0 | Editor -> 1 in
+    let dec = function
+    | 0 -> Author | 1 -> Editor | n -> Fmt.failwith "%d: Unknown role" n
+    in
+    Type.coded @@
+    Type.Coded.make ~name:"Contributor.role" Type.int ~enc ~dec ~pp:pp_role
+end
+]}
+
+FIXME try to get something out of a typegist.

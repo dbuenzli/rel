@@ -385,7 +385,7 @@ val busy_timeout_ms : t -> int -> (unit, error) result
 (** [busy_timout_ms db d] sets
     {{:https://sqlite.org/c3ref/busy_timeout.html}the busy timeout} to [d]
     milliseconds. If you are planning to perform concurrent writes you
-    should, {{!page-sqlite3_howto.write}among other things}, set this
+    should, {{!page-sqlite3_howto.webapp}among other things}, set this
     to a suitable amount. *)
 
 val changes : t -> int

@@ -1,0 +1,7 @@
+{0 Query quick start}
+
+This assumes you have the definitions of the {{!schema_quickstart}schema
+quick start}.
+
+- Show how to query a single table.
+- Show how to join

@@ -52,8 +52,12 @@ let with_db ?(mode = Rel_sqlite3.Read ) f =
 ]}
 
 Then we devise this query that selects the identifier and title column
-of the [Album] table {b TODO.} it would be nice to avoid the raw sql
+of the [Album] table
+
+{b TODO.} it would be nice to avoid the raw sql
 while not getting directly into formal schema modelling.
+
+{b TODO.} Also add a parameter to the query.
 
 {[
 let print_albums db =

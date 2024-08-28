@@ -7,6 +7,7 @@ let sqlite3 = Conf.with_pkg "conf-sqlite3"
 let () =
   Pkg.describe "rel" @@ fun c ->
   let sqlite3 = Conf.value c sqlite3 in
+  let doc file = Pkg.doc ("doc/" ^ file) ~dst:("odoc-pages/" ^ file) in
   Ok [
     Pkg.mllib "src/rel.mllib";
     Pkg.mllib "src/kit/rel_kit.mllib" ~dst_dir:"kit";
@@ -16,11 +17,15 @@ let () =
     Pkg.clib
       ~cond:sqlite3 "src/sqlite3/librel_sqlite3_stubs.clib"
       ~lib_dst_dir:"sqlite3";
-    Pkg.doc "doc/index.mld" ~dst:"odoc-pages/index.mld";
-    Pkg.doc "doc/sqlite3_quickstart.mld" ~dst:"odoc-pages/sqlite3_quickstart.mld";
-    Pkg.doc "doc/sqlite3_howto.mld" ~dst:"odoc-pages/sqlite3_howto.mld";
-    Pkg.doc "doc/tutorial.mld" ~dst:"odoc-pages/tutorial.mld";
-    Pkg.doc "doc/sql_stmt_howto.mld" ~dst:"odoc-pages/sql_stmt_howto.mld";
-    Pkg.doc "doc/schema_howto.mld" ~dst:"odoc-pages/schema_howto.mld";
     Pkg.bin ~cond:sqlite3 "tool/rel_tool" ~dst:"rel";
+    doc "index.mld";
+    doc "tutorial.mld";
+    doc "query_tutorial.mld";
+    doc "query_quickstart.mld";
+    doc "query_howto.mld";
+    doc "schema_quickstart.mld";
+    doc "schema_howto.mld";
+    doc "sqlite3_quickstart.mld";
+    doc "sqlite3_howto.mld";
+    doc "sql_stmt_manual.mld";
   ]

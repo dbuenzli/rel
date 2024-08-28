@@ -10,7 +10,7 @@ It provides:
 - Typed combinators to describe database schemas. Schemas can be translated 
   to SQL data definitions or, conversly, generated for existing databases 
   (external schema definition).
-- Automated schema changes via schema diffing.
+- Automatic schema change computation via schema diffing.
 - Raw SQL statements typing and SQL generation helpers (parametric on SQL
   dialect).
 - Query language embedded in *plain* OCaml. Queries are typed,

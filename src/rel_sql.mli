@@ -15,7 +15,7 @@ open Rel
 
 (** Typed SQL statements.
 
-    See the {{!page-sql_stmt_howto}SQL statement typing howto}
+    See the {{!page-sql_stmt_manual}SQL statement typing howto}
     for a short introduction. *)
 module Stmt : sig
 
@@ -105,7 +105,7 @@ module Stmt : sig
 
   (** {2:projs Binding projections}
 
-        See the {{!page-sql_stmt_howto.binding_projection}this section}
+        See the {{!page-sql_stmt_manual.binding_projection}this section}
         of the SQL statement typing howto. *)
 
   val nop : 'b func -> ('a -> 'b) func

@@ -1,27 +1,29 @@
-{0 SQL statement typing howto}
+{0 SQL statement typing manual}
 
-The mecanism described here uses raw SQL strings. This means it is
-low-level: the SQL depends on the SQL dialect of your DBMS and will
-likely have unchecked dependencies with your {!Rel} descriptions. If
-possible you should prefer the higher level functions of {!Rel_sql} or
-the embedded query language {!Rel_query}.
+The mecanism described here uses raw SQL strings.
+
+This means it is low-level: the SQL depends on the SQL dialect of your
+DBMS and will likely have unchecked dependencies with your {!Rel}
+descriptions. Whenever possible you should prefer the higher level
+functions of {!Rel_sql} or the embedded query language {!Rel_query}.
 
 Nevertheless this provides a good escape hatch would you find yourself
 stuck with the expressiveness of the higher-level support.
 
-{1:basics Binding basics}
+{1:basics Basics}
 
 The {!Rel_sql.Stmt} module provides a low-level mecanism to type the
-parameters and results of SQL prepared statements.
+parameters and results of SQL
+{{:https://en.wikipedia.org/wiki/Prepared_statement}prepared statements}.
 
 Using this mecanism results in a {e binding function} that binds OCaml
 values to SQL parameters and returns a value of type ['a Stmt.t] that
-specifies the type of rows ['a] returned by the statement. The type
+specifies the type of rows ['a] returned by executing the statement. The type
 [unit] is used for the {{!Rel.Row.empty}empty row}.
 
 For example if you have this SQL statement:
 
-{v SELECT name FROM person WHERE age = ? OR surname = ? v}
+{@sql[ SELECT name FROM person WHERE age = ? OR surname = ? v]}
 
       Assuming [age] is an integer and [name] and [surname] are text,
       a binding function for that statement would have type
@@ -30,8 +32,8 @@ For example if you have this SQL statement:
 let names_with_age_or_surname : int -> string -> string Rel_sql.Stmt.t =
   let sql = "SELECT name FROM person WHERE id = ? OR surname = ?" in
   let name = Row.Quick.(t1 @@ text "name") in
-  let typ = Rel_sql.Stmt.(int @-> text @-> ret name) in
-  Rel_sql.Stmt.func sql typ
+  let type' = Rel_sql.Stmt.(int @-> text @-> ret name) in
+  Rel_sql.Stmt.func sql type'
 ]}
 
 Note that the binding function is only positional in nature it always
@@ -47,9 +49,7 @@ binding function.
 
 For example if we have the statement:
 
-{v
-UPDATE person SET age = ? WHERE name = ?
-v}
+{@sql[UPDATE person SET age = ? WHERE name = ?]}
 
 which we update by projecting values from an OCaml value of type
 [person] we do not want the type:
@@ -57,7 +57,6 @@ which we update by projecting values from an OCaml value of type
 {[ person -> person -> unit Rel_sql.Stmt.t ]}
 
 we want the type [person -> unit Rel_sql.Stmt.t].
-
 
 This can be achieved with {{!Rel_sql.Stmt.projs}these combinators}
 as follows:

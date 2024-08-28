@@ -1,0 +1,9 @@
+{0 Schema quickstart}
+
+Show.
+
+- How to define a {!Rel.Schema.t} value.
+- How to derive it from a db.
+- How to print a diagram of it.
+
+Now move to the {{!page-query_quickstart}query quick start}.

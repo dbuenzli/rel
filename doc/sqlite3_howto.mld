@@ -1,10 +1,66 @@
-{0 Sqlite3 howto}
+{0 Sqlite3 how-to}
 
-Show how to get a hand on the chinook database, dump the schema
+{1:schema Schema}
 
-{1:write Write heavy}
+See also Rel's general {{!page-schema_howto}how-to}.
 
-{ul
-{- set a busy timeout}
-{- set wal mode}
-{- begin immediate}}
+{2:diagram How can I get the schema diagram of a database ?}
+
+{[
+rel schema -f dot db.sqlite3 > db.dot
+rel schema -f dot db.sqlite3 | dot -Tsvg | show-url -t db.svg
+]}
+
+{2:gen How can I generate the OCaml schema definition of a database ?}
+
+{[
+rel schema -f ocaml-mli db.sqlite3 > db.mli
+rel schema -f ocaml-ml db.sqlite3 > db.ml
+]}
+
+{2:how How can I define my own database schema ?}
+
+See Rel's general {{!page-schema_howto}schema how-to}.
+
+{1:db Database configuration}
+
+{2:webapp How do I setup SQLite for a web application ?}
+
+SQLite3 is perfectly fine for medium scale web applications. However you need:
+
+{ol
+{- Set your database in {{:https://sqlite.org/wal.html}WAL} mode.}
+{- Set a {{:https://www.sqlite.org/c3ref/busy_timeout.html}busy timeout}.}
+{- Make your {{!Rel_sqlite3.with_transaction}transactions} with [`Immediate].}}
+
+This snippet peforms the two first steps for you when the connection
+is open to the database:
+
+{[
+open Result.Syntax
+
+let open' ?foreign_keys ?stmt_cache_size ?(read_only = false) file =
+  let set_wal_mode db = Rel_sqlite3.exec_sql db "PRAGMA journal_mode=WAL;" in
+  let mode = Rel_sqlite3.(if read_only then Read else Read_write_create) in
+  let mutex = Rel_sqlite3.No and f = Fpath.to_string file in
+  let* db = Rel_sqlite3.open' ?foreign_keys ?stmt_cache_size ~mutex ~mode f in
+  let* () = Rel_sqlite3.busy_timeout_ms db 5000 in
+  let* () = if read_only then Ok () else set_wal_mode db in
+  Ok db
+]}
+
+This should be enough for rarely hitting the busy time errors. In case
+you still do and need to respond to an HTTP client, it's a good idea
+to let it now to try again later. For example (using {!Webs}):
+
+{[
+let http_response_error ?(retry_after_s = 2) e =
+  let explain = Rel_sqlite3.Error.message e in
+  match Rel_sqlite3.Error.code e with
+  | e when e = Rel_sqlite3.Error.busy_timeout ->
+      let dur = string_of_int retry_after_s in
+      let headers = Http.Headers.empty |> Http.Headers.(def retry_after dur) in
+      Http.Response.empty ~headers ~explain Http.Status.service_unavailable_503
+  | _ ->
+      Http.Response.empty ~explain Http.Status.server_error_500
+]}

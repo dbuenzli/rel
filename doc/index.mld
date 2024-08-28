@@ -8,7 +8,7 @@ It provides:
 - Typed combinators to describe database schemas. Schemas can be
   translated to SQL data definitions or, conversly, generated for
   existing databases (external schema definition).
-- Automated schema changes via schema diffing.
+- Automatic schema change computation via schema diffing.
 - Raw SQL statements typing and SQL generation helpers.
 - Query language embedded in *plain* OCaml. Queries are typed,
   composable and compile to a single, flat, SQL query (experimental).
@@ -20,14 +20,22 @@ A few things are {{!todo}TODO}.
 
 These manuals are available:
 
-- The {{!page-sqlite3_quickstart}SQLite3 quick start} explains how
-  to get started to query an existing database.
-- The {{!page-sqlite3_howto}Sqlite3 howto} has more details and
-  tips on how to use [Rel] with SQLite3.
-- The {{!page-schema_howto}schema howto} discusses how to manage your
-  database schema with Rel.
-- The {{!page-sql_stmt_howto}SQL statement typing howto} explains the
-  low-level mecanism to type SQL statements.
+- The {{!page-tutorial}database tutorial} is a short tutorial. It
+  assumes you have SQLite3 installed, that you want to make your own
+  database and that you want to fully model it in OCaml.
+- The {{!page-query_tutorial}query tutorial} is a short tutorial. It
+  assumes you need to query an existing SQLite3 database.
+- The schema {{!page-schema_quickstart}quick start} and
+  {{!page-schema_howto}how-to} discusses how to manage your
+  database schema when using Rel.
+- The query {{!page-query_quickstart}quick start} and
+  {{!page-query_howto}how-to} discusses how to query your data
+  ith Rel's embedded query language.
+- The SQLite3 {{!page-sqlite3_quickstart}quick start} and
+  {{!page-sqlite3_howto}how-to} explain how to deal with SQLite3
+  databases.
+- The {{!page-sql_stmt_manual}SQL statement typing manual} explains the
+  low-level mecanism to type and execute SQL statements.
 
 {1:rel The [rel] library}
 

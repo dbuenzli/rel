@@ -1,7 +1,6 @@
 {0:tutorial Tutorial}
 
-{1:basics Basics}
-
+This tutorial shows you simple steps to define a database in OCaml
 
 {1:old Old stuff}
 
