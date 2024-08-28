@@ -27,7 +27,7 @@ module Table_env : sig
 end
 
 type error =
-[ `Undefined_table of Table.v
+[ `Undefined_table of Table.def
 | `Unknown_extension of string
 | `Unexpected_variable of string ]
 (** The type for query errors. *)

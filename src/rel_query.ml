@@ -9,19 +9,20 @@ let pf = Format.fprintf
 module Private = struct
   type ('a, 'b) unop = ..
   type ('a, 'b) unop +=
-  | Neg : 'a Rel.Type.t -> ('a, 'a) unop
+  | Neg : 'a Rel.Type.Repr.t -> ('a, 'a) unop
   | Get_some : ('a option, 'a) unop
   | Is_null : ('a option, bool) unop
   | Is_not_null : ('a option, bool) unop
-  | Cast : { src : 'a Rel.Type.t; dst : 'b Rel.Type.t } -> ('a, 'b) unop
+  | Cast : { src : 'a Rel.Type.Repr.t; dst : 'b Rel.Type.Repr.t } ->
+      ('a, 'b) unop
 
   type arith = Add | Sub | Div | Mul
   type cmp = Eq | Neq | Lt | Leq | Gt | Geq
 
   type ('a, 'b) binop = ..
   type ('a, 'b) binop +=
-  | Arith : arith * 'a Rel.Type.t -> ('a, 'a) binop
-  | Cmp : cmp * 'a Rel.Type.t -> ('a, bool) binop
+  | Arith : arith * 'a Rel.Type.Repr.t -> ('a, 'a) binop
+  | Cmp : cmp * 'a Rel.Type.Repr.t -> ('a, bool) binop
   | And : (bool, bool) binop
   | Or : (bool, bool) binop
   | Like : (string, bool) binop
@@ -29,7 +30,7 @@ module Private = struct
 
   type 'a value =
   | Var : string -> 'a value (* only for compiling *)
-  | Const : 'a Rel.Type.t * 'a -> 'a value
+  | Const : 'a Rel.Type.Repr.t * 'a -> 'a value
   | Unop : ('a, 'b) unop * 'a value -> 'b value
   | Binop : ('a, 'b) binop * 'a value * 'a value -> 'b value
   | Proj : 'b value * ('b, 'a) Rel.Col.t -> 'a value
@@ -51,14 +52,15 @@ module Private = struct
   let unop_to_string : type a b. (a, b) unop -> string = function
   | Neg t ->
       begin match t with
-      | Rel.Type.Bool -> "NOT"
-      | Rel.Type.(Int | Int64 | Float) -> "-"
+      | Bool -> "NOT"
+      | Int | Int64 | Float -> "-"
       | _ -> "<unknown>"
       end
   | Get_some -> "get-some"
   | Is_not_null -> "IS NOT NULL"
   | Is_null -> "IS NULL"
-  | Cast { src; dst } -> strf "%a-of-%a" Rel.Type.pp dst Rel.Type.pp src
+  | Cast { src; dst } ->
+      strf "%a-of-%a" Rel.Type.Repr.pp dst Rel.Type.Repr.pp src
   | _ -> "<unknown>"
 
   let cmp_to_string = function
@@ -79,7 +81,7 @@ module Private = struct
   let rec pp_value : type a. int -> Format.formatter -> a value -> unit =
   fun id ppf -> function
   | Var v -> Format.pp_print_string ppf v
-  | Const (t, v)  -> Rel.Type.value_pp t ppf v
+  | Const (t, v)  -> Rel.Type.Repr.value_pp t ppf v
   | Unop (u, v) ->
       pf ppf "@[<1>(%s@ %a)@]" (unop_to_string u) (pp_value id) v
   | Binop (b, v0, v1) ->
@@ -138,7 +140,7 @@ module Bag = struct
   let row f = Row f
   let inj f = Row f
   let tuple f v = Tuple (f, v)
-  let const t v = Const (t, v)
+  let const t v = Const (Rel.Type.Repr.of_t t, v)
   let pp = pp_bag
   let to_bag = Fun.id
 end
@@ -149,13 +151,13 @@ module Bag_sql = struct   (* Target SQL fragment to compile bags *)
   type col_name = string
   type exp =
   | Var of string
-  | Const : 'a Rel.Type.t * 'a -> exp
+  | Const : 'a Rel.Type.Repr.t * 'a -> exp
   | Unop of (bool * (* prefixed *) string) * exp
   | Binop of string * exp * exp
   | Proj of var * string
   | Exists of t
   | Case of exp * exp * exp
-  | Cast : 'dst Rel.Type.t * exp -> exp
+  | Cast : 'dst Rel.Type.Repr.t * exp -> exp
   | Row of sel list
 
   and sel = Col of exp * var (* e AS l *) | All of table (* t.* *)
@@ -168,35 +170,36 @@ module Bag_sql = struct   (* Target SQL fragment to compile bags *)
 
   let empty_table : table * var = "(VALUES ('empty'))", "empty"
 
-  let rec type_of_type : type a. a Rel.Type.t -> string * bool = function
-  | Rel.Type.Bool -> "BOOL", true (* not null *)
-  | Rel.Type.Int -> "INTEGER", true
-  | Rel.Type.Int64 -> "BIGINT", true
-  | Rel.Type.Float -> "DOUBLE", true
-  | Rel.Type.Text -> "TEXT", true
-  | Rel.Type.Blob -> "BLOB", true
-  | Rel.Type.Option t -> fst (type_of_type t), false
-  | Rel.Type.Coded c -> type_of_type (Rel.Type.Coded.repr c)
-  | _ -> Rel.Type.invalid_unknown ()
+  let rec type_of_type : type a. a Rel.Type.Repr.t -> string * bool = function
+  | Bool -> "BOOL", true (* not null *)
+  | Int -> "INTEGER", true
+  | Int64 -> "BIGINT", true
+  | Float -> "DOUBLE", true
+  | Text -> "TEXT", true
+  | Blob -> "BLOB", true
+  | Option t -> fst (type_of_type t), false
+  | Coded c -> type_of_type (Rel.Type.Repr.of_t ((Rel.Type.Coded.repr c)))
+  | Custom c -> Rel.Type.Custom.invalid_unknown c
 
   (* FIXME this should be part of dialect. *)
-  let rec const_to_literal : type a. a Rel.Type.t -> a -> string =
+  let rec const_to_literal : type a. a Rel.Type.Repr.t -> a -> string =
   fun t v -> match t with
-  | Rel.Type.Bool -> (match v with true -> "1" | false -> "0")
-  | Rel.Type.Int -> string_of_int v
-  | Rel.Type.Int64 -> Int64.to_string v
-  | Rel.Type.Float -> Float.to_string v
-  | Rel.Type.Text -> Rel_sql.Syntax.string_to_literal v
-  | Rel.Type.Blob (* FIXME nonsense *) -> Rel_sql.Syntax.string_to_literal v
-  | Rel.Type.Option t ->
+  | Bool -> (match v with true -> "1" | false -> "0")
+  | Int -> string_of_int v
+  | Int64 -> Int64.to_string v
+  | Float -> Float.to_string v
+  | Text -> Rel_sql.Syntax.string_to_literal v
+  | Blob (* FIXME nonsense *) -> Rel_sql.Syntax.string_to_literal v
+  | Option t ->
       (match v with None -> "NULL" | Some v -> const_to_literal t v)
-  | Rel.Type.Coded c ->
+  | Coded c ->
       (match Rel.Type.Coded.enc c v with
-      | Ok v -> const_to_literal (Rel.Type.Coded.repr c) v
-      | Error e ->
+      | v ->
+          const_to_literal (Rel.Type.Repr.of_t (Rel.Type.Coded.repr c)) v
+      | exception Failure e ->
           let name = Rel.Type.Coded.name c in
           invalid_arg (strf "invalid %s constant %s" name e))
-  | _ -> Rel.Type.invalid_unknown ()
+  | Custom c -> Rel.Type.Custom.invalid_unknown c
 
   let rec sel_to_string = function
   | Col (exp, "") -> exp_to_string exp (* FIXME possible ? *)
@@ -294,8 +297,8 @@ module Bag_to_sql = struct
     fun op -> match op with
     | Private.Neg t ->
         begin match t with
-        | Rel.Type.Bool -> true, "NOT"
-        | Rel.Type.(Int | Int64 | Float) -> true, "-"
+        | Bool -> true, "NOT"
+        | Int | Int64 | Float -> true, "-"
         | _ -> failwith "Rel_sql: unimplemented unary operation"
         end
     | Is_null -> false, "IS NULL"
@@ -402,8 +405,8 @@ module Bag_to_sql = struct
       let m' = stage1 m and n' = fun y -> stage1 (n y) in
       stage1 (Where (value_stage1 l, (Foreach (m', n'))))
   | Foreach (Table _ as t, n) -> Foreach (t, fun y -> stage1 (n y))
-  | Where (Const (Rel.Type.Bool, true), m) -> stage1 m (* WhereTrue *)
-  | Where (Const (Rel.Type.Bool, false), m) -> Empty (* WhereFalse *)
+  | Where (Const (Bool, true), m) -> stage1 m (* WhereTrue *)
+  | Where (Const (Bool, false), m) -> Empty (* WhereFalse *)
   | Where (l, m) -> Where (value_stage1 l, stage1 m)
 
   and value_stage1 : type a. a value -> a value = function
@@ -487,13 +490,13 @@ module Sql = struct
     { argc; bag; func }
 
   let ( @-> ) = arg
-  let bool = Rel.Type.Bool
-  let int = Rel.Type.Int
-  let int64 = Rel.Type.Int64
-  let float = Rel.Type.Float
-  let text = Rel.Type.Text
-  let blob = Rel.Type.Blob
-  let option v = (Rel.Type.Option v)
+  let bool = Rel.Type.bool
+  let int = Rel.Type.int
+  let int64 = Rel.Type.int64
+  let float = Rel.Type.float
+  let text = Rel.Type.text
+  let blob = Rel.Type.blob
+  let option v = Rel.Type.option v
 
   let normalize = Bag_to_sql.normalize
 
@@ -505,108 +508,111 @@ end
 module Bool = struct
   open Rel
   open Private
-  let v b = Const (Type.Bool, b)
-  let true' = Const (Type.Bool, true)
-  let false' = Const (Type.Bool, false)
-  let equal x y = Binop (Cmp (Eq, Type.Bool), x, y)
+  let v b = Const (Bool, b)
+  let true' = Const (Bool, true)
+  let false' = Const (Bool, false)
+  let equal x y = Binop (Cmp (Eq, Bool), x, y)
   let ( = ) = equal
   let ( && ) x y = Binop (And, x, y)
   let ( || ) x y = Binop (Or, x, y)
-  let not x = Unop (Neg Type.Bool, x)
-  let dst = Type.Bool
-  let of_int x = Unop (Cast {src = Type.Int; dst}, x)
-  let of_int64 x = Unop (Cast {src = Type.Int64; dst}, x)
-  let of_float x = Unop (Cast {src = Type.Float; dst}, x)
-  let of_string x = Unop (Cast {src = Type.Text; dst}, x)
+  let not x = Unop (Neg Bool, x)
+  let dst = Type.Repr.Bool
+  let of_int x = Unop (Cast {src = Int; dst}, x)
+  let of_int64 x = Unop (Cast {src = Int64; dst}, x)
+  let of_float x = Unop (Cast {src = Float; dst}, x)
+  let of_string x = Unop (Cast {src = Text; dst}, x)
 end
 
 module Int = struct
   open Rel
   open Private
-  let v x = Const (Type.Int, x)
-  let zero = Const (Type.Int, 0)
-  let one = Const (Type.Int, 1)
-  let equal x y = Binop (Cmp (Eq, Type.Int), x, y)
+  let v x = Const (Int, x)
+  let zero = Const (Int, 0)
+  let one = Const (Int, 1)
+  let equal x y = Binop (Cmp (Eq, Int), x, y)
   let ( = ) = equal
-  let ( <> ) x y = Binop (Cmp (Neq, Type.Int), x, y)
-  let ( < ) x y = Binop (Cmp (Lt, Type.Int), x, y)
-  let ( <= ) x y = Binop (Cmp (Leq, Type.Int), x, y)
-  let ( > ) x y = Binop (Cmp (Gt, Type.Int), x, y)
-  let ( >= ) x y = Binop (Cmp (Geq, Type.Int), x, y)
-  let ( ~- ) x = Unop ((Neg Type.Int), x)
-  let ( + ) x y = Binop (Arith (Add, Type.Int), x, y)
-  let ( - ) x y = Binop (Arith (Sub, Type.Int), x, y)
-  let ( * ) x y = Binop (Arith (Mul, Type.Int), x, y)
-  let ( / ) x y = Binop (Arith (Div, Type.Int), x, y)
-  let dst = Type.Int
-  let of_bool x = Unop (Cast {src = Type.Bool; dst}, x)
-  let of_int64 x = Unop (Cast {src = Type.Int64; dst}, x)
-  let of_float x = Unop (Cast {src = Type.Float; dst}, x)
-  let of_string x = Unop (Cast {src = Type.Text; dst}, x)
+  let ( <> ) x y = Binop (Cmp (Neq, Int), x, y)
+  let ( < ) x y = Binop (Cmp (Lt, Int), x, y)
+  let ( <= ) x y = Binop (Cmp (Leq, Int), x, y)
+  let ( > ) x y = Binop (Cmp (Gt, Int), x, y)
+  let ( >= ) x y = Binop (Cmp (Geq, Int), x, y)
+  let ( ~- ) x = Unop ((Neg Int), x)
+  let ( + ) x y = Binop (Arith (Add, Int), x, y)
+  let ( - ) x y = Binop (Arith (Sub, Int), x, y)
+  let ( * ) x y = Binop (Arith (Mul, Int), x, y)
+  let ( / ) x y = Binop (Arith (Div, Int), x, y)
+  let dst = Type.Repr.Int
+  let of_bool x = Unop (Cast {src = Bool; dst}, x)
+  let of_int64 x = Unop (Cast {src = Int64; dst}, x)
+  let of_float x = Unop (Cast {src = Float; dst}, x)
+  let of_string x = Unop (Cast {src = Text; dst}, x)
 end
 
 module Int64 = struct
   open Rel
   open Private
-  let v x = Const (Type.Int64, x)
-  let zero = Const (Type.Int64, 0L)
-  let one = Const (Type.Int64, 1L)
-  let equal x y = Binop (Cmp (Eq, Type.Int64), x, y)
+  let v x = Const (Int64, x)
+  let zero = Const (Int64, 0L)
+  let one = Const (Int64, 1L)
+  let equal x y = Binop (Cmp (Eq, Int64), x, y)
   let ( = ) = equal
-  let ( ~- ) x = Unop ((Neg Type.Int64), x)
-  let ( + ) x y = Binop (Arith (Add, Type.Int64), x, y)
-  let ( - ) x y = Binop (Arith (Sub, Type.Int64), x, y)
-  let ( * ) x y = Binop (Arith (Mul, Type.Int64), x, y)
-  let ( / ) x y = Binop (Arith (Div, Type.Int64), x, y)
-  let dst = Type.Int64
-  let of_bool x = Unop (Cast {src = Type.Bool; dst}, x)
-  let of_int x = Unop (Cast {src = Type.Int; dst}, x)
-  let of_float x = Unop (Cast {src = Type.Float; dst}, x)
-  let of_string x = Unop (Cast {src = Type.Text; dst}, x)
+  let ( ~- ) x = Unop ((Neg Int64), x)
+  let ( + ) x y = Binop (Arith (Add, Int64), x, y)
+  let ( - ) x y = Binop (Arith (Sub, Int64), x, y)
+  let ( * ) x y = Binop (Arith (Mul, Int64), x, y)
+  let ( / ) x y = Binop (Arith (Div, Int64), x, y)
+  let dst = Type.Repr.Int64
+  let of_bool x = Unop (Cast {src = Bool; dst}, x)
+  let of_int x = Unop (Cast {src = Int; dst}, x)
+  let of_float x = Unop (Cast {src = Float; dst}, x)
+  let of_string x = Unop (Cast {src = Text; dst}, x)
 end
 
 module Float = struct
   open Rel
   open Private
-  let v x = Const (Type.Float, x)
-  let zero = Const (Type.Float, 0.0)
-  let one = Const (Type.Float, 1.0)
-  let equal x y = Binop (Cmp (Eq, Type.Float), x, y)
+  let v x = Const (Float, x)
+  let zero = Const (Float, 0.0)
+  let one = Const (Float, 1.0)
+  let equal x y = Binop (Cmp (Eq, Float), x, y)
   let ( = ) = equal
-  let ( ~-. ) x = Unop ((Neg Type.Float), x)
-  let ( +. ) x y = Binop (Arith (Add, Type.Float), x, y)
-  let ( -. ) x y = Binop (Arith (Sub, Type.Float), x, y)
-  let ( *. ) x y = Binop (Arith (Mul, Type.Float), x, y)
-  let ( /. ) x y = Binop (Arith (Div, Type.Float), x, y)
-  let dst = Type.Float
-  let of_bool x = Unop (Cast {src = Type.Bool; dst}, x)
-  let of_int x = Unop (Cast {src = Type.Int; dst}, x)
-  let of_int64 x = Unop (Cast {src = Type.Int64; dst}, x)
-  let of_string x = Unop (Cast {src = Type.Text; dst}, x)
+  let ( ~-. ) x = Unop ((Neg Float), x)
+  let ( +. ) x y = Binop (Arith (Add, Float), x, y)
+  let ( -. ) x y = Binop (Arith (Sub, Float), x, y)
+  let ( *. ) x y = Binop (Arith (Mul, Float), x, y)
+  let ( /. ) x y = Binop (Arith (Div, Float), x, y)
+  let dst = Type.Repr.Float
+  let of_bool x = Unop (Cast {src = Bool; dst}, x)
+  let of_int x = Unop (Cast {src = Int; dst}, x)
+  let of_int64 x = Unop (Cast {src = Int64; dst}, x)
+  let of_string x = Unop (Cast {src = Text; dst}, x)
 end
 
 module Text = struct
   open Rel
   open Private
-  let v s = Const (Type.Text, s)
-  let empty = Const (Type.Text, "")
-  let equal x y = Binop (Cmp (Eq, Type.Text), x, y)
+  let v s = Const (Text, s)
+  let empty = Const (Text, "")
+  let equal x y = Binop (Cmp (Eq, Text), x, y)
   let ( = ) = equal
   let ( ^ ) x y = Binop (Cat, x, y)
   let like x y = Binop (Like, x, y)
-  let dst = Type.Text
-  let of_bool x = Unop (Cast {src = Type.Bool; dst}, x)
-  let of_int x = Unop (Cast {src = Type.Int; dst}, x)
-  let of_int64 x = Unop (Cast {src = Type.Int64; dst}, x)
-  let of_float x = Unop (Cast {src = Type.Float; dst}, x)
+  let dst = Type.Repr.Text
+  let of_bool x = Unop (Cast {src = Bool; dst}, x)
+  let of_int x = Unop (Cast {src = Int; dst}, x)
+  let of_int64 x = Unop (Cast {src = Int64; dst}, x)
+  let of_float x = Unop (Cast {src = Float; dst}, x)
 end
 
 module Option = struct
   open Rel
   open Private
-  let v t o = Const (Type.Option t, o)
-  let none t = Const (Type.Option t, None)
-  let some src v = Unop (Cast { src; dst = Type.Option src }, v)
+  let v t o = Const (Option (Type.Repr.of_t t), o)
+  let none t = Const (Option (Type.Repr.of_t t), None)
+  let some src v =
+    let src = Type.Repr.of_t src in
+    Unop (Cast { src; dst = Option src }, v)
+
   let is_none v = Unop (Is_null, v)
   let is_some v = Unop (Is_not_null, v)
   let get v = Unop (Get_some, v)

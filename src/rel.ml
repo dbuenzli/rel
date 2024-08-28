@@ -3,6 +3,8 @@
    SPDX-License-Identifier: ISC
   ---------------------------------------------------------------------------*)
 
+(* Stdlib preliminaries *)
+
 let ( let* ) = Result.bind
 let assoc_find_remove k l = match List.assoc_opt k l with
 | None -> None, l | Some _ as v -> v, List.remove_assoc k l
@@ -12,8 +14,14 @@ module Smap = Map.Make (String)
 module Fmt = struct
   let pf = Format.fprintf
   let str = Format.asprintf
+  let bool = Format.pp_print_bool
+  let int = Format.pp_print_int
+  let int64 ppf v = pf ppf "%Ld" v
+  let float ppf v = pf ppf "%g" v
   let string = Format.pp_print_string
   let list = Format.pp_print_list
+  let option = Format.pp_print_option
+  let null ppf () = Format.pp_print_string ppf "NULL"
   let hex ppf s =
     for i = 0 to String.length s - 1
     do pf ppf "%02x" (String.get_uint8 s i) done
@@ -21,58 +29,124 @@ module Fmt = struct
   let invalid_arg fmt = Format.kasprintf invalid_arg fmt
   let error fmt = Format.kasprintf Result.error fmt
 
-  let tty_bold = "\027[01m"
-  let tty_red_bold = "\027[31;01m"
-  let tty_reset = "\027[m"
-  let tty_yellow = "\027[33m"
-  let bold ppf s = Format.fprintf ppf "@<0>%s%s@<0>%s" tty_bold s tty_reset
-  let yellow ppf s = Format.fprintf ppf "@<0>%s%s@<0>%s" tty_yellow s tty_reset
+  let st_bold = "\027[01m"
+  let st_red_bold = "\027[31;01m"
+  let st_reset = "\027[m"
+  let st_yellow = "\027[33m"
+  let bold ppf s = Format.fprintf ppf "@<0>%s%s@<0>%s" st_bold s st_reset
+  let yellow ppf s = Format.fprintf ppf "@<0>%s%s@<0>%s" st_yellow s st_reset
 end
 
+(* Columns *)
+
+type 'a fmt = Format.formatter -> 'a -> unit
+type 'a eq = 'a -> 'a -> bool
+
 module Type = struct
-  type 'a t = ..
-  type ('a, 'b) coded =
+  module Repr = struct
+    module Custom = struct
+      type 'a type' = ..
+      type 'a ops = { name : string; doc : string; pp : 'a fmt; equal : 'a eq }
+      type 'a t = 'a type' * 'a ops
+
+      let pp_default ppf v = Fmt.string ppf "<custom>"
+      let equal_default = ( = )
+      let make
+          ?(doc = "") ?(pp = pp_default) ?(equal = equal_default) ~name type'
+        =
+        type', { name; doc; pp; equal }
+
+      let name (_, ops) = ops.name
+      let doc (_, ops) = ops.doc
+      let pp (_, ops) = ops.pp
+      let equal (_, ops) = ops.equal
+      let invalid_unknown (_, ops) =
+        invalid_arg ("Unknown " ^ ops.name ^ " custom Rel.Type.t")
+    end
+
+    type 'a t =
+    | Bool : bool t
+    | Int : int t
+    | Int64 : int64 t
+    | Float : float t
+    | Text : string t
+    | Blob : string t
+    | Option : 'a t -> 'a option t
+    | Coded : ('a, 'b) coded -> 'a t
+    | Custom : 'a Custom.t -> 'a t
+
+    and ('a, 'b) coded =
     { name : string;
-      enc : 'a -> ('b, string) result;
-      dec : 'b -> ('a, string) result;
+      doc : string;
       repr : 'b t;
-      pp : (Format.formatter -> 'a -> unit) option; }
+      enc : 'a -> 'b;
+      dec : 'b -> 'a;
+      pp : 'a fmt;
+      equal : 'a eq; }
 
-  type 'a t +=
-  | Bool : bool t | Int : int t | Int64 : int64 t | Float : float t
-  | Text : string t | Blob : string t | Option : 'a t -> 'a option t
-  | Coded : ('a, 'b) coded -> 'a t
+    let rec value_pp : type a. a t -> a fmt = function
+    | Bool -> Fmt.bool | Int -> Fmt.int | Int64 -> Fmt.int64
+    | Float -> Fmt.float  | Text -> Fmt.string | Blob -> Fmt.hex
+    | Option t -> Fmt.option ~none:Fmt.null (value_pp t)
+    | Coded c -> c.pp | Custom c -> Custom.pp c
 
-  module Coded = struct
-    type 'a repr = 'a t
-    type ('a, 'b) map = 'a -> ('b, string) result
-    type ('a, 'b) t = ('a, 'b) coded
-    let make ?pp ~name enc dec repr = { name; enc; dec; repr; pp }
-    let name c = c.name
-    let enc c = c.enc
-    let dec c = c.dec
-    let repr c = c.repr
-    let pp c = c.pp
+    let rec pp : type a. a t fmt =
+    fun ppf t -> match t with
+    | Bool -> Fmt.string ppf "bool" | Int -> Fmt.string ppf "int"
+    | Int64 -> Fmt.string ppf "int64" | Float -> Fmt.string ppf "float"
+    | Text -> Fmt.string ppf "text" | Blob -> Fmt.string ppf "blob"
+    | Option v -> pp ppf v; Fmt.string ppf " option"
+    | Coded c -> Fmt.string ppf c.name
+    | Custom c -> Fmt.string ppf (Custom.name c)
+
+    let rec value_equal : type a. a t -> a -> a -> bool = function
+    | Bool -> Bool.equal | Int -> Int.equal | Int64 -> Int64.equal
+    | Float -> Float.equal | Text -> String.equal | Blob -> String.equal
+    | Option t -> Option.equal (value_equal t) | Coded c -> c.equal
+    | Custom c -> Custom.equal c
+
+    module Coded = struct
+      type ('a, 'b) t = ('a, 'b) coded
+      let make ?(doc = "") ?pp ?(equal = ( = )) ~name repr ~enc ~dec =
+        let pp = match pp with
+        | Some pp -> pp
+        | None ->
+            fun ppf v -> match enc v with
+            | v -> (value_pp repr) ppf v
+            | exception Failure e -> Fmt.pf ppf "<%s error: %s>" name e
+        in
+        { name; doc; enc; dec; repr; pp; equal }
+
+      let name c = c.name
+      let doc c = c.doc
+      let repr c = c.repr
+      let enc c = c.enc
+      let dec c = c.dec
+      let pp c = c.pp
+      let equal c = c.equal
+    end
+
+    let of_t = Fun.id
+    let to_t = Fun.id
   end
 
+  include Repr
+
+  let rec is_nullable : type a. a t -> bool = function
+  | Option _ -> true | Coded c -> is_nullable (Coded.repr c)
+  | Bool | Int | Int64 | Float | Text | Blob | Custom _ -> false
+
+  let bool = Bool
+  let int = Int
+  let int64 = Int64
+  let float = Float
+  let text = Text
+  let blob = Blob
   let coded c = Coded c
-
-  let invalid_unknown () = invalid_arg "Unknown 'a Rel.Type.t case."
-  let invalid_nested_option () =
-    invalid_arg "Nested option in 'a Rel.Type.t are unsupported."
-
-  let rec pp : type a. Format.formatter -> a t -> unit =
-  fun ppf t -> match t with
-  | Bool -> Fmt.string ppf "bool" | Int -> Fmt.string ppf "int"
-  | Int64 -> Fmt.string ppf "int64" | Float -> Fmt.string ppf "float"
-  | Text -> Fmt.string ppf "text" | Blob -> Fmt.string ppf "blob"
-  | Option v -> pp ppf v; Fmt.string ppf " option"
-  | Coded { name; _ } -> Fmt.string ppf name
-  | _ -> invalid_unknown ()
-
-  let rec is_option : type a. a t -> bool = function
-  | Bool | Int | Int64 | Float | Text | Blob -> false
-  | Coded c -> is_option (Coded.repr c) | _ -> invalid_unknown ()
+  let custom c = Custom c
+  let option c =
+    if not (is_nullable c) then Option c else
+    Fmt.invalid_arg "%a already nullable" pp c
 
   let rec equal : type a b. a t -> b t -> bool = fun t0 t1 -> match t0, t1 with
   | Bool, Bool -> true | Int, Int -> true | Int64, Int64 -> true
@@ -82,29 +156,6 @@ module Type = struct
   | Coded c, t -> equal (Coded.repr c) t
   | t, Coded c -> equal t (Coded.repr c)
   | _, _ -> false
-
-  let value_equal : type a. a t -> a -> a -> bool =
-    (* Maybe we should have an ~equal on coded and plug it here. Maybe not. *)
-    fun _ v0 v1 -> v0 = v1
-
-  let rec value_pp : type a. a t -> (Format.formatter -> a -> unit) = function
-  | Bool -> Format.pp_print_bool
-  | Int -> Format.pp_print_int
-  | Int64 -> fun ppf v -> Fmt.pf ppf "%Ld" v
-  | Float -> fun ppf v -> Fmt.pf ppf "%g" v
-  | Text -> Fmt.string
-  | Blob -> fun ppf v -> Fmt.pf ppf "x%a" Fmt.hex v
-  | Option t ->
-      let pp_null ppf () = Format.pp_print_string ppf "NULL" in
-      Format.pp_print_option ~none:pp_null (value_pp t)
-  | Coded c ->
-      (fun ppf v -> match Coded.pp c with
-      | Some pp -> pp ppf v
-      | None ->
-          match Coded.enc c v with
-          | Ok v -> (value_pp (Coded.repr c)) ppf v
-          | Error e -> Fmt.pf ppf "<error: %s>" e)
-  | _ -> invalid_unknown ()
 
   let rec value_change : type a b. a t -> a -> b t -> b -> b option =
   (* [None] if v0 = v1 otherwise (Some v1) *)
@@ -125,7 +176,13 @@ module Type = struct
           | Some _ as v -> Some v
       end;
   | Coded c0, Coded c1 ->
-      begin match Coded.enc c0 v0, Coded.enc c1 v1 with
+      let cv0 = match Coded.enc c0 v0 with
+      | exception Failure e -> Error e | v -> Ok v
+      in
+      let cv1 = match Coded.enc c1 v1 with
+      | exception Failure e -> Error e | v -> Ok v
+      in
+      begin match cv0, cv1 with
       | Error _, Error _ -> None (* Why not… *)
       | Error _, Ok _ | Ok _, Error _ -> Some v1 (* Why not… *)
       | Ok cv0, Ok cv1 ->
@@ -135,18 +192,22 @@ module Type = struct
       end
   | _, _ -> Some v1
 
+(* FIXME the following should be made more formal of what it is:
+   (ocaml type + constructor of corresponding Type.t value)and
+   it should be exposoed in the Custom type definition. *)
+
   let rec ocaml_spec : type a. a t -> string * string = function
-  | Bool -> "bool", "Bool"
-  | Int -> "int", "Int"
-  | Int64 -> "int64", "Int64"
-  | Float -> "float", "Float"
-  | Text -> "string", "Text"
-  | Blob -> "string", "Blob"
+  | Bool -> "bool", "bool"
+  | Int -> "int", "int"
+  | Int64 -> "int64", "int64"
+  | Float -> "float", "float"
+  | Text -> "string", "text"
+  | Blob -> "string", "blob"
   | Option t ->
       let t, c = ocaml_spec t in
-      t ^ " option", String.concat "" ["(Option "; c; ")"]
+      t ^ " option", String.concat "" ["(option "; c; ")"]
   | Coded c -> ocaml_spec (Coded.repr c)
-  | _ -> invalid_unknown ()
+  | Custom c -> (* FIXME *) Custom.invalid_unknown c
 end
 
 module Col = struct
@@ -156,18 +217,18 @@ module Col = struct
   type ('r, 'a) t =
     { name : name;
       type' : 'a Type.t;
-      proj : ('r -> 'a);
+      proj : ('r -> 'a); (* inj : 'a -> 'r -> 'r *)
       default : 'a default option;
       params : 'a param list; }
 
-  type 'r v = V : ('r, 'a) t -> 'r v
+  type 'r def = Def : ('r, 'a) t -> 'r def
   type 'r value = Value : ('r, 'a) t * 'a -> 'r value
 
-  let v ?(params = []) ?default name type' proj =
+  let make ?(params = []) ?default name type' proj =
     { name; params; type'; default; proj }
 
   let name c = c.name
-  let name' (V c) = name c
+  let name' (Def c) = name c
   let type' c = c.type'
   let proj c = c.proj
   let default c = c.default
@@ -187,13 +248,34 @@ module Col = struct
   let pp_sep ppf () = Format.pp_print_char ppf '|'
 end
 
-module Row = struct
-  type ('r, 'a) prod =
-  | Unit : 'a -> ('r, 'a) prod
-  | Prod : ('r, 'a -> 'b) prod * ('r, 'a) Col.t -> ('r, 'b) prod
-  | Cat : ('r, 'a -> 'b) prod * ('r -> 'a) * ('a, 'a) prod -> ('r, 'b) prod
+(* Rows *)
 
-  type 'r t = ('r, 'r) prod
+module Row = struct
+
+  module Repr = struct
+    type ('r, 'a) prod =
+    | Unit : 'a -> ('r, 'a) prod
+    | Prod : ('r, 'a -> 'b) prod * ('r, 'a) Col.t -> ('r, 'b) prod
+    | Cat : ('r, 'a -> 'b) prod * ('r -> 'a) * ('a, 'a) prod -> ('r, 'b) prod
+
+    type 'r t = ('r, 'r) prod
+
+    let to_prod = Fun.id
+    let of_prod = Fun.id
+
+    let row_of_cols cs =
+      (* The resulting row is absurd we just need to be able to store the cs
+         columns in the row, so that Row.cols gives them back. *)
+      let rec loop = function
+      | [] -> Unit (fun _ -> assert false)
+      | (Col.Def c) :: cs ->
+          let col = Prod ((Unit (fun _ _ -> assert false)), c) in
+          Cat (col, (fun _ -> assert false), (loop cs))
+      in
+      loop cs
+  end
+
+  include Repr
 
   let unit f = Unit f
   let prod r c = Prod (r, c)
@@ -201,14 +283,14 @@ module Row = struct
   let cat r ~proj row = Cat (r, proj, row)
   let empty = unit ()
 
-  let col ?(proj = Col.no_proj) n t = Col.v n t proj
-  let bool ?(proj = Col.no_proj) n = Col.v n Type.Bool proj
-  let int ?(proj = Col.no_proj) n = Col.v n Type.Int proj
-  let int64 ?(proj = Col.no_proj) n = Col.v n Type.Int64 proj
-  let float ?(proj = Col.no_proj) n = Col.v n Type.Float proj
-  let text ?(proj = Col.no_proj) n = Col.v n Type.Text proj
-  let blob ?(proj = Col.no_proj) n = Col.v n Type.Blob proj
-  let option ?(proj = Col.no_proj) t n = Col.v n (Type.Option t) proj
+  let col ?(proj = Col.no_proj) n t = Col.make n t proj
+  let bool ?(proj = Col.no_proj) n = Col.make n Type.Bool proj
+  let int ?(proj = Col.no_proj) n = Col.make n Type.Int proj
+  let int64 ?(proj = Col.no_proj) n = Col.make n Type.Int64 proj
+  let float ?(proj = Col.no_proj) n = Col.make n Type.Float proj
+  let text ?(proj = Col.no_proj) n = Col.make n Type.Text proj
+  let blob ?(proj = Col.no_proj) n = Col.make n Type.Blob proj
+  let option ?(proj = Col.no_proj) t n = Col.make n (Type.Option t) proj
 
   let t1 a = unit Fun.id * Col.with_proj Fun.id a
   let t2 a b =
@@ -247,13 +329,13 @@ module Row = struct
     unit (fun a b c d e f -> a, b, c, d, e, f) * a * b * c * d * e * f
 
   let rec fold f acc r =
-    let rec loop : type a r b. (a -> r Col.v -> a) -> a -> (r, b) prod -> a =
+    let rec loop : type a r b. (a -> r Col.def -> a) -> a -> (r, b) prod -> a =
     fun f acc prod -> match prod with
     | Unit _ -> acc
-    | Prod (r, c) -> loop f (f acc (Col.V c)) r
+    | Prod (r, c) -> loop f (f acc (Col.Def c)) r
     | Cat (r, proj, row) ->
-        let f' acc (Col.V c) =
-          f acc (Col.V (Col.with_proj (fun r -> Col.proj c (proj r)) c))
+        let f' acc (Col.Def c) =
+          f acc (Col.Def (Col.with_proj (fun r -> Col.proj c (proj r)) c))
         in
         loop f (loop f' acc row) r
     in
@@ -286,147 +368,19 @@ module Row = struct
     if header
     then Fmt.pf ppf "@[<v>%a@,%a@]" pp_header r pp_vs rs
     else Fmt.pf ppf "@[<v>%a@]" pp_vs rs
-
-  module Private = struct
-    let row_of_cols cs =
-      (* The resulting row is absurd we just need to be able to store the cs
-         columns in the row, so that Row.cols gives them back. *)
-      let rec loop = function
-      | [] -> Unit (fun _ -> assert false)
-      | (Col.V c) :: cs ->
-          let col = Prod ((Unit (fun _ _ -> assert false)), c) in
-          Cat (col, (fun _ -> assert false), (loop cs))
-      in
-      loop cs
-
-    type ('r, 'a) prod' = ('r, 'a) prod =
-    | Unit : 'a -> ('r, 'a) prod'
-    | Prod : ('r, 'a -> 'b) prod' * ('r, 'a) Col.t -> ('r, 'b) prod'
-    | Cat : ('r, 'a -> 'b) prod' * ('r -> 'a) * ('a, 'a) prod' -> ('r, 'b) prod'
-    let prod_to_prod = Fun.id
-    let prod_of_prod = Fun.id
-  end
 end
 
 module Table = struct
   type name = string
-  type 'r primary_key = 'r Col.v list
-  type 'r unique_key = { cols : 'r Col.v list }
-  type 'r index = { unique : bool; name : name option; cols : 'r Col.v list }
-  type 'r param = ..
-  type action = [ `Set_null | `Set_default | `Cascade | `Restrict ]
-  type parent' = Parent : [`Self | `Table of 'a t] * 'a Col.v list -> parent'
-  and 'r foreign_key =
-    { cols : 'r Col.v list;
-      parent : parent';
-      on_delete : action option;
-      on_update : action option; }
-
-  and 'r t =
-    { name : name;
-      row : 'r Row.t;
-      primary_key : 'r primary_key option;
-      unique_keys : 'r unique_key list;
-      mutable (* for cycle breaking *) foreign_keys : 'r foreign_key list;
-      params : 'r param list;
-      indices : 'r index list; }
-
-  type v = V : 'r t -> v
-
-  let v
-      ?(params = []) ?(indices = []) ?(foreign_keys = []) ?(unique_keys = [])
-      ?primary_key name row
-    =
-    { name; row; primary_key; unique_keys; foreign_keys; params; indices }
-
-  let name t = t.name
-  let name' (V t) = t.name
-  let row t = t.row
-  let primary_key t = t.primary_key
-  let unique_keys t = t.unique_keys
-  let foreign_keys t = t.foreign_keys
-  let set_foreign_keys t fks = t.foreign_keys <- fks
-  let indices t = t.indices
-  let params t = t.params
-  let with_name t name = { t with name }
-
-  let cols ?(ignore = []) t = match ignore with
-  | [] -> Row.cols t.row
-  | icols ->
-      let keep (Col.V c) =
-        not (List.exists (fun (Col.V i) -> Col.equal_name i c) icols)
-      in
-      List.filter keep (Row.cols t.row)
-
-  module Unique_key = struct
-    type nonrec 'r t = 'r unique_key
-    let v cols = { cols }
-
-    let cols (u : 'r unique_key) = u.cols
-    let name (u : 'r unique_key) =
-      (* When new DBMS will be added we may want to have that as a proper
-         user settable field that we use as the constraint name. For now
-         we can't get that back in SQLite without parsing SQL so we avoid. *)
-      String.concat "_" (List.map Col.name' u.cols)
-
-    let equal u0 u1 = Col.list_equal_names (cols u0) (cols u1)
-  end
-
-  let unique_key = Unique_key.v
-
-  module Foreign_key = struct
-    type nonrec action = action
-    type parent = parent' =
-        Parent : [`Self | `Table of 'r t ] * 'r Col.v list -> parent
-
-    type nonrec 'r t = 'r foreign_key
-    let v ?on_delete ?on_update ~cols ~parent () =
-      { cols; parent; on_delete; on_update }
-
-    let cols fk = fk.cols
-    let parent fk = fk.parent
-    let on_delete fk = fk.on_delete
-    let on_update fk = fk.on_update
-
-    let name (fk : 'r foreign_key) =
-      (* When new DBMS will be added we may want to have that as a proper
-         user settable field that we use as the constraint name. For now
-         we can't get that back in SQLite without parsing SQL so we avoid. *)
-      let cols = List.map Col.name' fk.cols in
-      match fk.parent with
-      | Parent (`Self, dst) ->
-          String.concat "_" (cols @ ("" :: List.map Col.name' dst))
-      | Parent (`Table t, dst) ->
-          String.concat "_" (cols @ (name t) :: List.map Col.name' dst)
-
-    let equal_parents p0 p1 = match p0, p1 with
-    | Parent (`Self, _), Parent (`Table _, _) -> false
-    | Parent (`Table _, _), Parent (`Self, _) -> false
-    | Parent (`Self, cs0), Parent (`Self, cs1) -> Col.list_equal_names cs0 cs1
-    | Parent (`Table t0, cs0), Parent (`Table t1, cs1) ->
-        String.equal t0.name t1.name && (Col.list_equal_names cs0 cs1)
-
-    let equal_action act0 act1 = Option.equal ( = ) act0 act1
-    let equal fk0 fk1 =
-      Col.list_equal_names (cols fk0) (cols fk1) &&
-      equal_parents (parent fk0) (parent fk1) &&
-      equal_action (on_delete fk0) (on_delete fk1) &&
-      equal_action (on_update fk0) (on_update fk1)
-  end
-
-  let foreign_key ?on_delete ?on_update ~cols ~parent:(t, pcols) () =
-    let parent = Parent (`Table t, pcols) in
-    Foreign_key.v ?on_delete ?on_update ~cols ~parent ()
-
-  let self_foreign_key ?on_delete ?on_update ~cols ~parent:pcols () =
-    let parent = Parent (`Self, pcols) in
-    Foreign_key.v ?on_delete ?on_update ~cols ~parent ()
+  type 'r primary_key = 'r Col.def list
+  type 'r unique_key = { cols : 'r Col.def list }
 
   module Index = struct
     type name = string
-    type nonrec 'r t = 'r index
+    type nonrec 'r t =
+      { unique : bool; name : name option; cols : 'r Col.def list }
 
-    let v ?(unique = false) ?name cols = { unique; name; cols }
+    let make ?(unique = false) ?name cols = { unique; name; cols }
     let unique i = i.unique
     let name (i : 'r t) = i.name
     let cols (i : 'r t) = i.cols
@@ -442,26 +396,135 @@ module Table = struct
       Col.list_equal_names (cols i0) (cols i1)
   end
 
-  let index = Index.v
+  type 'r param = ..
+  type action = [ `Set_null | `Set_default | `Cascade | `Restrict ]
+
+  type parent' =
+  | Table : 'a t * 'a Col.def list -> parent'
+  | Self : 'a Col.def list -> parent'
+
+  and 'r foreign_key =
+    { cols : 'r Col.def list;
+      parent : parent';
+      on_delete : action option;
+      on_update : action option; }
+
+  and 'r t =
+    { name : name;
+      row : 'r Row.t;
+      primary_key : 'r primary_key option;
+      unique_keys : 'r unique_key list;
+      mutable (* for cycle breaking *) foreign_keys : 'r foreign_key list;
+      params : 'r param list;
+      indices : 'r Index.t list; }
+
+  type def = Def : 'r t -> def
+
+  let make
+      ?(params = []) ?(indices = []) ?(foreign_keys = []) ?(unique_keys = [])
+      ?primary_key name row
+    =
+    { name; row; primary_key; unique_keys; foreign_keys; params; indices }
+
+  let name t = t.name
+  let name' (Def t) = t.name
+  let row t = t.row
+  let primary_key t = t.primary_key
+  let unique_keys t = t.unique_keys
+  let foreign_keys t = t.foreign_keys
+  let set_foreign_keys t fks = t.foreign_keys <- fks
+  let indices t = t.indices
+  let params t = t.params
+  let with_name t name = { t with name }
+
+  let cols ?(ignore = []) t = match ignore with
+  | [] -> Row.cols t.row
+  | icols ->
+      let keep (Col.Def c) =
+        not (List.exists (fun (Col.Def i) -> Col.equal_name i c) icols)
+      in
+      List.filter keep (Row.cols t.row)
+
+  module Primary_key = struct
+    type 'r t = 'r primary_key
+    let make cols = cols
+    let cols = Fun.id
+    let equal pk0 pk1 = Col.list_equal_names (cols pk0) (cols pk1)
+  end
+
+  module Unique_key = struct
+    type 'r t = 'r unique_key
+    let make cols = { cols }
+
+    let cols (u : 'r unique_key) = u.cols
+    let name (u : 'r unique_key) =
+      (* When new DBMS will be added we may want to have that as a proper
+         user settable field that we use as the constraint name. For now
+         we can't get that back in SQLite without parsing SQL so we avoid. *)
+      String.concat "_" (List.map Col.name' u.cols)
+
+    let equal u0 u1 = Col.list_equal_names (cols u0) (cols u1)
+  end
+
+  module Foreign_key = struct
+    type nonrec action = action
+    type parent = parent' =
+    | Table : 'a t * 'a Col.def list -> parent
+    | Self : 'a Col.def list -> parent
+
+    type nonrec 'r t = 'r foreign_key
+    let make ?on_delete ?on_update ~cols ~parent () =
+      { cols; parent; on_delete; on_update }
+
+    let cols fk = fk.cols
+    let parent fk = fk.parent
+    let on_delete fk = fk.on_delete
+    let on_update fk = fk.on_update
+
+    let name (fk : 'r foreign_key) =
+      (* When new DBMS will be added we may want to have that as a proper
+         user settable field that we use as the constraint name. For now
+         we can't get that back in SQLite without parsing SQL so we avoid. *)
+      let cols = List.map Col.name' fk.cols in
+      match fk.parent with
+      | Self dst ->
+          String.concat "_" (cols @ ("" :: List.map Col.name' dst))
+      | Table (t, dst) ->
+          String.concat "_" (cols @ (name t) :: List.map Col.name' dst)
+
+    let equal_parents p0 p1 = match p0, p1 with
+    | Self _, Table _ -> false
+    | Table _, Self _ -> false
+    | Self cs0, Self cs1 -> Col.list_equal_names cs0 cs1
+    | Table (t0, cs0), Table (t1, cs1) ->
+        String.equal t0.name t1.name && (Col.list_equal_names cs0 cs1)
+
+    let equal_action act0 act1 = Option.equal ( = ) act0 act1
+    let equal fk0 fk1 =
+      Col.list_equal_names (cols fk0) (cols fk1) &&
+      equal_parents (parent fk0) (parent fk1) &&
+      equal_action (on_delete fk0) (on_delete fk1) &&
+      equal_action (on_update fk0) (on_update fk1)
+  end
 
   (* Changes *)
 
   type 'r change =
-  | Add_column_after : 'r Col.v * 'r Col.v option -> 'r change
+  | Add_column_after : 'r Col.def * 'r Col.def option -> 'r change
   | Add_foreign_key : 'r foreign_key -> 'r change
   | Add_primary_key : 'r primary_key -> 'r change
   | Add_unique_key : 'r unique_key -> 'r change
-  | Create_index : 'r index -> 'r change
+  | Create_index : 'r Index.t -> 'r change
   | Drop_column : Col.name -> 'r change
   | Drop_foreign_key : 'a foreign_key -> 'r change
   | Drop_index : Index.name -> 'r change
   | Drop_primary_key : 'r change
   | Drop_unique_key : 'a unique_key -> 'r change
-  | Set_column_default : 'r Col.v -> 'r change
-  | Set_column_type : 'r Col.v * 'b Col.v -> 'r change
-  | Set_column_pos_after : 'r Col.v * 'r Col.v option -> 'r change
+  | Set_column_default : 'r Col.def -> 'r change
+  | Set_column_type : 'r Col.def * 'b Col.def -> 'r change
+  | Set_column_pos_after : 'r Col.def * 'r Col.def option -> 'r change
 
-  let column_changes cs (Col.V s as src) (Col.V d as dst) =
+  let column_changes cs (Col.Def s as src) (Col.Def d as dst) =
     let src_type = Col.type' s and dst_type = Col.type' d in
     match Type.equal src_type dst_type with
     | false -> Set_column_type (dst, src) :: cs
@@ -616,10 +679,10 @@ module Table = struct
         Fmt.pf ppf "DROP PRIMARY KEY"
     | Drop_unique_key u ->
         Fmt.pf ppf "DROP UNIQUE KEY %a" pp_cols (Unique_key.cols u)
-    | Set_column_default (Col.V c) ->
+    | Set_column_default (Col.Def c) ->
         Fmt.pf ppf "COLUMN %s %a" (Col.name c)
           (pp_default (Col.type' c)) (Col.default c)
-    | Set_column_type (Col.V c, _old) ->
+    | Set_column_type (Col.Def c, _old) ->
         Fmt.pf ppf "COLUMN %s SET TYPE %a" (Col.name c) Type.pp (Col.type' c)
     | Set_column_pos_after (c, after) ->
         Fmt.pf ppf "COLUMN %s SET POSITION %a" (Col.name' c) pp_after after
@@ -634,10 +697,10 @@ module Table = struct
     in
     ignore (List.fold_left check_name Sset.empty tables)
 
-  let table_deps (V t) =
+  let table_deps (Def t) =
     let add_dep acc fk = match Foreign_key.parent fk with
-    | Parent (`Self, _) -> acc
-    | Parent (`Table t, _) -> Sset.add (name t) acc
+    | Self _ -> acc
+    | Table (t, _) -> Sset.add (name t) acc
     in
     List.fold_left add_dep Sset.empty (foreign_keys t)
 
@@ -676,11 +739,13 @@ module Table = struct
     | Ok (_, order) -> Ok (List.rev order)
 end
 
+(* Schemas *)
+
 module Schema = struct
   type name = string
-  type t = { name : name option; tables : Table.v list; }
+  type t = { name : name option; tables : Table.def list; }
 
-  let v ?name ~tables () =
+  let make ?name ~tables () =
     Table.check_name_unicity tables;
     let tables = match Table.sort tables with
     | Ok tables -> tables | Error _ -> tables
@@ -690,12 +755,12 @@ module Schema = struct
   let name s = s.name
   let tables s = s.tables
   let find_table n s =
-    List.find_opt (fun (Table.V t) -> Table.name t = n) s.tables
+    List.find_opt (fun (Table.Def t) -> Table.name t = n) s.tables
 
   let must_be_dag s = match Table.sort (tables s) with
   | Ok _ -> Ok () | Error cycle ->
       let pp_sep ppf () = Fmt.pf ppf "@ -> @ " in
-      let pp_name ppf (Table.V t) = Fmt.string ppf (Table.name t) in
+      let pp_name ppf (Table.Def t) = Fmt.string ppf (Table.name t) in
       Fmt.error
         "@[<v2>Cannot proceed, schema has cyclic table dependencies:@,@[%a@]@]"
         (Fmt.list ~pp_sep pp_name) cycle
@@ -718,7 +783,7 @@ module Schema = struct
   let check_col_renames errs ~col_renames srcs =
     let check errs (n, cs) = match find_table n srcs with
     | None -> Fmt.str "column rename for %s: no such table" n :: errs
-    | Some (Table.V t) ->
+    | Some (Table.Def t) ->
         let cols = Sset.of_list (List.map Col.name' (Table.cols t)) in
         let check_col errs (s, _) = match Sset.mem s cols with
         | true -> errs
@@ -743,21 +808,20 @@ module Schema = struct
     List.fold_left (fun acc (s, d) -> Smap.add s d acc) Smap.empty ns
 
   let rename_cols ~map cs =
-    let rename_col ~map (Col.V c) =
+    let rename_col ~map (Col.Def c) =
       let name = match Smap.find_opt (Col.name c) map with
       | None -> Col.name c | Some n -> n
       in
       let never _ = assert false in
-      Col.V { c with name; Col.proj = never }
+      Col.Def { c with name; Col.proj = never }
     in
     List.map (rename_col ~map) cs
 
   let rename_table_foreign_key ~self_col_map ~col_map ~table_map fk =
     let cols = rename_cols ~map:self_col_map (Table.Foreign_key.cols fk) in
     let parent = match Table.Foreign_key.parent fk with
-    | Parent (`Self, cs) ->
-        Table.Foreign_key.Parent (`Self, rename_cols ~map:self_col_map cs)
-    | Parent (`Table t, cs) ->
+    | Self cs -> Table.Foreign_key.Self (rename_cols ~map:self_col_map cs)
+    | Table (t, cs) ->
         let map = match Smap.find_opt (Table.name t) col_map with
         | None -> Smap.empty | Some col_map -> col_map
         in
@@ -765,19 +829,19 @@ module Schema = struct
         let tname = match Smap.find_opt (Table.name t) table_map with
         | None -> Table.name t | Some n -> n
         in
-        Parent (`Table { t with Table.name = tname }, cs)
+        Table ( { t with Table.name = tname }, cs)
     in
     { fk with cols; parent }
 
-  let rename_index_cols ~map (i : 'r Table.index) =
-    { i with Table.cols = rename_cols ~map (Table.Index.cols i) }
+  let rename_index_cols ~map (i : 'r Table.Index.t) =
+    { i with Table.Index.cols = rename_cols ~map (Table.Index.cols i) }
 
-  let rename_table ~col_map ~table_map cs (Table.V t) =
+  let rename_table ~col_map ~table_map cs (Table.Def t) =
     let map = match Smap.find_opt (Table.name t) col_map with
     | None -> Smap.empty | Some col_map -> col_map
     in
     let cs, rev_cols =
-      let add_col (cs, cols) (Col.V c) =
+      let add_col (cs, cols) (Col.Def c) =
         let cs, name = match Smap.find_opt (Col.name c) map with
         | None -> cs, Col.name c
         | Some n ->
@@ -785,7 +849,7 @@ module Schema = struct
             (change :: cs), n
         in
         let never _ = assert false in
-        cs, Col.V { c with name; Col.proj = never } :: cols
+        cs, Col.Def { c with name; Col.proj = never } :: cols
       in
       List.fold_left add_col (cs, []) (Table.cols t)
     in
@@ -793,7 +857,7 @@ module Schema = struct
     | Some name -> (Rename_table (Table.name t, name) :: cs), name
     | None -> cs, Table.name t
     in
-    let row = Row.Private.row_of_cols (List.rev rev_cols) in
+    let row = Row.Repr.row_of_cols (List.rev rev_cols) in
     let primary_key = Option.map (rename_cols ~map) (Table.primary_key t) in
     let unique_keys =
       let k u = { Table.cols = rename_cols ~map (Table.Unique_key.cols u) } in
@@ -806,8 +870,10 @@ module Schema = struct
       let rename = rename_table_foreign_key ~self_col_map ~col_map ~table_map in
       List.map rename (Table.foreign_keys t)
     in
-    let t = Table.v name row ?primary_key ~unique_keys ~foreign_keys ~indices in
-    cs, Table.V t
+    let t =
+      Table.make name row ?primary_key ~unique_keys ~foreign_keys ~indices
+    in
+    cs, Table.Def t
 
   let rename_src_schema ~col_renames ~table_renames ~src ~dst =
     let errs = check_col_renames [] ~col_renames src in
@@ -826,7 +892,7 @@ module Schema = struct
       List.fold_left table ([], []) (tables src)
     in
     let tables = List.rev rev_tables in
-    Ok (cs, v ?name:(name src) ~tables ())
+    Ok (cs, make ?name:(name src) ~tables ())
 
   let changes ?(col_renames = []) ?(table_renames = []) ~src ~dst () =
     (* Do all the renames first. That makes things easier. *)
@@ -835,11 +901,11 @@ module Schema = struct
     let srcs = List.map (fun t -> Table.name' t, t) (tables src) in
     let rec loop cs srcs = function
     | [] -> List.rev_append (List.map drop srcs) cs
-    | (Table.V dst) :: dsts ->
+    | (Table.Def dst) :: dsts ->
         let src, srcs = assoc_find_remove (Table.name dst) srcs in
         let rev_changes = match src with
         | None -> Create_table dst :: cs
-        | Some (Table.V src) ->
+        | Some (Table.Def src) ->
             let tcs = Table.changes ~src ~dst in
             if tcs = [] then cs else (Alter_table (dst, tcs) :: cs)
         in
@@ -866,8 +932,8 @@ module Schema = struct
      indexes, unique keys (e.g. with colored dots). *)
 
   type ref = (* Just in case not sure keeping the typing is useful here *)
-  | R : 'r Table.t * 'r Col.v *
-        's Table.t * 't (* no 's here because of `Self *) Col.v -> ref
+  | R : 'r Table.t * 'r Col.def *
+        's Table.t * 't (* no 's here because of `Self *) Col.def -> ref
 
   let table_parents t =
     let rec add_foreign_keys acc = function
@@ -876,15 +942,15 @@ module Schema = struct
         let add t' acc c c' = R (t, c, t', c') :: acc in
         let cs = Table.Foreign_key.cols fk in
         match Table.Foreign_key.parent fk with
-        | Table.Foreign_key.Parent (`Self, cs') ->
+        | Table.Foreign_key.Self cs' ->
             add_foreign_keys (List.fold_left2 (add t) acc cs cs') fks
-        | Table.Foreign_key.Parent (`Table t', cs') ->
+        | Table.Foreign_key.Table (t', cs') ->
             add_foreign_keys (List.fold_left2 (add t') acc cs cs') fks
     in
     add_foreign_keys [] (Table.foreign_keys t)
 
   let table_primary_keys t =
-    let add_col acc (Col.V c) = Sset.add (Col.name c) acc in
+    let add_col acc (Col.Def c) = Sset.add (Col.name c) acc in
     match Table.primary_key t with
     | None -> Sset.empty | Some cs -> List.fold_left add_col Sset.empty cs
 
@@ -908,7 +974,7 @@ module Schema = struct
   let pp_html_id = Fmt.string (* FIXME html quotes *)
   let pp_type ppf t = pp_font_color type_fg Type.pp ppf t
 
-  let pp_col_cell table_pks ppf (Col.V c) =
+  let pp_col_cell table_pks ppf (Col.Def c) =
     let is_pk = Sset.mem (Col.name c) table_pks in
     let pp_name = if is_pk then (pp_bold pp_html_id) else pp_html_id in
     let pp_name = pp_font_color col_fg pp_name in
@@ -941,12 +1007,12 @@ module Schema = struct
     in
     pp_table ~atts pp_contents ppf t
 
-  let pp_table_node ppf (Table.V t) =
+  let pp_table_node ppf (Table.Def t) =
     Fmt.pf ppf "%a [id=%a, label=<%a>]"
       pp_id (Table.name t) pp_id (Table.name t) pp_table_node_label t
 
-  let pp_table_edges ppf (Table.V t) =
-    let ref ppf (R (t, (Col.V c), t', (Col.V c'))) =
+  let pp_table_edges ppf (Table.Def t) =
+    let ref ppf (R (t, (Col.Def c), t', (Col.Def c'))) =
       let t = Table.name t and c = Col.name c in
       let t' = Table.name t' and c' = Col.name c' in
       Fmt.pf ppf "%a:%a -> %a:%a" pp_id t pp_id c pp_id t' pp_id c'
@@ -1018,11 +1084,11 @@ module Schema = struct
   let pp_module_name ppf t =
     Fmt.string ppf (String.capitalize_ascii (ocaml_table_id (Table.name t)))
 
-  let pp_col_id ppf (Col.V c) = Fmt.string ppf (ocaml_col_id (Col.name c))
-  let pp_col_constructor ppf (Col.V c) =
+  let pp_col_id ppf (Col.Def c) = Fmt.string ppf (ocaml_col_id (Col.name c))
+  let pp_col_constructor ppf (Col.Def c) =
     Fmt.pf ppf "Type.%s" (snd (Type.ocaml_spec (Col.type' c)))
 
-  let pp_col_type ppf (Col.V c) =
+  let pp_col_type ppf (Col.Def c) =
     Fmt.string ppf (fst (Type.ocaml_spec (Col.type' c)))
 
   let pp_proj_intf ppf c =
@@ -1035,11 +1101,11 @@ module Schema = struct
   let pp_col_intf ppf c =
     Fmt.pf ppf "@[val %a : (t, %a) Rel.Col.t@]" pp_col_col_name c pp_col_type c
 
-  let pp_col_impl ppf (Col.V cc as c) =
-    Fmt.pf ppf "@[<2>let %a =@ Col.v %S %a %a@]"
+  let pp_col_impl ppf (Col.Def cc as c) =
+    Fmt.pf ppf "@[<2>let %a =@ Col.make %S %a %a@]"
       pp_col_col_name c (Col.name cc) pp_col_constructor c pp_col_id c
 
-  let pp_record_field_name ppf (Col.V c) =
+  let pp_record_field_name ppf (Col.Def c) =
     Fmt.string ppf (ocaml_col_id (Col.name c))
 
   let pp_record_field ppf c =
@@ -1060,7 +1126,7 @@ module Schema = struct
       (Fmt.list ~pp_sep:pp_arr pp_col_type) (Table.cols t) pp_arr ()
 
   let pp_pre_cols ~pre ppf cs =
-    let pp_col ppf c = Fmt.pf ppf "Col.V %s%a" pre pp_col_col_name c in
+    let pp_col ppf c = Fmt.pf ppf "Col.Def %s%a" pre pp_col_col_name c in
     Fmt.pf ppf "@[<2>[%a]@]" (Fmt.list ~pp_sep:pp_semi pp_col) cs
 
   let pp_cols = pp_pre_cols ~pre:""
@@ -1068,22 +1134,29 @@ module Schema = struct
   let pp_table_intf ppf t = Fmt.pf ppf "@[val table : t Rel.Table.t@]"
   let pp_table_impl ppf t =
     let pp_cols ppf cs =
-      let pp_col ppf c = Fmt.pf ppf "Col.V %a" pp_col_col_name c in
+      let pp_col ppf c = Fmt.pf ppf "Col.Def %a" pp_col_col_name c in
       Fmt.pf ppf "@[<2>[%a]@]" (Fmt.list ~pp_sep:pp_semi pp_col) cs
     in
     let pp_row ppf t =
-      Fmt.pf ppf "@[<2>let row =@ @[Row.@[<1>(unit row * %a)@]@] in@]@,"
+      Fmt.pf ppf "@[Row.@[<1>(unit row * %a)@]@]"
         (Fmt.list ~pp_sep:pp_star pp_col_col_name) (Table.cols t)
     in
     let pp_primary_key ppf t = match Table.primary_key t with
     | None -> () | Some pk ->
-        Fmt.pf ppf "@[<2>let primary_key =@ %a in@]@," pp_cols pk
+        let pp_cols ppf pk = pp_cols ppf (Table.Primary_key.cols pk) in
+        let pp_primary_key ppf pk =
+          Fmt.pf ppf "Table.Primary_key.make @[%a@]" pp_cols pk
+        in
+        Fmt.pf ppf "@[<2>let primary_key =@ %a in@]@," pp_primary_key pk
     in
     let pp_unique_keys ppf t = match Table.unique_keys t with
     | [] -> () | us ->
         let pp_cols ppf u = pp_cols ppf (Table.Unique_key.cols u) in
+        let pp_unique_key ppf u =
+          Fmt.pf ppf "Table.Unique_key.make @[%a@]" pp_cols u
+        in
         Fmt.pf ppf "@[<2>let unique_keys =@ [@[<v>%a@]] in@]@,"
-           (Fmt.list ~pp_sep:pp_semi pp_cols) us
+           (Fmt.list ~pp_sep:pp_semi pp_unique_key) us
     in
     let pp_foreign_keys ppf t = match Table.foreign_keys t with
     | [] -> () | fks ->
@@ -1096,20 +1169,16 @@ module Schema = struct
               in
               Fmt.pf ppf "@ ~%s:%s" act (action_to_string a)
           in
-          let pp_constructor ppf p = Fmt.string ppf @@ match p with
-          | Table.Foreign_key.Parent (`Self, _) -> "Table.self_foreign_key"
-          | Table.Foreign_key.Parent (`Table _, _) -> "Table.foreign_key"
-          in
           let pp_parent ppf = function
-          | Table.Foreign_key.Parent (`Self, cols) ->
-              (pp_pre_cols ~pre:"") ppf cols
-          | Table.Foreign_key.Parent (`Table t, cols) ->
+          | Table.Foreign_key.Self cols ->
+              Fmt.pf ppf "@[<v>(Self %a)@]" (pp_pre_cols ~pre:"") cols
+          | Table.Foreign_key.Table (t, cols) ->
               let pre = Fmt.str "%a." pp_module_name t in
-              Fmt.pf ppf "@[<1>(%stable,@ %a)@]" pre (pp_pre_cols ~pre) cols
+              Fmt.pf ppf "@[<1>(Table (%stable,@ %a))@]"
+                pre (pp_pre_cols ~pre) cols
           in
           Fmt.pf ppf
-            "@[<2>%a@ ~cols:%a@ ~parent:%a%a%a ()@]"
-            pp_constructor (Table.Foreign_key.parent fk)
+            "@[<2>Table.Foreign_key.make@ ~cols:%a@ ~parent:%a%a%a ()@]"
             pp_cols (Table.Foreign_key.cols fk)
             pp_parent (Table.Foreign_key.parent fk)
             (pp_action "on_update") (Table.Foreign_key.on_update fk)
@@ -1127,22 +1196,23 @@ module Schema = struct
           let pp_unique ppf i = match Table.Index.unique i with
           | false -> () | true -> Fmt.pf ppf " ~unique:true"
           in
-          Fmt.pf ppf "@[<2>Table.index%a%a@ %a@]"
+          Fmt.pf ppf "@[<2>Table.Index.make%a%a@ %a@]"
             pp_name i pp_unique i pp_cols (Table.Index.cols i)
         in
         Fmt.pf ppf "@[<2>let indices =@ [@[<v>%a@]] in@]@,"
           (Fmt.list ~pp_sep:pp_semi pp_index) is
     in
-    Fmt.pf ppf "@[<v2>let table =@,%a%a%a%a%aTable.v %S row%s%s%s%s@]"
-      pp_row t pp_primary_key t pp_unique_keys t pp_foreign_keys t
+    Fmt.pf ppf "@[<v2>let table =@,%a%a%a%aTable.make %S %s%s%s%s @@@@@,%a@]"
+      pp_primary_key t pp_unique_keys t pp_foreign_keys t
       pp_indices t
       (Table.name t)
       (if Table.primary_key t = None then "" else " ~primary_key")
       (if Table.unique_keys t = [] then "" else " ~unique_keys")
       (if Table.foreign_keys t = [] then "" else " ~foreign_keys")
       (if Table.indices t = [] then "" else " ~indices")
+      pp_row t
 
-  let pp_table_intf kind ppf (Table.V t) =
+  let pp_table_intf kind ppf (Table.Def t) =
     if kind = `Intf || kind = `Both then begin
       Fmt.pf ppf "@[<v2>module %a : sig@," pp_module_name t;
       pp_record_intf ppf t; pp_cut_cut ppf ();
@@ -1156,7 +1226,7 @@ module Schema = struct
       else Fmt.pf ppf "@]@,@[<v2>end = struct@,"
     end
 
-  let pp_table_impl kind ppf (Table.V t) =
+  let pp_table_impl kind ppf (Table.Def t) =
     if kind = `Impl
     then (Fmt.pf ppf "@[<v2>module %a = struct@," pp_module_name t);
     if kind = `Impl || kind = `Both then begin
@@ -1179,14 +1249,14 @@ module Schema = struct
     end
 
   let pp_schema_impl kind ppf s =
-    let pp_table ppf (Table.V t) =
-      Fmt.pf ppf "Rel.Table.V %a.table;" pp_module_name t
+    let pp_table ppf (Table.Def t) =
+      Fmt.pf ppf "Rel.Table.Def %a.table;" pp_module_name t
     in
     let pp_tables ppf s = (Fmt.list pp_table) ppf (tables s) in
     if kind = `Impl then (Fmt.pf ppf "@[<v2>module Schema = struct@,");
     if kind = `Impl || kind = `Both then begin
       Fmt.pf ppf "@[<2>let tables =@ [ @[<v>%a@] ]@]@,@," pp_tables s;
-      Fmt.pf ppf "@[let v = Rel.Schema.v ~tables ()@]";
+      Fmt.pf ppf "@[let v = Rel.Schema.make ~tables ()@]";
       Fmt.pf ppf "@]@,end"
     end
 

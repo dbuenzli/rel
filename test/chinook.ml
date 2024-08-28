@@ -26,13 +26,13 @@ end = struct
   
   open Rel
   
-  let artistId' = Col.v "ArtistId" Type.Int artistId
-  let name' = Col.v "Name" Type.(Option Text) name
+  let artistId' = Col.make "ArtistId" Type.int artistId
+  let name' = Col.make "Name" Type.(option text) name
   
   let table =
-    let row = Row.(unit row * artistId' * name') in
-    let primary_key = [Col.V artistId'] in
-    Table.v "Artist" row ~primary_key
+    let primary_key = Table.Primary_key.make [Col.Def artistId'] in
+    Table.make "Artist"  ~primary_key @@
+    Row.(unit row * artistId' * name')
 end
 
 module Album : sig
@@ -65,19 +65,19 @@ end = struct
   
   open Rel
   
-  let albumId' = Col.v "AlbumId" Type.Int albumId
-  let title' = Col.v "Title" Type.Text title
-  let artistId' = Col.v "ArtistId" Type.Int artistId
+  let albumId' = Col.make "AlbumId" Type.int albumId
+  let title' = Col.make "Title" Type.text title
+  let artistId' = Col.make "ArtistId" Type.int artistId
   
   let table =
-    let row = Row.(unit row * albumId' * title' * artistId') in
-    let primary_key = [Col.V albumId'] in
+    let primary_key = Table.Primary_key.make [Col.Def albumId'] in
     let foreign_keys =
-      [Table.foreign_key ~cols:[Col.V artistId']
-         ~parent:(Artist.table, [Col.V Artist.artistId']) ()] in
+      [Table.Foreign_key.make ~cols:[Col.Def artistId']
+         ~parent:(Table (Artist.table, [Col.Def Artist.artistId'])) ()] in
     let indices =
-      [Table.index ~name:"IFK_AlbumArtistId" [Col.V artistId']] in
-    Table.v "Album" row ~primary_key ~foreign_keys ~indices
+      [Table.Index.make ~name:"IFK_AlbumArtistId" [Col.Def artistId']] in
+    Table.make "Album"  ~primary_key ~foreign_keys ~indices @@
+    Row.(unit row * albumId' * title' * artistId')
 end
 
 module Employee : sig
@@ -164,34 +164,33 @@ end = struct
   
   open Rel
   
-  let employeeId' = Col.v "EmployeeId" Type.Int employeeId
-  let lastName' = Col.v "LastName" Type.Text lastName
-  let firstName' = Col.v "FirstName" Type.Text firstName
-  let title' = Col.v "Title" Type.(Option Text) title
-  let reportsTo' = Col.v "ReportsTo" Type.(Option Int) reportsTo
-  let birthDate' = Col.v "BirthDate" Type.(Option Float) birthDate
-  let hireDate' = Col.v "HireDate" Type.(Option Float) hireDate
-  let address' = Col.v "Address" Type.(Option Text) address
-  let city' = Col.v "City" Type.(Option Text) city
-  let state' = Col.v "State" Type.(Option Text) state
-  let country' = Col.v "Country" Type.(Option Text) country
-  let postalCode' = Col.v "PostalCode" Type.(Option Text) postalCode
-  let phone' = Col.v "Phone" Type.(Option Text) phone
-  let fax' = Col.v "Fax" Type.(Option Text) fax
-  let email' = Col.v "Email" Type.(Option Text) email
+  let employeeId' = Col.make "EmployeeId" Type.int employeeId
+  let lastName' = Col.make "LastName" Type.text lastName
+  let firstName' = Col.make "FirstName" Type.text firstName
+  let title' = Col.make "Title" Type.(option text) title
+  let reportsTo' = Col.make "ReportsTo" Type.(option int) reportsTo
+  let birthDate' = Col.make "BirthDate" Type.(option float) birthDate
+  let hireDate' = Col.make "HireDate" Type.(option float) hireDate
+  let address' = Col.make "Address" Type.(option text) address
+  let city' = Col.make "City" Type.(option text) city
+  let state' = Col.make "State" Type.(option text) state
+  let country' = Col.make "Country" Type.(option text) country
+  let postalCode' = Col.make "PostalCode" Type.(option text) postalCode
+  let phone' = Col.make "Phone" Type.(option text) phone
+  let fax' = Col.make "Fax" Type.(option text) fax
+  let email' = Col.make "Email" Type.(option text) email
   
   let table =
-    let row =
-      Row.(unit row * employeeId' * lastName' * firstName' * title' *
-           reportsTo' * birthDate' * hireDate' * address' * city' * state' *
-           country' * postalCode' * phone' * fax' * email') in
-    let primary_key = [Col.V employeeId'] in
+    let primary_key = Table.Primary_key.make [Col.Def employeeId'] in
     let foreign_keys =
-      [Table.self_foreign_key ~cols:[Col.V reportsTo']
-         ~parent:[Col.V employeeId'] ()] in
+      [Table.Foreign_key.make ~cols:[Col.Def reportsTo']
+         ~parent:(Self [Col.Def employeeId']) ()] in
     let indices =
-      [Table.index ~name:"IFK_EmployeeReportsTo" [Col.V reportsTo']] in
-    Table.v "Employee" row ~primary_key ~foreign_keys ~indices
+      [Table.Index.make ~name:"IFK_EmployeeReportsTo" [Col.Def reportsTo']] in
+    Table.make "Employee"  ~primary_key ~foreign_keys ~indices @@
+    Row.(unit row * employeeId' * lastName' * firstName' * title' *
+         reportsTo' * birthDate' * hireDate' * address' * city' * state' *
+         country' * postalCode' * phone' * fax' * email')
 end
 
 module Customer : sig
@@ -270,32 +269,32 @@ end = struct
   
   open Rel
   
-  let customerId' = Col.v "CustomerId" Type.Int customerId
-  let firstName' = Col.v "FirstName" Type.Text firstName
-  let lastName' = Col.v "LastName" Type.Text lastName
-  let company' = Col.v "Company" Type.(Option Text) company
-  let address' = Col.v "Address" Type.(Option Text) address
-  let city' = Col.v "City" Type.(Option Text) city
-  let state' = Col.v "State" Type.(Option Text) state
-  let country' = Col.v "Country" Type.(Option Text) country
-  let postalCode' = Col.v "PostalCode" Type.(Option Text) postalCode
-  let phone' = Col.v "Phone" Type.(Option Text) phone
-  let fax' = Col.v "Fax" Type.(Option Text) fax
-  let email' = Col.v "Email" Type.Text email
-  let supportRepId' = Col.v "SupportRepId" Type.(Option Int) supportRepId
+  let customerId' = Col.make "CustomerId" Type.int customerId
+  let firstName' = Col.make "FirstName" Type.text firstName
+  let lastName' = Col.make "LastName" Type.text lastName
+  let company' = Col.make "Company" Type.(option text) company
+  let address' = Col.make "Address" Type.(option text) address
+  let city' = Col.make "City" Type.(option text) city
+  let state' = Col.make "State" Type.(option text) state
+  let country' = Col.make "Country" Type.(option text) country
+  let postalCode' = Col.make "PostalCode" Type.(option text) postalCode
+  let phone' = Col.make "Phone" Type.(option text) phone
+  let fax' = Col.make "Fax" Type.(option text) fax
+  let email' = Col.make "Email" Type.text email
+  let supportRepId' = Col.make "SupportRepId" Type.(option int) supportRepId
   
   let table =
-    let row =
-      Row.(unit row * customerId' * firstName' * lastName' * company' *
-           address' * city' * state' * country' * postalCode' * phone' *
-           fax' * email' * supportRepId') in
-    let primary_key = [Col.V customerId'] in
+    let primary_key = Table.Primary_key.make [Col.Def customerId'] in
     let foreign_keys =
-      [Table.foreign_key ~cols:[Col.V supportRepId']
-         ~parent:(Employee.table, [Col.V Employee.employeeId']) ()] in
+      [Table.Foreign_key.make ~cols:[Col.Def supportRepId']
+         ~parent:(Table (Employee.table, [Col.Def Employee.employeeId'])) ()] in
     let indices =
-      [Table.index ~name:"IFK_CustomerSupportRepId" [Col.V supportRepId']] in
-    Table.v "Customer" row ~primary_key ~foreign_keys ~indices
+      [Table.Index.make ~name:"IFK_CustomerSupportRepId"
+         [Col.Def supportRepId']] in
+    Table.make "Customer"  ~primary_key ~foreign_keys ~indices @@
+    Row.(unit row * customerId' * firstName' * lastName' * company' *
+         address' * city' * state' * country' * postalCode' * phone' * fax' *
+         email' * supportRepId')
 end
 
 module Genre : sig
@@ -324,13 +323,13 @@ end = struct
   
   open Rel
   
-  let genreId' = Col.v "GenreId" Type.Int genreId
-  let name' = Col.v "Name" Type.(Option Text) name
+  let genreId' = Col.make "GenreId" Type.int genreId
+  let name' = Col.make "Name" Type.(option text) name
   
   let table =
-    let row = Row.(unit row * genreId' * name') in
-    let primary_key = [Col.V genreId'] in
-    Table.v "Genre" row ~primary_key
+    let primary_key = Table.Primary_key.make [Col.Def genreId'] in
+    Table.make "Genre"  ~primary_key @@
+    Row.(unit row * genreId' * name')
 end
 
 module Invoice : sig
@@ -391,31 +390,30 @@ end = struct
   
   open Rel
   
-  let invoiceId' = Col.v "InvoiceId" Type.Int invoiceId
-  let customerId' = Col.v "CustomerId" Type.Int customerId
-  let invoiceDate' = Col.v "InvoiceDate" Type.Float invoiceDate
+  let invoiceId' = Col.make "InvoiceId" Type.int invoiceId
+  let customerId' = Col.make "CustomerId" Type.int customerId
+  let invoiceDate' = Col.make "InvoiceDate" Type.float invoiceDate
   let billingAddress' =
-    Col.v "BillingAddress" Type.(Option Text) billingAddress
-  let billingCity' = Col.v "BillingCity" Type.(Option Text) billingCity
-  let billingState' = Col.v "BillingState" Type.(Option Text) billingState
+    Col.make "BillingAddress" Type.(option text) billingAddress
+  let billingCity' = Col.make "BillingCity" Type.(option text) billingCity
+  let billingState' = Col.make "BillingState" Type.(option text) billingState
   let billingCountry' =
-    Col.v "BillingCountry" Type.(Option Text) billingCountry
+    Col.make "BillingCountry" Type.(option text) billingCountry
   let billingPostalCode' =
-    Col.v "BillingPostalCode" Type.(Option Text) billingPostalCode
-  let total' = Col.v "Total" Type.Float total
+    Col.make "BillingPostalCode" Type.(option text) billingPostalCode
+  let total' = Col.make "Total" Type.float total
   
   let table =
-    let row =
-      Row.(unit row * invoiceId' * customerId' * invoiceDate' *
-           billingAddress' * billingCity' * billingState' * billingCountry' *
-           billingPostalCode' * total') in
-    let primary_key = [Col.V invoiceId'] in
+    let primary_key = Table.Primary_key.make [Col.Def invoiceId'] in
     let foreign_keys =
-      [Table.foreign_key ~cols:[Col.V customerId']
-         ~parent:(Customer.table, [Col.V Customer.customerId']) ()] in
+      [Table.Foreign_key.make ~cols:[Col.Def customerId']
+         ~parent:(Table (Customer.table, [Col.Def Customer.customerId'])) ()] in
     let indices =
-      [Table.index ~name:"IFK_InvoiceCustomerId" [Col.V customerId']] in
-    Table.v "Invoice" row ~primary_key ~foreign_keys ~indices
+      [Table.Index.make ~name:"IFK_InvoiceCustomerId" [Col.Def customerId']] in
+    Table.make "Invoice"  ~primary_key ~foreign_keys ~indices @@
+    Row.(unit row * invoiceId' * customerId' * invoiceDate' *
+         billingAddress' * billingCity' * billingState' * billingCountry' *
+         billingPostalCode' * total')
 end
 
 module MediaType : sig
@@ -444,13 +442,13 @@ end = struct
   
   open Rel
   
-  let mediaTypeId' = Col.v "MediaTypeId" Type.Int mediaTypeId
-  let name' = Col.v "Name" Type.(Option Text) name
+  let mediaTypeId' = Col.make "MediaTypeId" Type.int mediaTypeId
+  let name' = Col.make "Name" Type.(option text) name
   
   let table =
-    let row = Row.(unit row * mediaTypeId' * name') in
-    let primary_key = [Col.V mediaTypeId'] in
-    Table.v "MediaType" row ~primary_key
+    let primary_key = Table.Primary_key.make [Col.Def mediaTypeId'] in
+    Table.make "MediaType"  ~primary_key @@
+    Row.(unit row * mediaTypeId' * name')
 end
 
 module Track : sig
@@ -511,33 +509,32 @@ end = struct
   
   open Rel
   
-  let trackId' = Col.v "TrackId" Type.Int trackId
-  let name' = Col.v "Name" Type.Text name
-  let albumId' = Col.v "AlbumId" Type.(Option Int) albumId
-  let mediaTypeId' = Col.v "MediaTypeId" Type.Int mediaTypeId
-  let genreId' = Col.v "GenreId" Type.(Option Int) genreId
-  let composer' = Col.v "Composer" Type.(Option Text) composer
-  let milliseconds' = Col.v "Milliseconds" Type.Int milliseconds
-  let bytes' = Col.v "Bytes" Type.(Option Int) bytes
-  let unitPrice' = Col.v "UnitPrice" Type.Float unitPrice
+  let trackId' = Col.make "TrackId" Type.int trackId
+  let name' = Col.make "Name" Type.text name
+  let albumId' = Col.make "AlbumId" Type.(option int) albumId
+  let mediaTypeId' = Col.make "MediaTypeId" Type.int mediaTypeId
+  let genreId' = Col.make "GenreId" Type.(option int) genreId
+  let composer' = Col.make "Composer" Type.(option text) composer
+  let milliseconds' = Col.make "Milliseconds" Type.int milliseconds
+  let bytes' = Col.make "Bytes" Type.(option int) bytes
+  let unitPrice' = Col.make "UnitPrice" Type.float unitPrice
   
   let table =
-    let row =
-      Row.(unit row * trackId' * name' * albumId' * mediaTypeId' * genreId' *
-           composer' * milliseconds' * bytes' * unitPrice') in
-    let primary_key = [Col.V trackId'] in
+    let primary_key = Table.Primary_key.make [Col.Def trackId'] in
     let foreign_keys =
-      [Table.foreign_key ~cols:[Col.V albumId']
-         ~parent:(Album.table, [Col.V Album.albumId']) ();
-        Table.foreign_key ~cols:[Col.V genreId']
-          ~parent:(Genre.table, [Col.V Genre.genreId']) ();
-        Table.foreign_key ~cols:[Col.V mediaTypeId']
-          ~parent:(MediaType.table, [Col.V MediaType.mediaTypeId']) ()] in
+      [Table.Foreign_key.make ~cols:[Col.Def albumId']
+         ~parent:(Table (Album.table, [Col.Def Album.albumId'])) ();
+        Table.Foreign_key.make ~cols:[Col.Def genreId']
+          ~parent:(Table (Genre.table, [Col.Def Genre.genreId'])) ();
+        Table.Foreign_key.make ~cols:[Col.Def mediaTypeId']
+          ~parent:(Table (MediaType.table, [Col.Def MediaType.mediaTypeId'])) ()] in
     let indices =
-      [Table.index ~name:"IFK_TrackAlbumId" [Col.V albumId'];
-       Table.index ~name:"IFK_TrackGenreId" [Col.V genreId'];
-       Table.index ~name:"IFK_TrackMediaTypeId" [Col.V mediaTypeId']] in
-    Table.v "Track" row ~primary_key ~foreign_keys ~indices
+      [Table.Index.make ~name:"IFK_TrackAlbumId" [Col.Def albumId'];
+       Table.Index.make ~name:"IFK_TrackGenreId" [Col.Def genreId'];
+       Table.Index.make ~name:"IFK_TrackMediaTypeId" [Col.Def mediaTypeId']] in
+    Table.make "Track"  ~primary_key ~foreign_keys ~indices @@
+    Row.(unit row * trackId' * name' * albumId' * mediaTypeId' * genreId' *
+         composer' * milliseconds' * bytes' * unitPrice')
 end
 
 module InvoiceLine : sig
@@ -579,26 +576,25 @@ end = struct
   
   open Rel
   
-  let invoiceLineId' = Col.v "InvoiceLineId" Type.Int invoiceLineId
-  let invoiceId' = Col.v "InvoiceId" Type.Int invoiceId
-  let trackId' = Col.v "TrackId" Type.Int trackId
-  let unitPrice' = Col.v "UnitPrice" Type.Float unitPrice
-  let quantity' = Col.v "Quantity" Type.Int quantity
+  let invoiceLineId' = Col.make "InvoiceLineId" Type.int invoiceLineId
+  let invoiceId' = Col.make "InvoiceId" Type.int invoiceId
+  let trackId' = Col.make "TrackId" Type.int trackId
+  let unitPrice' = Col.make "UnitPrice" Type.float unitPrice
+  let quantity' = Col.make "Quantity" Type.int quantity
   
   let table =
-    let row =
-      Row.(unit row * invoiceLineId' * invoiceId' * trackId' * unitPrice' *
-           quantity') in
-    let primary_key = [Col.V invoiceLineId'] in
+    let primary_key = Table.Primary_key.make [Col.Def invoiceLineId'] in
     let foreign_keys =
-      [Table.foreign_key ~cols:[Col.V invoiceId']
-         ~parent:(Invoice.table, [Col.V Invoice.invoiceId']) ();
-        Table.foreign_key ~cols:[Col.V trackId']
-          ~parent:(Track.table, [Col.V Track.trackId']) ()] in
+      [Table.Foreign_key.make ~cols:[Col.Def invoiceId']
+         ~parent:(Table (Invoice.table, [Col.Def Invoice.invoiceId'])) ();
+        Table.Foreign_key.make ~cols:[Col.Def trackId']
+          ~parent:(Table (Track.table, [Col.Def Track.trackId'])) ()] in
     let indices =
-      [Table.index ~name:"IFK_InvoiceLineInvoiceId" [Col.V invoiceId'];
-       Table.index ~name:"IFK_InvoiceLineTrackId" [Col.V trackId']] in
-    Table.v "InvoiceLine" row ~primary_key ~foreign_keys ~indices
+      [Table.Index.make ~name:"IFK_InvoiceLineInvoiceId" [Col.Def invoiceId'];
+       Table.Index.make ~name:"IFK_InvoiceLineTrackId" [Col.Def trackId']] in
+    Table.make "InvoiceLine"  ~primary_key ~foreign_keys ~indices @@
+    Row.(unit row * invoiceLineId' * invoiceId' * trackId' * unitPrice' *
+         quantity')
 end
 
 module Playlist : sig
@@ -627,13 +623,13 @@ end = struct
   
   open Rel
   
-  let playlistId' = Col.v "PlaylistId" Type.Int playlistId
-  let name' = Col.v "Name" Type.(Option Text) name
+  let playlistId' = Col.make "PlaylistId" Type.int playlistId
+  let name' = Col.make "Name" Type.(option text) name
   
   let table =
-    let row = Row.(unit row * playlistId' * name') in
-    let primary_key = [Col.V playlistId'] in
-    Table.v "Playlist" row ~primary_key
+    let primary_key = Table.Primary_key.make [Col.Def playlistId'] in
+    Table.make "Playlist"  ~primary_key @@
+    Row.(unit row * playlistId' * name')
 end
 
 module PlaylistTrack : sig
@@ -662,37 +658,38 @@ end = struct
   
   open Rel
   
-  let playlistId' = Col.v "PlaylistId" Type.Int playlistId
-  let trackId' = Col.v "TrackId" Type.Int trackId
+  let playlistId' = Col.make "PlaylistId" Type.int playlistId
+  let trackId' = Col.make "TrackId" Type.int trackId
   
   let table =
-    let row = Row.(unit row * playlistId' * trackId') in
-    let primary_key = [Col.V playlistId'; Col.V trackId'] in
+    let primary_key =
+      Table.Primary_key.make [Col.Def playlistId'; Col.Def trackId'] in
     let foreign_keys =
-      [Table.foreign_key ~cols:[Col.V playlistId']
-         ~parent:(Playlist.table, [Col.V Playlist.playlistId']) ();
-        Table.foreign_key ~cols:[Col.V trackId']
-          ~parent:(Track.table, [Col.V Track.trackId']) ()] in
+      [Table.Foreign_key.make ~cols:[Col.Def playlistId']
+         ~parent:(Table (Playlist.table, [Col.Def Playlist.playlistId'])) ();
+        Table.Foreign_key.make ~cols:[Col.Def trackId']
+          ~parent:(Table (Track.table, [Col.Def Track.trackId'])) ()] in
     let indices =
-      [Table.index ~name:"IFK_PlaylistTrackTrackId" [Col.V trackId']] in
-    Table.v "PlaylistTrack" row ~primary_key ~foreign_keys ~indices
+      [Table.Index.make ~name:"IFK_PlaylistTrackTrackId" [Col.Def trackId']] in
+    Table.make "PlaylistTrack"  ~primary_key ~foreign_keys ~indices @@
+    Row.(unit row * playlistId' * trackId')
 end
 
 module Schema : sig
   val v : Rel.Schema.t
 end = struct
   let tables =
-    [ Rel.Table.V Artist.table;
-      Rel.Table.V Album.table;
-      Rel.Table.V Employee.table;
-      Rel.Table.V Customer.table;
-      Rel.Table.V Genre.table;
-      Rel.Table.V Invoice.table;
-      Rel.Table.V MediaType.table;
-      Rel.Table.V Track.table;
-      Rel.Table.V InvoiceLine.table;
-      Rel.Table.V Playlist.table;
-      Rel.Table.V PlaylistTrack.table; ]
+    [ Rel.Table.Def Artist.table;
+      Rel.Table.Def Album.table;
+      Rel.Table.Def Employee.table;
+      Rel.Table.Def Customer.table;
+      Rel.Table.Def Genre.table;
+      Rel.Table.Def Invoice.table;
+      Rel.Table.Def MediaType.table;
+      Rel.Table.Def Track.table;
+      Rel.Table.Def InvoiceLine.table;
+      Rel.Table.Def Playlist.table;
+      Rel.Table.Def PlaylistTrack.table; ]
   
-  let v = Rel.Schema.v ~tables ()
+  let v = Rel.Schema.make ~tables ()
 end

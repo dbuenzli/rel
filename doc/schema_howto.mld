@@ -122,7 +122,7 @@ module [N] ({e n} capitalized) for it.  This module should have
 {- A value [N.table] of type {!Rel.Table.t} that defines the table.}}
 
 Once you have modelled your tables and gathered them into a schema
-values with {!Rel.Schema.v} you can use {!Rel_sql.create_schema} to
+values with {!Rel.Schema.make} you can use {!Rel_sql.create_schema} to
 output the corresponding schema in SQL's data definition language.
 
 {2:example Example}
@@ -198,7 +198,7 @@ module Person = struct
 
  let table =
    let primary_key = Col.[V id'] in
-   Table.v "person" ~primary_key @@
+   Table.make "person" ~primary_key @@
    Row.(unit row * id' * first_name' * last_name')
 end
 ]}

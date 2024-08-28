@@ -165,11 +165,11 @@ module type DIALECT = sig
 
   val insert_into :
     ?or_action:insert_or_action -> ?schema:Schema.name ->
-    ?ignore:'r Col.v list -> 'r Table.t -> ('r -> unit Stmt.t)
+    ?ignore:'r Col.def list -> 'r Table.t -> ('r -> unit Stmt.t)
   (** See {!Rel_sql.insert_into}. *)
 
   val insert_into_cols :
-    ?schema:Schema.name -> ?ignore:'r Col.v list -> 'r Table.t ->
+    ?schema:Schema.name -> ?ignore:'r Col.def list -> 'r Table.t ->
     ('r Col.value list -> unit Stmt.t)
   (** See {!Rel_sql.insert_into_cols}. *)
 
@@ -195,11 +195,11 @@ module type DIALECT = sig
 
   val create_index :
     ?schema:Schema.name -> ?if_not_exists:unit -> 'r Table.t ->
-    'r Table.index -> unit Stmt.t
+    'r Table.Index.t -> unit Stmt.t
   (** See {!Rel_sql.create_index}. *)
 
   val drop_index :
-    ?schema:Schema.name -> ?if_exists:unit -> 'r Table.t -> 'r Table.index ->
+    ?schema:Schema.name -> ?if_exists:unit -> 'r Table.t -> 'r Table.Index.t ->
     unit Stmt.t
   (** See {!Rel_sql.drop_index}. *)
 
@@ -215,7 +215,7 @@ type dialect = (module DIALECT)
 
 val insert_into :
   dialect -> ?or_action:insert_or_action -> ?schema:Schema.name ->
-  ?ignore:'r Col.v list -> 'r Table.t -> ('r -> unit Stmt.t)
+  ?ignore:'r Col.def list -> 'r Table.t -> ('r -> unit Stmt.t)
 (** [insert_into d ~ignore t] is an INSERT INTO statement which
     inserts i [t] values draw from an value values drawn from a
     provided OCaml table row. Columns mentioned in [col] of the row
@@ -223,7 +223,7 @@ val insert_into :
     corresponding [INSERT OR]. *)
 
 val insert_into_cols :
-  dialect -> ?schema:Schema.name -> ?ignore:'r Col.v list -> 'r Table.t ->
+  dialect -> ?schema:Schema.name -> ?ignore:'r Col.def list -> 'r Table.t ->
   ('r Col.value list -> unit Stmt.t)
 (** [insert_into_cols] is like {!insert_into} but uses the
       given column values for the insertion. *)
@@ -271,7 +271,7 @@ val create_index :
 
 val drop_index :
   dialect -> ?schema:Schema.name -> ?if_exists:unit ->
-  'a Table.t -> 'a Table.index -> unit Stmt.t
+  'a Table.t -> 'a Table.Index.t -> unit Stmt.t
 (** [drop_index d t i] is a DROP INDEX statement to drop index [i] of
     table [t]. The index and table are in [schema] if specified. The
     statement is DROP INDEX IF EXISTS when [~if_exists:()] is

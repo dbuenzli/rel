@@ -86,8 +86,8 @@ module Test_products = struct
   let dialect = Rel_sqlite3.dialect
 
   let schema =
-    let tables = [Table.V Product.table; Table.V Order.table] in
-    let schema = Rel.Schema.v ~tables () in
+    let tables = Table.[Def Product.table; Def Order.table] in
+    let schema = Rel.Schema.make ~tables () in
     Rel_sql.create_schema dialect schema
 
   let insert_orders = Rel_sql.insert_into dialect Order.table
@@ -136,8 +136,8 @@ module Test_duos = struct
 
   let dialect = Rel_sqlite3.dialect
   let schema =
-    let tables = [Table.V Person.table; Table.V Duo.table] in
-    let schema = Schema.v ~tables () in
+    let tables = Table.[Def Person.table; Def Duo.table] in
+    let schema = Schema.make ~tables () in
     Rel_sql.create_schema dialect schema
 
   let insert_person = Rel_sql.insert_into dialect Person.table
@@ -214,9 +214,9 @@ module Test_org = struct
   open Schemas.Org
   let dialect = Rel_sqlite3.dialect
 
-  let tables = Table.[V Department.table; V Person.table; V Task.table]
+  let tables = Table.[Def Department.table; Def Person.table; Def Task.table]
   let schema =
-    let schema = Schema.v ~tables () in
+    let schema = Schema.make ~tables () in
     Rel_sql.create_schema dialect schema
 
   let insert_department = Rel_sql.insert_into dialect Department.table

@@ -33,7 +33,7 @@ let list_concat_map f l = (* available in 4.10 *)
 (* Evaluation error *)
 
 type error =
-[ `Undefined_table of Table.v
+[ `Undefined_table of Table.def
 | `Unknown_extension of string
 | `Unexpected_variable of string ]
 
@@ -43,26 +43,26 @@ let unknown_extension k = raise_notrace (Error (`Unknown_extension k))
 let unexpected_variable n = raise_notrace (Error (`Unexpected_variable n))
 
 let error_to_string = function
-| `Undefined_table (Table.V t) -> "Undefined table: " ^ (Table.name t)
+| `Undefined_table (Table.Def t) -> "Undefined table: " ^ (Table.name t)
 | `Unknown_extension kind -> String.concat "" ["Unknown "; kind; " extension"]
 | `Unexpected_variable v -> "Unexpected variable " ^ v
 
 (* Evaluation *)
 
-let rec eval_add : type t. t Type.t -> t -> t -> t = function
-| Type.Int -> Int.add | Type.Int64 -> Int64.add | Type.Float -> Float.add
+let rec eval_add : type t. t Type.Repr.t -> t -> t -> t = function
+| Int -> Int.add | Int64 -> Int64.add | Float -> Float.add
 | _ -> unknown_extension "addition"
 
-let rec eval_sub : type t. t Type.t -> t -> t -> t = function
-| Type.Int -> Int.sub | Type.Int64 -> Int64.sub | Type.Float -> Float.sub
+let rec eval_sub : type t. t Type.Repr.t -> t -> t -> t = function
+| Int -> Int.sub | Int64 -> Int64.sub | Float -> Float.sub
 | _ -> unknown_extension "subtraction"
 
-let rec eval_mul : type t. t Type.t -> t -> t -> t = function
-| Type.Int -> Int.mul | Type.Int64 -> Int64.mul | Type.Float -> Float.mul
+let rec eval_mul : type t. t Type.Repr.t -> t -> t -> t = function
+| Int -> Int.mul | Int64 -> Int64.mul | Float -> Float.mul
 | _ -> unknown_extension "multiplication"
 
-let rec eval_div : type t. t Type.t -> t -> t -> t = function
-| Type.Int -> Int.div | Type.Int64 -> Int64.div | Type.Float -> Float.div
+let rec eval_div : type t. t Type.Repr.t -> t -> t -> t = function
+| Int -> Int.div | Int64 -> Int64.div | Float -> Float.div
 | _ -> unknown_extension "division"
 
 open Rel_query.Private
@@ -71,10 +71,10 @@ let eval_unop : type a r. (a, r) unop -> a -> r =
 fun op x -> match op with
 | Neg t ->
     begin match t with
-    | Type.Bool -> Bool.not x
-    | Type.Int -> Int.neg x
-    | Type.Int64 -> Int64.neg x
-    | Type.Float -> Float.neg x
+    | Bool -> Bool.not x
+    | Int -> Int.neg x
+    | Int64 -> Int64.neg x
+    | Float -> Float.neg x
     | _ -> unknown_extension "negation"
     end
 | _ -> unknown_extension "unary operation"
@@ -116,7 +116,7 @@ and eval_bag : type r e. Table_env.t -> (r, e) bag -> r list =
 fun e b -> match b with
 | Table t ->
     begin match Table_env.find t e with
-    | None -> undefined (Table.V t)
+    | None -> undefined (Table.Def t)
     | Some l -> l
     end
 | Empty -> []

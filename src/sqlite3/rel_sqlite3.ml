@@ -336,22 +336,24 @@ module Stmt' = struct
       let finalized = false in
       { stmt; col_count; finalized }
 
-  let rec bind_arg st idx (Rel_sql.Stmt.Arg (t, v)) = match t with
-  | Type.Bool -> Tsqlite3.bind_bool st idx v
-  | Type.Int -> Tsqlite3.bind_int st idx v
-  | Type.Int64 -> Tsqlite3.bind_int64 st idx v
-  | Type.Float -> Tsqlite3.bind_double st idx v
-  | Type.Text -> Tsqlite3.bind_text st idx v
-  | Type.Blob -> Tsqlite3.bind_blob st idx v
-  | Type.Option t ->
-      (match v with
-      | None -> Tsqlite3.bind_null st idx
-      | Some v -> bind_arg st idx (Rel_sql.Stmt.Arg (t, v)))
-  | Type.Coded c ->
-      (match Type.Coded.enc c v with
-      | Ok v -> bind_arg st idx (Rel_sql.Stmt.Arg (Type.Coded.repr c, v))
-      | Error e -> error (stmt_error_var_encode idx (Type.Coded.name c) e))
-  | _ -> Type.invalid_unknown ()
+  let rec bind_arg st idx (Rel_sql.Stmt.Arg (t, v)) =
+    match Type.Repr.of_t t with
+    | Bool -> Tsqlite3.bind_bool st idx v
+    | Int -> Tsqlite3.bind_int st idx v
+    | Int64 -> Tsqlite3.bind_int64 st idx v
+    | Float -> Tsqlite3.bind_double st idx v
+    | Text -> Tsqlite3.bind_text st idx v
+    | Blob -> Tsqlite3.bind_blob st idx v
+    | Option t ->
+        (match v with
+        | None -> Tsqlite3.bind_null st idx
+        | Some v -> bind_arg st idx (Rel_sql.Stmt.Arg (Type.Repr.to_t t, v)))
+    | Coded c ->
+        (match Type.Coded.enc c v with
+        | v -> bind_arg st idx (Rel_sql.Stmt.Arg (Type.Coded.repr c, v))
+        | exception Failure e ->
+            error (stmt_error_var_encode idx (Type.Coded.name c) e))
+    | Custom c -> Rel.Type.Custom.invalid_unknown c
 
   let bind_args st args =
     let rec loop idx st = function
@@ -373,29 +375,31 @@ module Stmt' = struct
     | 0 -> bind_args s.stmt (List.rev (Rel_sql.Stmt.rev_args st))
     | rc -> error (stmt_error rc s.stmt)
 
-  let rec unpack_col_type : type r c. Tsqlite3.stmt -> int -> c Type.t -> c =
+  let rec unpack_col_type :
+    type r c. Tsqlite3.stmt -> int -> c Type.Repr.t -> c
+  =
   fun s i t -> match t with
-  | Type.Bool -> Tsqlite3.column_bool s i
-  | Type.Int -> Tsqlite3.column_int s i
-  | Type.Int64 -> Tsqlite3.column_int64 s i
-  | Type.Float -> Tsqlite3.column_double s i
-  | Type.Text -> Tsqlite3.column_text s i
-  | Type.Blob -> Tsqlite3.column_blob s i
-  | Type.Option t ->
+  | Bool -> Tsqlite3.column_bool s i
+  | Int -> Tsqlite3.column_int s i
+  | Int64 -> Tsqlite3.column_int64 s i
+  | Float -> Tsqlite3.column_double s i
+  | Text -> Tsqlite3.column_text s i
+  | Blob -> Tsqlite3.column_blob s i
+  | Option t ->
       if Tsqlite3.column_is_null s i then None else Some (unpack_col_type s i t)
-  | Type.Coded c ->
-      let v = unpack_col_type s i (Type.Coded.repr c) in
+  | Coded c ->
+      let v = unpack_col_type s i (Type.Repr.of_t ((Type.Coded.repr c))) in
       (match Type.Coded.dec c v with
-      | Ok v -> v
-      | Error e -> error (col_error_decode i (Type.Coded.name c) e))
-  | _ -> Type.invalid_unknown ()
+      | v -> v
+      | exception Failure e -> error (col_error_decode i (Type.Coded.name c) e))
+  | Custom c -> Rel.Type.Custom.invalid_unknown c
 
   let unpack_col : type r c. Tsqlite3.stmt -> int -> (r, c) Col.t -> c =
-  fun s i c -> unpack_col_type s i (Col.type' c)
+  fun s i c -> unpack_col_type s i (Type.Repr.of_t ((Col.type' c)))
 
   let unpack_row : type r. t -> r Rel_sql.Stmt.t -> r = fun s st ->
     let rec cols :
-      type r a. Tsqlite3.stmt -> int -> (r, a) Rel.Row.Private.prod' -> a
+      type r a. Tsqlite3.stmt -> int -> (r, a) Rel.Row.Repr.prod -> a
     =
     fun s idx r -> match r with
     | Unit f -> f
@@ -404,12 +408,12 @@ module Stmt' = struct
         f (unpack_col s idx c)
     | Cat (cs, _, row) ->
         let f =
-          cols s (idx - Row.col_count (Rel.Row.Private.prod_to_prod row)) cs
+          cols s (idx - Row.col_count (Rel.Row.Repr.to_prod row)) cs
         in
         let v = cols s idx row in
         f v
     in
-    let row = Rel.Row.Private.prod_of_prod (Rel_sql.Stmt.result st) in
+    let row = Rel.Row.Repr.of_prod (Rel_sql.Stmt.result st) in
     cols s.stmt (s.col_count - 1) row
 
   let stop s =
@@ -653,7 +657,7 @@ module Dialect = struct
 
   let rec insert_columns ~ignore:ign i rev_cols rev_vars rev_args cols =
     let ignore c =
-      List.exists (fun (Rel.Col.V i) -> Rel.Col.equal_name i c) ign
+      List.exists (fun (Rel.Col.Def i) -> Rel.Col.equal_name i c) ign
     in
     match cols with
     | [] ->
@@ -781,60 +785,64 @@ module Dialect = struct
       loop (b_len - 1) b 0 s 2
     with Failure e -> Error e
 
-  let rec type_of_type : type a. a Type.t -> string * bool = function
+  let rec type_of_type : type a. a Type.Repr.t -> string * bool = function
   (* N.B. if we create databases in strict mode we can no longer
      distinguish between the first three types. *)
-  | Type.Bool -> "BOOL", true (* not null *)
-  | Type.Int -> "INTEGER", true
-  | Type.Int64 -> "BIGINT", true
-  | Type.Float -> "REAL", true
-  | Type.Text -> "TEXT", true
-  | Type.Blob -> "BLOB", true
-  | Type.Option t -> fst (type_of_type t), false
-  | Type.Coded c -> type_of_type (Type.Coded.repr c)
-  | _ -> Type.invalid_unknown ()
+  | Bool -> "BOOL", true (* not null *)
+  | Int -> "INTEGER", true
+  | Int64 -> "BIGINT", true
+  | Float -> "REAL", true
+  | Text -> "TEXT", true
+  | Blob -> "BLOB", true
+  | Option t -> fst (type_of_type t), false
+  | Coded c -> type_of_type (Type.Repr.of_t (Type.Coded.repr c))
+  | Custom c -> Type.Custom.invalid_unknown c
 
-  let rec const_of_literal : type a. a Type.t -> string -> (a, string) result =
-  fun t s -> match t with
-  | Type.Bool -> bool_of_literal s
-  | Type.Int -> int_of_literal s
-  | Type.Int64 -> int64_of_literal s
-  | Type.Float -> float_of_literal s
-  | Type.Text -> text_of_literal s
-  | Type.Blob -> blob_of_literal s
-  | Type.Option t ->
+  let rec const_of_literal :
+    type a. a Type.t -> string -> (a, string) result
+  =
+  fun t s -> match (Type.Repr.of_t t) with
+  | Bool -> bool_of_literal s
+  | Int -> int_of_literal s
+  | Int64 -> int64_of_literal s
+  | Float -> float_of_literal s
+  | Text -> text_of_literal s
+  | Blob -> blob_of_literal s
+  | Option t ->
       if String.uppercase_ascii s = "NULL"
       then Ok None
-      else Result.map Option.some (const_of_literal t s)
-  | Type.Coded c ->
+      else Result.map Option.some (const_of_literal (Type.Repr.to_t t) s)
+  | Coded c ->
       begin match const_of_literal (Type.Coded.repr c) s with
-      | Ok v -> Rel.Type.Coded.dec c v
+      | Ok v ->
+          (match Rel.Type.Coded.dec c v with
+          | v -> Ok v | exception Failure e -> Error e)
       | Error e -> Error (strf "%s literal: %s" (Type.Coded.name c) e)
       end
-  | _ -> Rel.Type.invalid_unknown ()
+  | Custom c -> Rel.Type.Custom.invalid_unknown c
 
   (* FIXME streamline with Rel_query, this should be part of dialect. *)
-  let rec const_to_literal : type a. a Rel.Type.t -> a -> string =
+  let rec const_to_literal : type a. a Rel.Type.Repr.t -> a -> string =
   fun t v -> match t with
-  | Type.Bool -> bool_to_literal v
-  | Type.Int -> int_to_literal v
-  | Type.Int64 -> int64_to_literal v
-  | Type.Float -> float_to_literal v
-  | Type.Text -> text_to_literal v
-  | Type.Blob -> blob_to_literal v
-  | Type.Option t ->
+  | Bool -> bool_to_literal v
+  | Int -> int_to_literal v
+  | Int64 -> int64_to_literal v
+  | Float -> float_to_literal v
+  | Text -> text_to_literal v
+  | Blob -> blob_to_literal v
+  | Option t ->
       (match v with None -> "NULL" | Some v -> const_to_literal t v)
-  | Type.Coded c ->
+  | Coded c ->
       (match Rel.Type.Coded.enc c v with
-      | Ok v -> const_to_literal (Rel.Type.Coded.repr c) v
-      | Error e ->
+      | v -> const_to_literal (Type.Repr.of_t (Type.Coded.repr c)) v
+      | exception Failure e ->
           let name = Rel.Type.Coded.name c in
           invalid_arg (strf "invalid %s constant %s" name e))
-  | _ -> Rel.Type.invalid_unknown ()
+  | Custom c -> Rel.Type.Custom.invalid_unknown c
 
-  let col_def (Col.V col) =
+  let col_def (Col.Def col) =
     let name = sqlid (Col.name col) in
-    let type' = Rel.Col.type' col in
+    let type' = Type.Repr.of_t (Rel.Col.type' col) in
     let typ, not_null = type_of_type type' in
     let not_null = if not_null then " NOT NULL" else "" in
     let default = match Col.default col with
@@ -847,9 +855,8 @@ module Dialect = struct
   let foreign_key ?schema t fk =
     let parent fk =
       let name, cs = match Table.Foreign_key.parent fk with
-      | Parent (`Self, cs) -> Table.name t, pp_strf "@[<h>%a@]" pp_col_names cs
-      | Parent (`Table t, cs) ->
-          Table.name t, pp_strf "@[<h>%a@]" pp_col_names cs
+      | Self cs -> Table.name t, pp_strf "@[<h>%a@]" pp_col_names cs
+      | Table (t, cs) -> Table.name t, pp_strf "@[<h>%a@]" pp_col_names cs
       in
       let name = sqlid_in_schema ?schema name in
       strf " REFERENCES %s (%s)" name cs
@@ -875,7 +882,8 @@ module Dialect = struct
     let uniques = List.map unique_key (Table.unique_keys t) in
     let primary_key = match Table.primary_key t with
     | None -> []
-    | Some pk -> [pp_strf "PRIMARY KEY (@[<h>%a@])" pp_col_names pk]
+    | Some pk -> [pp_strf "PRIMARY KEY (@[<h>%a@])"
+                    pp_col_names (Table.Primary_key.cols pk)]
     in
     let fks = List.map (foreign_key ?schema t) (Table.foreign_keys t) in
     let defs = cols @ primary_key @ uniques @ fks in
@@ -932,20 +940,20 @@ module Dialect = struct
 
   let insert_into ?or_action ?schema ?(ignore = []) t =
     let ignore c =
-      List.exists (fun (Rel.Col.V i) -> Rel.Col.equal_name i c) ignore
+      List.exists (fun (Rel.Col.Def i) -> Rel.Col.equal_name i c) ignore
     in
     let rec loop :
-      type r a.
-      (r, a) Rel.Row.Private.prod' ->
-      r Rel.Col.v list * (r -> unit Rel_sql.Stmt.t) Rel_sql.Stmt.func
+      type r a. (r, a) Rel.Row.Repr.prod ->
+      r Rel.Col.def list * (r -> unit Rel_sql.Stmt.t) Rel_sql.Stmt.func
       = function
       | Unit _ -> [], Rel_sql.Stmt.nop (Rel_sql.Stmt.ret_rev Rel.Row.empty)
       | Prod (r, c) ->
           let ns, f = loop r in
-          if ignore c then ns, f else (Rel.Col.V c :: ns, Rel_sql.Stmt.col c f)
+          if ignore c then ns, f else
+          (Rel.Col.Def c :: ns, Rel_sql.Stmt.col c f)
       | Cat (r, proj', row) -> failwith "TODO"
     in
-    let cs, f = loop (Rel.Row.Private.prod_of_prod (Rel.Table.row t)) in
+    let cs, f = loop (Rel.Row.Repr.of_prod (Rel.Table.row t)) in
     let cs = List.rev cs in
     let vars = List.mapi (fun i _ -> "?" ^ string_of_int (i + 1)) cs in
     let or_action = Option.fold ~none:"" ~some:insert_or_action or_action in
@@ -1047,7 +1055,7 @@ let string_subrange ?(first = 0) ?last s =
 
 let ( let* ) = Result.bind
 let never _ = assert false
-let dummy_col name = Col.V (Col.v name Type.Int never)
+let dummy_col name = Col.Def (Col.make name Type.int never)
 
 let err_col tname cname fmt = strf ("Column %s.%s: " ^^ fmt) tname cname
 
@@ -1058,7 +1066,7 @@ let err_null_not_null tname cname =
   err_ignoring_default tname cname "NULL default on NOT NULL column"
 
 let col_type tname cname not_null default type' =
-  let some c = Some (Col.V c) in
+  let some c = Some (Col.Def c) in
   let parse_default type' s =
     if s = "" then None else
     match Dialect.const_of_literal type' s with
@@ -1067,28 +1075,28 @@ let col_type tname cname not_null default type' =
   match not_null with
   | true ->
       let default = parse_default type' default in
-      some (Col.v ?default cname type' never)
+      some (Col.make ?default cname type' never)
   | false ->
-      let type' = Type.(Option type') in
+      let type' = Type.option type' in
       let default = parse_default type' default in
-      some (Col.v ?default cname type' never)
+      some (Col.make ?default cname type' never)
 
 let col_spec tname cname type' not_null default issues =
   match String.uppercase_ascii type' with
   | "BOOL" | "BOOLEAN" ->
-      col_type tname cname not_null default Type.Bool, issues
+      col_type tname cname not_null default Type.bool, issues
   | "INT" | "INTEGER" | "TINYINT" | "SMALLINT" | "MEDIUMINT" |"INT2" | "INT8" ->
-      col_type tname cname not_null default Type.Int, issues
+      col_type tname cname not_null default Type.int, issues
   | "BIGINT" |  "UNSIGNED BIG INT" ->
-      col_type tname cname not_null default Type.Int64, issues
+      col_type tname cname not_null default Type.int64, issues
   | "REAL" | "DOUBLE" | "DOUBLE PRECISION" | "FLOAT" | "NUMERIC" ->
-      col_type tname cname not_null default Type.Float, issues
+      col_type tname cname not_null default Type.float, issues
   | "TEXT" | "CLOB" ->
-      col_type tname cname not_null default Type.Text, issues
+      col_type tname cname not_null default Type.text, issues
   | "BLOB" | "" ->
-      col_type tname cname not_null default Type.Blob, issues
+      col_type tname cname not_null default Type.blob, issues
   | "DATETIME" | "DATE" ->
-      col_type tname cname not_null default Type.Float, issues
+      col_type tname cname not_null default Type.float, issues
   | s ->
       let err_drop s =
         err_col tname cname "dropping : cannot parse type '%s'"  type'
@@ -1099,16 +1107,16 @@ let col_spec tname cname type' not_null default issues =
           match string_subrange ~last:(i - 1) s with
           | "CHARACTER" | "VARCHAR" | "VARYING CHARACTER"
           | "NCHAR" | "NATIVE CHARACTER" |"NVARCHAR" ->
-              col_type tname cname not_null default Type.Text, issues
+              col_type tname cname not_null default Type.text, issues
           | "DECIMAL" | "NUMERIC" ->
-              col_type tname cname not_null default Type.Float, issues
+              col_type tname cname not_null default Type.float, issues
           | _ -> None, (err_drop s :: issues)
 
 let table_cols db name issues =
   let rec cols pk cs issues = function
   | [] ->
       let pk = match List.map snd (List.sort compare pk) with
-      | [] -> None | cols -> Some cols
+      | [] -> None | cols -> Some (Table.Primary_key.make cols)
       in
       Ok (cs, pk, issues)
   | (_order, cname, type', not_null, default, pk_index) :: specs ->
@@ -1155,11 +1163,11 @@ let table_foreign_keys db name issues =
       let on_delete, issues = fk_action name id "ON DELETE" issues on_delete in
       let fk =
         let parent = match table = name with
-        | true -> Table.Foreign_key.Parent (`Self, parent)
-        | false ->
-            Table.Foreign_key.Parent (`Table (Table.v table Row.empty), parent)
+        | true -> Table.Foreign_key.Self parent
+        | false -> Table.Foreign_key.Table (Table.make table Row.empty, parent)
         in
-        Table.Foreign_key.v ?on_delete ?on_update ~cols:child ~parent:parent ()
+        Table.Foreign_key.make
+          ?on_delete ?on_update ~cols:child ~parent ()
       in
       fks (fk :: acc) issues l
   in
@@ -1198,8 +1206,8 @@ let table_indices db tname =
         else Some name
       in
       match origin with
-      | "c" -> indices (Rel.Table.index ?name ~unique cols :: is) us specs
-      | "u" -> indices is (Rel.Table.unique_key cols :: us) specs
+      | "c" -> indices (Rel.Table.Index.make ?name ~unique cols :: is) us specs
+      | "u" -> indices is (Rel.Table.Unique_key.make cols :: us) specs
       | _ -> indices is us specs
   in
   let stmt =
@@ -1215,17 +1223,17 @@ let table_indices db tname =
 
 let table db name issues =
   let* cols, primary_key, issues = table_cols db name issues in
-  let row = Rel.Row.Private.row_of_cols cols in
+  let row = Rel.Row.Repr.row_of_cols cols in
   let* indices, unique_keys = table_indices db name in
   let* foreign_keys, issues = table_foreign_keys db name issues in
-  Ok (Rel.Table.v name row ?primary_key ~unique_keys ~foreign_keys ~indices,
+  Ok (Rel.Table.make name row ?primary_key ~unique_keys ~foreign_keys ~indices,
       issues)
 
 let rec tables db ts issues = function
 | [] -> Ok (List.rev ts, List.rev issues)
 | (name, _sql) :: names ->
     let* t, issues = table db name issues in
-    tables db ((Table.V t) :: ts) issues names
+    tables db ((Table.Def t) :: ts) issues names
 
 let table_names db =
   let stmt =
@@ -1240,4 +1248,4 @@ let table_names db =
 let schema_of_db ?schema:name db =
   let* names = table_names db in
   let* tables, issues = tables db [] [] names in
-  Ok (Rel.Schema.v ?name ~tables (), issues)
+  Ok (Rel.Schema.make ?name ~tables (), issues)

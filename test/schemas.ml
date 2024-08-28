@@ -85,10 +85,10 @@ module Products_flat_with_objects = struct
 
 
     let product_table =
-      Table.v "product" Row.(unit product' * pid' * name' * price')
+      Table.make "product" Row.(unit product' * pid' * name' * price')
 
     let order_table =
-      Table.v "order" Row.(unit order' * oid' * pid' * qty')
+      Table.make "order" Row.(unit order' * oid' * pid' * qty')
 
     let sales_row = Row.(unit sales' * pid' * name' * sale')
   end
@@ -156,14 +156,14 @@ module Products_with_adts = struct
     let name p = p.name
     let price p = p.price
 
-    let pid' = Col.v "pid" Type.Int pid
-    let name' = Col.v "name" Type.Text name
-    let price' = Col.v "price" Type.Int price
+    let pid' = Col.make "pid" Type.int pid
+    let name' = Col.make "name" Type.text name
+    let price' = Col.make "price" Type.int price
     let table =
-      let primary_key = [Col.V pid'] in
-      let unique_keys = [Table.unique_key [Col.V name']] in
-      Table.v "product" Row.(unit v * pid' * name' * price')
-        ~primary_key ~unique_keys
+      let primary_key = Table.Primary_key.make [Def pid'] in
+      let unique_keys = [Table.Unique_key.make [Col.Def name']] in
+      Table.make "product" ~primary_key ~unique_keys @@
+      Row.(unit v * pid' * name' * price')
   end
 
   module Order : sig
@@ -172,8 +172,6 @@ module Products_with_adts = struct
     val oid : t -> int
     val pid : t -> int
     val qty : t -> int
-
-
     val oid' : (t, int) Rel.Col.t
     val pid' : (t, int) Rel.Col.t
     val qty' : (t, int) Rel.Col.t
@@ -185,17 +183,16 @@ module Products_with_adts = struct
     let pid o = o.pid
     let qty o = o.qty
 
-
-    let oid' = Col.v "oid" Type.Int oid
-    let pid' = Col.v "pid" Type.Int pid
-
-    let qty' = Col.v "qty" Type.Int qty
+    let oid' = Col.make "oid" Type.int oid
+    let pid' = Col.make "pid" Type.int pid
+    let qty' = Col.make "qty" Type.int qty
     let table =
       let fk =
-        let parent = Product.(table, [Col.V pid']) in
-        Table.foreign_key ~cols:[Col.V pid'] ~parent ()
+        let parent = Product.(Table.Foreign_key.Table (table, [Col.Def pid']))
+        in
+        Table.Foreign_key.make ~cols:[Col.Def pid'] ~parent ()
       in
-      Table.v "order" ~foreign_keys:[fk] Row.(unit v * oid' * pid' * qty')
+      Table.make "order" ~foreign_keys:[fk] Row.(unit v * oid' * pid' * qty')
   end
 
   type sales = <pid:int; name:string; sale:int>
@@ -256,11 +253,11 @@ module Duos = struct
     let name p = p.name
     let age p = p.age
 
-    let name' = Col.v "name" Type.Text name
-    let age' = Col.v "age" Type.Int age
+    let name' = Col.make "name" Type.text name
+    let age' = Col.make "age" Type.int age
     let table =
-      let primary_key = [Col.V name'] in
-      Table.v "person" Row.(unit v * name' * age') ~primary_key
+      let primary_key = Table.Primary_key.make [Def name'] in
+      Table.make "person" Row.(unit v * name' * age') ~primary_key
   end
 
   module Duo : sig
@@ -279,9 +276,9 @@ module Duos = struct
     let snd = snd
 
 
-    let fst' = Col.v "fst" Type.Text fst
-    let snd' = Col.v "snd" Type.Text snd
-    let table = Table.v "duo" Row.(unit v * fst' * snd')
+    let fst' = Col.make "fst" Type.text fst
+    let snd' = Col.make "snd" Type.text snd
+    let table = Table.make "duo" Row.(unit v * fst' * snd')
   end
 
   module Q = struct
@@ -357,10 +354,10 @@ module Org = struct
     type t = { name : string }
     let v name = { name }
     let name p = p.name
-    let name' = Col.v "name" Type.Text name
+    let name' = Col.make "name" Type.text name
     let table =
-      let primary_key = [Col.V name'] in
-      Table.v "department" Row.(unit v * name') ~primary_key
+      let primary_key = Table.Primary_key.make [Def name'] in
+      Table.make "department" Row.(unit v * name') ~primary_key
   end
 
   module Person : sig
@@ -376,11 +373,11 @@ module Org = struct
     let v name department = { name; department }
     let name p = p.name
     let department p = p.department
-    let name' = Col.v "name" Type.Text name
-    let department' = Col.v "department" Type.Text department
+    let name' = Col.make "name" Type.text name
+    let department' = Col.make "department" Type.text department
     let table =
-      let primary_key = [Col.V name'] in
-      Table.v "person" Row.(unit v * name' * department') ~primary_key
+      let primary_key = Table.Primary_key.make [Def name'] in
+      Table.make "person" Row.(unit v * name' * department') ~primary_key
   end
 
   module Task : sig
@@ -398,9 +395,9 @@ module Org = struct
     let person p = p.person
     let task p = p.task
 
-    let person' = Col.v "person" Type.Text person
-    let task' = Col.v "task" Type.Text task
-    let table = Table.v "task" Row.(unit v * person' * task')
+    let person' = Col.make "person" Type.text person
+    let task' = Col.make "task" Type.text task
+    let table = Table.make "task" Row.(unit v * person' * task')
   end
 
   module Q = struct
@@ -431,12 +428,14 @@ module Org = struct
       let member name tasks = { name; tasks}
       let dept dept members = { dept; members }
 
-      type 'a Type.t += Bag : ('a, 'e) Bag.t Type.t
-
-      let name = Col.v "name" Type.Text (fun m -> m.name)
-      let tasks = Col.v "tasks" Bag (fun m -> m.tasks)
-      let dept_name = Col.v "dept" Type.Text (fun d -> d.dept)
-      let members = Col.v "members" Bag (fun d -> d.members)
+      type 'a Type.Custom.type' += Bag : ('a, 'e) Bag.t Type.Custom.type'
+      (* XXX loss of polymorphism *)
+      let bag0 = Type.custom (Type.Custom.make Bag ~name:"bag")
+      let bag1 = Type.custom (Type.Custom.make Bag ~name:"bag")
+      let name = Col.make "name" Type.text (fun m -> m.name)
+      let tasks = Col.make "tasks" bag0 (fun m -> m.tasks)
+      let dept_name = Col.make "dept" Type.text (fun d -> d.dept)
+      let members = Col.make "members" bag1 (fun d -> d.members)
     end
 
     let nested_org =
@@ -517,14 +516,14 @@ module Xpath = struct
     let pre n = n.pre
     let post n = n.post
     module C = struct
-      let id = Col.v "id" Type.Int id ~params:[Sql.Col_primary_key]
-      let parent = Col.v "parent" Type.Int parent
-      let name = Col.v "name" Type.Text name
-      let pre = Col.v "pre" Type.Int pre
-      let post = Col.v "post" Type.Int post
+      let id = Col.make "id" Type.Int id ~params:[Sql.Col_primary_key]
+      let parent = Col.make "parent" Type.Int parent
+      let name = Col.make "name" Type.Text name
+      let pre = Col.make "pre" Type.Int pre
+      let post = Col.make "post" Type.Int post
     end
     let table =
-      Table.v "node"
+      Table.make "node"
         Row.(unit v * C.id * C.parent * C.name * C.pre * C.post)
   end
 

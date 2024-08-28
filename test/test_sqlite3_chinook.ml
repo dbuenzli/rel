@@ -27,10 +27,10 @@ module Ad_hoc_schema = struct
     let id p = p.id
     let name p = p.name
 
-    let id' = Col.v "PlaylistId" Type.Int id
-    let name' = Col.v "Name" Type.Text name
+    let id' = Col.make "PlaylistId" Type.int id
+    let name' = Col.make "Name" Type.text name
 
-    let table = Table.v "Playlist" Row.(unit v * id' * name')
+    let table = Table.make "Playlist" Row.(unit v * id' * name')
     let pp = Row.value_pp (Table.row table)
   end
 

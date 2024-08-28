@@ -14,4 +14,4 @@ true : bin_annot, safe_string
 <src/pool/rel_pool*> : thread, package(threads.posix)
 <src/cli/rel_cli*> : package(cmdliner)
 
-<tool/rel*> : package(cmdliner), use_rel_sqlite3
+<src/tool/rel*> : package(cmdliner), use_rel_sqlite3

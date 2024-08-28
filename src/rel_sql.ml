@@ -44,13 +44,13 @@ module Stmt = struct
   let ( @-> ) = arg
 
   let unit = ret Row.empty
-  let bool = Type.Bool
-  let int = Type.Int
-  let int64 = Type.Int64
-  let float = Type.Float
-  let text = Type.Text
-  let blob = Type.Blob
-  let option v = (Type.Option v)
+  let bool = Type.bool
+  let int = Type.int
+  let int64 = Type.int64
+  let float = Type.float
+  let text = Type.text
+  let blob = Type.blob
+  let option v = (Type.option v)
   let nop f = fun src rev_args v -> f src rev_args
   let proj p t f = fun src rev_args r -> f src (Arg (t, p r) :: rev_args) r
   let col :
@@ -122,10 +122,10 @@ module type DIALECT = sig
 
   val insert_into :
     ?or_action:insert_or_action -> ?schema:Schema.name ->
-    ?ignore:'r Col.v list -> 'r Table.t -> ('r -> unit Stmt.t)
+    ?ignore:'r Col.def list -> 'r Table.t -> ('r -> unit Stmt.t)
 
   val insert_into_cols :
-    ?schema:Schema.name -> ?ignore:'r Col.v list -> 'r Table.t ->
+    ?schema:Schema.name -> ?ignore:'r Col.def list -> 'r Table.t ->
     ('r Col.value list -> unit Stmt.t)
 
   val update :
@@ -144,10 +144,10 @@ module type DIALECT = sig
 
   val create_index :
     ?schema:Schema.name -> ?if_not_exists:unit -> 'r Table.t ->
-    'r Table.index -> unit Stmt.t
+    'r Table.Index.t -> unit Stmt.t
 
   val drop_index :
-    ?schema:Schema.name -> ?if_exists:unit -> 'r Table.t -> 'r Table.index ->
+    ?schema:Schema.name -> ?if_exists:unit -> 'r Table.t -> 'r Table.Index.t ->
     unit Stmt.t
 
   val schema_changes :
@@ -182,7 +182,7 @@ let drop_index (module Sql : DIALECT) ?schema ?if_exists t i =
 
 let create_schema (module Sql : DIALECT) s =
   let schema = Schema.name s in
-  let add_table acc (Table.V t) =
+  let add_table acc (Table.Def t) =
     let acc = Sql.create_table ?schema t :: acc in
     let add_index acc i = Sql.create_index ?schema t i :: acc in
     List.fold_left add_index acc (Table.indices t)
@@ -191,7 +191,7 @@ let create_schema (module Sql : DIALECT) s =
 
 let drop_schema (module Sql : DIALECT) ?if_exists s =
   let schema = Schema.name s in
-  let drop_table (Table.V t) = Sql.drop_table ?schema ?if_exists t in
+  let drop_table (Table.Def t) = Sql.drop_table ?schema ?if_exists t in
   List.rev_map drop_table (Schema.tables s)
 
 let schema_changes (module Sql : DIALECT) ?schema cs =

@@ -491,7 +491,7 @@ module Private : sig
       values of type ['b]. *)
 
   type ('a, 'b) unop +=
-  | Neg : 'a Rel.Type.t -> ('a, 'a) unop (** Negation. *)
+  | Neg : 'a Rel.Type.Repr.t -> ('a, 'a) unop (** Negation. *)
   (** Predefined unary operations. *)
 
   type ('a, 'b) binop = ..
@@ -505,8 +505,8 @@ module Private : sig
   (** The type for comparison operators. *)
 
   type ('a, 'b) binop +=
-  | Arith : arith * 'a Rel.Type.t -> ('a, 'a) binop
-  | Cmp : cmp * 'a Rel.Type.t -> ('a, bool) binop
+  | Arith : arith * 'a Rel.Type.Repr.t -> ('a, 'a) binop
+  | Cmp : cmp * 'a Rel.Type.Repr.t -> ('a, bool) binop
   | And : (bool, bool) binop
   | Or : (bool, bool) binop (** *)
   (** Predefined binary operations. *)
@@ -518,7 +518,7 @@ module Private : sig
 
   type 'a value =
   | Var : string -> 'a value (* only for compiling *)
-  | Const : 'a Rel.Type.t * 'a -> 'a value
+  | Const : 'a Rel.Type.Repr.t * 'a -> 'a value
   | Unop : ('a, 'b) unop * 'a value -> 'b value
   | Binop : ('a, 'b) binop * 'a value * 'a value -> 'b value
   | Proj : 'b value * ('b, 'a) Rel.Col.t -> 'a value

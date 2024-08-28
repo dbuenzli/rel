@@ -41,7 +41,7 @@ let rel_pool_lib = (* We can put that into the rel library on OCaml > 5. *)
 (* Tools *)
 
 let rel_tool =
-  let srcs = [ `File ~/"tool/rel_tool.ml" ] in
+  let srcs = [ `Dir ~/"src/tool" ] in
   let requires = [cmdliner; rel; rel_cli; rel_kit; rel_sqlite3] in
   B0_ocaml.exe "rel" ~public:true ~srcs ~requires ~doc:"Rel tool"
 
@@ -71,6 +71,8 @@ let test_sqlite3_stub =
 
 let test_sqlite3_chinook =
   test ~/"test/test_sqlite3_chinook.ml" ~requires:[rel_sqlite3] ~srcs:chinook
+
+let examples = test ~/"test/examples.ml" ~run:false
 
 (* Test data *)
 
