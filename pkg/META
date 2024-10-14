@@ -19,18 +19,6 @@ package "cli" (
   exists_if = "rel_cli.cma rel_cli.cmxa"
 )
 
-package "kit" (
-  directory = "kit"
-  description = "The rel.kit library"
-  version = "%%VERSION_NUM%%"
-  requires = "rel"
-  archive(byte) = "rel_kit.cma"
-  archive(native) = "rel_kit.cmxa"
-  plugin(byte) = "rel_kit.cma"
-  plugin(native) = "rel_kit.cmxs"
-  exists_if = "rel_kit.cma rel_kit.cmxa"
-)
-
 package "pool" (
   directory = "pool"
   description = "The rel.pool library"

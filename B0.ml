@@ -8,7 +8,6 @@ let cmdliner = B0_ocaml.libname "cmdliner"
 let b0_std = B0_ocaml.libname "b0.std"
 
 let rel = B0_ocaml.libname "rel"
-let rel_kit = B0_ocaml.libname "rel.kit"
 let rel_pool = B0_ocaml.libname "rel.pool"
 let rel_cli = B0_ocaml.libname "rel.cli"
 let rel_sqlite3 = B0_ocaml.libname "rel.sqlite3"
@@ -18,10 +17,6 @@ let rel_sqlite3 = B0_ocaml.libname "rel.sqlite3"
 let rel_lib =
   let srcs = [ `Dir ~/"src" ] in
   B0_ocaml.lib rel ~name:"rel-lib" ~srcs
-
-let rel_kit_lib =
-  let srcs = [ `Dir ~/"src/kit" ] in
-  B0_ocaml.lib rel_kit ~srcs ~requires:[rel]
 
 let rel_cli_lib =
   let srcs = [ `Dir ~/"src/cli" ] in
@@ -42,7 +37,7 @@ let rel_pool_lib = (* We can put that into the rel library on OCaml > 5. *)
 
 let rel_tool =
   let srcs = [ `Dir ~/"src/tool" ] in
-  let requires = [cmdliner; rel; rel_cli; rel_kit; rel_sqlite3] in
+  let requires = [cmdliner; rel; rel_cli; rel_sqlite3] in
   B0_ocaml.exe "rel" ~public:true ~srcs ~requires ~doc:"Rel tool"
 
 (* Tests *)

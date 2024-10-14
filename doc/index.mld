@@ -44,6 +44,7 @@ Rel
 Rel_sql
 Rel_query
 Rel_list
+Rel_kit
 }
 
 {1:dbms_support Database management systems}

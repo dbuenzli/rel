@@ -10,7 +10,6 @@ let () =
   let doc file = Pkg.doc ("doc/" ^ file) ~dst:("odoc-pages/" ^ file) in
   Ok [
     Pkg.mllib "src/rel.mllib";
-    Pkg.mllib "src/kit/rel_kit.mllib" ~dst_dir:"kit";
     Pkg.mllib "src/cli/rel_cli.mllib" ~dst_dir:"cli";
     Pkg.mllib "src/pool/rel_pool.mllib" ~dst_dir:"pool";
     Pkg.mllib ~cond:sqlite3 "src/sqlite3/rel_sqlite3.mllib" ~dst_dir:"sqlite3";
