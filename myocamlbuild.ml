@@ -3,20 +3,19 @@ open Command
 
 (* Generic pkg-config(1) support. *)
 
-let strf = Printf.sprintf
-
 let pkg_config_exists package =
-  (Sys.command ("pkg-config --exists " ^ package) = 0)
-
-let pkg_config flags package =
-  let cmd tmp =
-    Command.execute ~quiet:true &
-    Cmd( S [ A "pkg-config"; A ("--" ^ flags); A package; Sh ">"; A tmp]);
-    List.map (fun arg -> A arg) (string_list_of_file tmp)
-  in
-  with_temp_file "pkgconfig" "pkg-config" cmd
+  Sys.command ("pkg-config --exists " ^ package) = 0
 
 let lib_with_clib ~lib ~clib ~has_lib ~src_dir ~stublib =
+  let strf = Printf.sprintf in
+  let pkg_config flags package =
+    let cmd tmp =
+      Command.execute ~quiet:true &
+      Cmd( S [ A "pkg-config"; A ("--" ^ flags); A package; Sh ">"; A tmp]);
+      List.map (fun arg -> A arg) (string_list_of_file tmp)
+    in
+    with_temp_file "pkgconfig" "pkg-config" cmd
+  in
   let ar s = match !Ocamlbuild_plugin.Options.ext_lib with
   | "" -> s ^ ".a" | x -> s ^ "." ^ x
   in
@@ -29,14 +28,18 @@ let lib_with_clib ~lib ~clib ~has_lib ~src_dir ~stublib =
   let record_stub_lib = strf "record_%s" stublib in
   let link_stub_archive = strf "link_%s_archive" stublib in
   let stub_ar = ar (strf "%s/lib%s" src_dir stublib) in
-  let stub_l = match !Ocamlbuild_plugin.Options.ext_lib with
-  | "lib" (* Windows *) -> A (strf "dll%s.dll" stublib)
+  let static_stub_l = match !Ocamlbuild_plugin.Options.ext_lib with
+  | "lib" (* Windows *) -> A (strf "lib%s.lib" stublib)
   | _ -> A (strf "-l%s" stublib)
+  in
+  let dynamic_stub_l = match !Ocamlbuild_plugin.Options.ext_lib with
+  | "lib" (* Windows *) -> A (strf "dll%s.dll" stublib)
+  | _ -> static_stub_l
   in
   let clib_l = pkg_config "libs-only-l" clib in
   let clib_L = pkg_config "libs-only-L" clib in
   let clib_cflags = ccopts @@ (A has_lib) :: pkg_config "cflags" clib in
-  let clib_cclibs = cclibs @@ stub_l :: clib_l in
+  let clib_cclibs = cclibs @@ static_stub_l :: clib_l in
   let clib_ccopts = ccopts @@ clib_L in
   begin
     dep [record_stub_lib] [stub_ar];
@@ -46,7 +49,7 @@ let lib_with_clib ~lib ~clib ~has_lib ~src_dir ~stublib =
     flag ["c"; "ocamlmklib"; use_clib] (S (clib_L @ clib_l));
 
     flag ["link"; "ocaml"; "library"; "byte"; record_stub_lib]
-      (S (dllibs [stub_l] @ clib_ccopts @ clib_cclibs));
+      (S (dllibs [dynamic_stub_l] @ clib_ccopts @ clib_cclibs));
 
     flag ["link"; "ocaml"; "library"; "native"; record_stub_lib]
       (S (clib_ccopts @ clib_cclibs));
