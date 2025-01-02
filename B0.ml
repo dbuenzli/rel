@@ -58,6 +58,7 @@ let chinook = [`File ~/"test/chinook.ml"]
 let schemas = [`File ~/"test/schemas.ml"]
 
 let test_rel = test ~/"test/test_rel.ml"
+let test_rel = test ~/"test/test_query.ml"
 let test_sql =
   test ~/"test/test_sql.ml" ~requires:[rel_sqlite3] ~srcs:schemas
 

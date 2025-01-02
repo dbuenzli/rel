@@ -621,7 +621,7 @@ module Option = struct
     (* N.B. in sql NULL = NULL is [false]. *)
     let none_eq = Bool.(is_none o && is_none o') in
     let some_eq = Bool.(eq (get o) (get o')) in
-    Bool.(none_eq && some_eq)
+    Bool.(none_eq || some_eq)
 end
 
 module Syntax = struct
