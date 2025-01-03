@@ -292,6 +292,14 @@ module Option : sig
     'a option value -> 'a option value -> bool value
 end
 
+(** Coded. *)
+
+module Coded : sig
+  val v : 'a Rel.Type.t -> 'a -> 'a value
+  val equal : 'a Rel.Type.t -> 'a value -> 'a value -> bool value
+end
+
+
 (** Bags specification language.
 
     Bags are multisets of values (rows).
@@ -405,7 +413,7 @@ module Syntax : sig
   module Float = Float
   module Text = Text
   module Option = Option
-
+  module Coded = Coded
   module Bag = Bag
 (*  module Sql = Sql *)
 

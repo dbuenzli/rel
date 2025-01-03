@@ -624,6 +624,18 @@ module Option = struct
     Bool.(none_eq || some_eq)
 end
 
+module Coded = struct
+  open Rel
+  open Private
+
+  let v coded v = Const ((Type.Repr.of_t coded), v)
+  let equal coded x y =
+    (* FIXME we should recover the type from expressions this would allow
+       to have polymorphic equal. However for coded columns this could enable
+       comparisons between two different encodings which could be problematic *)
+    Binop (Cmp (Eq, (Type.Repr.of_t coded)), x, y)
+end
+
 module Syntax = struct
 
   type nonrec 'a value = 'a value
@@ -651,6 +663,7 @@ module Syntax = struct
   module Int64 = Int64
   module Float = Float
   module Text = Text
+  module Coded = Coded
   module Option = Option
   module Bag = Bag
 
