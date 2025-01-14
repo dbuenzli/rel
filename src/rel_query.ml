@@ -480,7 +480,7 @@ module Sql = struct
     Rel_sql.Stmt.func sql f.func
 
   let ret ret bag =
-    let func = Rel_sql.Stmt.ret ret in
+    let func = Rel_sql.Stmt.ret_rev ret in
     { argc = 0; bag; func }
 
   let arg t f =

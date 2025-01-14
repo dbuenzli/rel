@@ -367,7 +367,8 @@ module Bag : sig
 end
 
 
-(** FIXME can't we merge that into {!Rel_sql.Stmt} ? *)
+(** FIXME can't we merge that into {!Rel_sql.Stmt} ?
+    FIXME can't we avoid the reverse typing ?  *)
 module Sql : sig
 
   type ('a, 'f, 'r) func
