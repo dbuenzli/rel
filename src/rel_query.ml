@@ -233,8 +233,9 @@ module Bag_sql = struct   (* Target SQL fragment to compile bags *)
       String.concat "" ["CAST ("; e; " AS "; t; ")" ]
   | Row sl -> String.concat ", " (List.map sel_to_string sl)
 
-  and table_to_string (t, tas) =
-    String.concat "" [Printf.sprintf "%S" t; " as "; tas]
+  and table_to_string = function
+    | t, "" -> Printf.sprintf "%S" t
+    | t, tas -> String.concat "" [Printf.sprintf "%S" t; " as "; tas]
 
   (* ~ignore_result is here to work around what looks like a bug in the
      quel paper in fig 9. of the translation of exists. The problem
