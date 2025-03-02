@@ -68,6 +68,8 @@ let test_sqlite3_stub =
 let test_sqlite3_chinook =
   test ~/"test/test_sqlite3_chinook.ml" ~requires:[rel_sqlite3] ~srcs:chinook
 
+let test_issue_4 = test ~/"test/test_issue_4.ml" ~requires:[rel_sqlite3]
+
 let examples = test ~/"test/examples.ml" ~run:false
 
 (* Test data *)

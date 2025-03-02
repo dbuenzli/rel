@@ -225,7 +225,7 @@ CAMLprim value ocaml_rel_sqlite3_bind_bool (value stmt, value i, value v)
 CAMLprim value ocaml_rel_sqlite3_bind_int (value stmt, value i, value v)
 {
   return Val_sqlite3_rc
-    (sqlite3_bind_int64 (Sqlite3_stmt_val (stmt), Int_val (i), Int_val (v)));
+    (sqlite3_bind_int64 (Sqlite3_stmt_val (stmt), Int_val (i), Long_val (v)));
 }
 
 CAMLprim value ocaml_rel_sqlite3_bind_int64 (value stmt, value i, value v)
