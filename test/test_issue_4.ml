@@ -25,13 +25,15 @@ let create_schema db =
 let insert v =
   let stmt = Rel_sql.insert_into Rel_sqlite3.dialect table v in
   snap_stmt stmt @@ __LOC_OF__
-    "INSERT INTO \"rest\" (\"xxx\")\nVALUES (?1)";
+    "INSERT INTO \"rest\" (\"xxx\")\n\
+     VALUES (?1)";
   stmt
 
 let rest_table =
   let stmt = Rel_query.(Sql.of_bag' table (Bag.table table)) in
   snap_stmt stmt @@ __LOC_OF__
-    "SELECT rest.*\nFROM \"rest\"";
+    "SELECT rest.*\n\
+     FROM \"rest\"";
   stmt
 
 
