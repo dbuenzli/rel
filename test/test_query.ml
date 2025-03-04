@@ -46,7 +46,7 @@ module Person = struct
     Bag.where is_role (Bag.yield p)
 end
 
-let test () =
+let test =
   Test.test "Rel_query" @@ fun () ->
   let find_name_sql =
     Rel_query.Sql.of_bag'
@@ -60,11 +60,5 @@ let test () =
   assert true;
   ()
 
-
-
-let main () =
-  Test.main @@ fun () ->
-  test ();
-  ()
-
+let main () = Test.main @@ fun () -> Test.autorun ()
 let () = if !Sys.interactive then () else exit (main ())

@@ -18,8 +18,6 @@ let with_db f =
   in
   Fun.protect ~finally @@ fun () -> f db
 
-
-
 module Ad_hoc_schema = struct
   module Playlist = struct
     type t = { id : int; name : string; }
@@ -50,7 +48,7 @@ module Ad_hoc_schema = struct
     Format.printf "\n\nplaylist %d: %a" id Playlist.pp (List.hd ps);
     Ok ()
 
-  let test () =
+  let test =
     Test.test "Ad-hoc schema" @@ fun () ->
     with_db @@ fun db ->
     let* () = playlists db in
@@ -85,18 +83,12 @@ module Generated_schema = struct
     assert (List.length ps = 3503);
     Ok ()
 
-  let test () =
+  let test =
     Test.test "Generated schema" @@ fun () ->
     with_db @@ fun db ->
     let* () = run_bag db all_tracks (Table.row Track.table) in
     Ok ()
 end
 
-
-let main () =
-  Test.main @@ fun () ->
-  Ad_hoc_schema.test ();
-  Generated_schema.test ();
-  ()
-
+let main () = Test.main @@ fun () -> Test.autorun ()
 let () = if !Sys.interactive then () else exit (main ())

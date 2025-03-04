@@ -24,20 +24,19 @@ let create_schema db =
 
 let insert v =
   let stmt = Rel_sql.insert_into Rel_sqlite3.dialect table v in
-  snap_stmt stmt @@ __LOC_OF__
+  snap_stmt stmt @@ __POS_OF__
     "INSERT INTO \"rest\" (\"xxx\")\n\
      VALUES (?1)";
   stmt
 
 let rest_table =
   let stmt = Rel_query.(Sql.of_bag' table (Bag.table table)) in
-  snap_stmt stmt @@ __LOC_OF__
+  snap_stmt stmt @@ __POS_OF__
     "SELECT rest.*\n\
      FROM \"rest\"";
   stmt
 
-
-let test_bug () =
+let test_bug =
   Test.test "Testing issue 4" @@ fun () ->
   Test.noraise @@ fun () ->
   let db = Rel_sqlite3.open' ~mode:Memory "" |> get in
@@ -45,11 +44,8 @@ let test_bug () =
   let v = 10_000_000_000 in
   let () = Rel_sqlite3.exec db (insert v) |> get in
   let vs = Rel_sqlite3.fold db rest_table List.cons [] |> get in
-  Test.list ~elt:Test.Eq.int vs [v];
+  Test.(list T.int) vs [v];
   ()
 
-let main () =
-  Test.main @@ fun () ->
-  test_bug ()
-
+let main () = Test.main @@ fun () -> Test.autorun ()
 let () = if !Sys.interactive then () else exit (main ())

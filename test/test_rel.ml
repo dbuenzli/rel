@@ -5,14 +5,10 @@
 
 open B0_testing
 
-let test () =
+let test =
   Test.test "Rel definitions" @@ fun () ->
   assert true;
   ()
 
-let main () =
-  Test.main @@ fun () ->
-  test ();
-  ()
-
+let main () = Test.main @@ fun () -> Test.autorun ()
 let () = if !Sys.interactive then () else exit (main ())

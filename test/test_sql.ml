@@ -119,7 +119,7 @@ module Test_products = struct
     select_rows db order2_sales row
 *)
 
-  let test () =
+  let test =
     Test.test "Products schema" @@ fun () ->
     with_in_memory_db @@ fun db ->
     let* () = create_schema db schema in
@@ -195,7 +195,7 @@ module Test_duos = struct
     let row = Row.(t1 (text "name")) in
     select_rows db (thirties_by_pred Q.thirties_pred) row
 
-  let test () =
+  let test =
     Test.test "Duos schema" @@ fun () ->
     with_in_memory_db @@ fun db ->
     let* () = create_schema db schema in
@@ -231,7 +231,7 @@ module Test_org = struct
     let row = Row.(t1 (text "name")) in
     select_rows db abstract_expertise row
 
-  let test () =
+  let test =
     Test.test "Duos" @@ fun () ->
     with_in_memory_db @@ fun db ->
     let* () = create_schema db schema in
@@ -244,12 +244,5 @@ module Test_org = struct
     Ok ()
 end
 
-let main () =
-  Test.main @@ fun () ->
-  (*  let* () = Test_sql_src.run () in *)
-  Test_products.test ();
-  Test_duos.test ();
-  Test_org.test ();
-  ()
-
+let main () = Test.main @@ fun () -> Test.autorun ()
 let () = if !Sys.interactive then () else exit (main ())

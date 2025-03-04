@@ -5,14 +5,10 @@
 
 open B0_testing
 
-let test_version () =
+let test_version =
   Test.test "Rel_sqlite3.version" @@ fun () ->
   Test.log "SQLite version: %s" (Rel_sqlite3.version ());
   ()
 
-let main () =
-  Test.main @@ fun () ->
-  test_version ();
-  ()
-
+let main () = Test.main @@ fun () -> Test.autorun ()
 let () = if !Sys.interactive then () else (exit (main ()))
