@@ -51,7 +51,7 @@ let test ?doc ?run:(r = true) ?(requires = []) ?(srcs = []) src =
     |> ~~ B0_meta.run r
     |> ~~ B0_unit.Action.cwd (`In (`Scope_dir, ~/"test"))
   in
-  let name = Fpath.basename ~strip_ext:true src in
+  let name = Fpath.basename ~strip_exts:true src in
   B0_ocaml.exe name ~srcs ~requires ~meta ?doc
 
 let chinook = [`File ~/"test/chinook.ml"]
