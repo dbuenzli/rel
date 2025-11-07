@@ -51,7 +51,7 @@ let test ?doc ?run:(r = true) ?(requires = []) ?(srcs = []) src =
     |> ~~ B0_meta.run r
     |> ~~ B0_unit.Action.cwd (`In (`Scope_dir, ~/"test"))
   in
-  let name = Fpath.basename ~strip_exts:true src in
+  let name = Fpath.basename ~drop_exts:true src in
   B0_ocaml.exe name ~srcs ~requires ~meta ?doc
 
 let chinook = [`File ~/"test/chinook.ml"]
@@ -81,8 +81,9 @@ let chinook_sqlite3_url =
 let download_chinook =
   let doc = "Download the Chinook test database to test/" in
   B0_unit.of_action "download-chinook" ~doc @@ fun env _ ~args:_ ->
-  let file = B0_env.in_scope_dir env ~/"test/Chinook_Sqlite.sqlite" in
-  B0_action_kit.fetch_url env chinook_sqlite3_url file
+  let force = true and make_path = true in
+  let dst = B0_env.in_scope_dir env ~/"test/Chinook_Sqlite.sqlite" in
+  B0_action_kit.download_url env ~force ~make_path chinook_sqlite3_url ~dst
 
 (* Packs *)
 
