@@ -24,14 +24,14 @@ let create_schema db =
 
 let insert v =
   let stmt = Rel_sql.insert_into Rel_sqlite3.dialect table v in
-  snap_stmt stmt @@ __POS_OF__
+  snap_stmt stmt @> __POS_OF__
     "INSERT INTO \"rest\" (\"xxx\")\n\
      VALUES (?1)";
   stmt
 
 let rest_table =
   let stmt = Rel_query.(Sql.of_bag' table (Bag.table table)) in
-  snap_stmt stmt @@ __POS_OF__
+  snap_stmt stmt @> __POS_OF__
     "SELECT rest.*\n\
      FROM \"rest\"";
   stmt
