@@ -14,7 +14,7 @@ let with_db f =
   B0_std.Result.get_ok' @@ Rel_sqlite3.string_error @@
   let* db = Rel_sqlite3.open' ~mode:Read "Chinook_Sqlite.sqlite" in
   let finally () = match Rel_sqlite3.close db with
-  | Ok () -> () | Error e -> Test.log_fail "%s" (Rel_sqlite3.Error.message e)
+  | Ok () -> () | Error e -> Test.Log.fail "%s" (Rel_sqlite3.Error.message e)
   in
   Fun.protect ~finally @@ fun () -> f db
 

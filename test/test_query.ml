@@ -55,8 +55,8 @@ let test =
   let find_role_sql =
     Rel_query.Sql.of_bag' Person.table (Person.find_role Editor)
   in
-  Test.log "%a" Rel_sql.Stmt.pp find_name_sql;
-  Test.log "%a" Rel_sql.Stmt.pp find_role_sql;
+  Test.Log.msg "%a" Rel_sql.Stmt.pp find_name_sql;
+  Test.Log.msg "%a" Rel_sql.Stmt.pp find_role_sql;
   assert true;
   ()
 

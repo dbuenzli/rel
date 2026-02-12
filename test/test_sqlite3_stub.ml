@@ -7,7 +7,7 @@ open B0_testing
 
 let test_version =
   Test.test "Rel_sqlite3.version" @@ fun () ->
-  Test.log "SQLite version: %s" (Rel_sqlite3.version ());
+  Test.Log.msg "SQLite version: %s" (Rel_sqlite3.version ());
   ()
 
 let main () = Test.main @@ fun () -> Test.autorun ()
