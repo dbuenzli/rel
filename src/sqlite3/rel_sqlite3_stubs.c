@@ -82,7 +82,7 @@ CAMLprim value ocaml_rel_sqlite3_open (value file, value uri, value mode,
   if (rc == SQLITE_OK)
   {
     sqlite3_extended_result_codes (dbc, 1);
-    value db = caml_alloc (1, Abstract_tag);
+    db = caml_alloc (1, Abstract_tag);
     *((sqlite3 **) Data_abstract_val(db)) = dbc;
     ret = caml_alloc (1, 0);
     Store_field (ret, 0, db);
@@ -154,7 +154,7 @@ CAMLprim value ocaml_rel_sqlite3_stmt_errmsg (value stmt)
 CAMLprim value ocaml_rel_sqlite3_prepare (value db, value sql)
 {
   CAMLparam2 (db, sql);
-  CAMLlocal1 (ret);
+  CAMLlocal2 (ret, stmt);
 
   if (!caml_string_is_c_safe (sql))
     caml_invalid_argument ("sqlite3_prepare: SQL string is not C safe.");
@@ -169,7 +169,7 @@ CAMLprim value ocaml_rel_sqlite3_prepare (value db, value sql)
 
   if (rc == SQLITE_OK)
   {
-    value stmt = caml_alloc (1, Abstract_tag);
+    stmt = caml_alloc (1, Abstract_tag);
     *((sqlite3_stmt **) Data_abstract_val(stmt)) = stmtc;
     ret = caml_alloc (1, 0);
     Store_field (ret, 0, stmt);
@@ -335,7 +335,7 @@ CAMLprim value ocaml_rel_sqlite3_backup_init
 
   if (bc)
   {
-    value b = caml_alloc (1, Abstract_tag);
+    b = caml_alloc (1, Abstract_tag);
     *((sqlite3_backup **) Data_abstract_val (b)) = bc;
     ret = caml_alloc (1, 0);
     Store_field (ret, 0, b);
